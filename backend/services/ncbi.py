@@ -25,6 +25,23 @@ class NCBIResult:
     aliases: list[str] = field(default_factory=list)
 
 
+async def _get_with_retry(client: httpx.AsyncClient, url: str, params: dict, max_retries: int = 3) -> httpx.Response:
+    """GET request with exponential backoff on 429."""
+    for attempt in range(max_retries):
+        resp = await client.get(url, params=params)
+        if resp.status_code == 429:
+            wait = 1.0 * (2 ** attempt)
+            logger.debug("Rate limited by NCBI (attempt %d), sleeping %.1fs", attempt + 1, wait)
+            await asyncio.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp
+    # Final attempt — let raise_for_status bubble up
+    resp = await client.get(url, params=params)
+    resp.raise_for_status()
+    return resp
+
+
 async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
     """Fetch gene summary from NCBI Gene database."""
     if not gene:
@@ -36,7 +53,8 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
             if organism:
                 term += f" AND {organism}[orgn]"
 
-            search_resp = await client.get(
+            search_resp = await _get_with_retry(
+                client,
                 f"{EUTILS_BASE}/esearch.fcgi",
                 params={
                     "db": "gene",
@@ -45,7 +63,6 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
                     "retmode": "json",
                 },
             )
-            search_resp.raise_for_status()
             search_data = search_resp.json()
 
             id_list = search_data.get("esearchresult", {}).get("idlist", [])
@@ -57,7 +74,8 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
             # Respect NCBI rate limit: max 3 req/sec without an API key.
             await asyncio.sleep(0.34)
 
-            summary_resp = await client.get(
+            summary_resp = await _get_with_retry(
+                client,
                 f"{EUTILS_BASE}/esummary.fcgi",
                 params={
                     "db": "gene",
@@ -65,7 +83,6 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
                     "retmode": "json",
                 },
             )
-            summary_resp.raise_for_status()
             summary_data = summary_resp.json()
 
             entry = summary_data.get("result", {}).get(gene_id, {})
