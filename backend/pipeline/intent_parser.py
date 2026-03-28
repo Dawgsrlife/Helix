@@ -1,6 +1,6 @@
 import json
-from config import settings
-from models.domain import DesignSpec
+from backend.config import settings
+from backend.models.domain import DesignSpec
 
 try:
     from google import genai
@@ -87,7 +87,7 @@ def _extract_target_gene(goal: str) -> str | None:
 
 
 def _extract_tissue(goal_lower: str) -> "TissueSpec | None":
-    from models.domain import TissueSpec
+    from backend.models.domain import TissueSpec
 
     high: list[str] = []
     if "hippocamp" in goal_lower:
