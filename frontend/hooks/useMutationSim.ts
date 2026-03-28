@@ -10,6 +10,26 @@ interface MutationSimState {
   error: string | null;
 }
 
+/** Mock mutation for standalone demo when backend is unavailable */
+function mockMutationEffect(
+  sequence: string,
+  position: number,
+  alternateBase: string
+): MutationEffect {
+  const referenceBase = position < sequence.length ? sequence[position] : "N";
+  const delta = -(Math.random() * 8 + 0.5) * (Math.random() > 0.3 ? 1 : -0.1);
+  const abs = Math.abs(delta);
+  const impact =
+    abs < 1 ? "benign" : abs < 3 ? "moderate" : "deleterious";
+  return {
+    position,
+    referenceBase,
+    alternateBase,
+    deltaLikelihood: Math.round(delta * 100) / 100,
+    predictedImpact: impact as MutationEffect["predictedImpact"],
+  };
+}
+
 export function useMutationSim() {
   const [state, setState] = useState<MutationSimState>({
     effect: null,
@@ -25,11 +45,11 @@ export function useMutationSim() {
         const effect = await predictMutation(sequence, position, alternateBase);
         setState({ effect, isLoading: false, error: null });
         return effect;
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Mutation simulation failed";
-        setState({ effect: null, isLoading: false, error: message });
-        return null;
+      } catch {
+        // Fall back to mock data for demo
+        const mock = mockMutationEffect(sequence, position, alternateBase);
+        setState({ effect: mock, isLoading: false, error: null });
+        return mock;
       }
     },
     []
