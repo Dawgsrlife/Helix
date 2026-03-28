@@ -1,9 +1,11 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
-  // Reduce memory pressure in dev mode
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   experimental: {
-    // Limit parallel compilation workers
     workerThreads: false,
     cpus: 2,
   },
