@@ -1,8 +1,8 @@
 "use client";
 
-import { useRef, useMemo, Suspense } from "react";
+import { useRef, useMemo, Suspense, lazy } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { OrbitControls, Environment } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 
 interface ProteinViewerProps {
@@ -134,11 +134,11 @@ export default function ProteinViewer({
         style={{ width: "100%", height: "100%" }}
         gl={{ antialias: true, alpha: true }}
       >
-        {/* Lighting - warm, cinematic */}
-        <ambientLight intensity={0.4} />
+        {/* Lighting - warm, no HDR environment to avoid memory issues */}
+        <ambientLight intensity={0.5} />
         <directionalLight position={[10, 8, 5]} intensity={0.8} color="#e5e1e4" />
-        <directionalLight position={[-8, -4, -6]} intensity={0.2} color="#5bb5a2" />
-        <Environment preset="city" environmentIntensity={0.1} />
+        <directionalLight position={[-8, -4, -6]} intensity={0.25} color="#5bb5a2" />
+        <hemisphereLight groundColor="#131315" intensity={0.3} />
 
         <BackboneTrace pdbData={pdbData} highlightResidues={highlightResidues} />
 
