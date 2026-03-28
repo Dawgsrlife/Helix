@@ -1,5 +1,7 @@
 import pytest
 from backend.models.domain import TissueSpec, DesignSpec
+import asyncio
+from backend.pipeline.intent_parser import parse_intent
 
 
 class TestTissueSpec:
@@ -53,3 +55,30 @@ class TestDesignSpec:
         schema = DesignSpec.model_json_schema()
         assert "properties" in schema
         assert "design_type" in schema["properties"]
+
+
+class TestParseIntent:
+    def test_full_design_goal(self):
+        result = asyncio.run(
+            parse_intent(
+                "Design a regulatory element that drives BDNF expression "
+                "in hippocampal neurons for Alzheimer's therapy"
+            )
+        )
+        assert isinstance(result, DesignSpec)
+        assert result.design_type is not None
+        assert len(result.design_type) > 0
+
+    def test_minimal_design_goal(self):
+        result = asyncio.run(
+            parse_intent("Generate a random E. coli promoter")
+        )
+        assert isinstance(result, DesignSpec)
+        assert result.design_type is not None
+
+    def test_vague_goal(self):
+        result = asyncio.run(
+            parse_intent("Make something interesting with DNA")
+        )
+        assert isinstance(result, DesignSpec)
+        assert result.design_type is not None
