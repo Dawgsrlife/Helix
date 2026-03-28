@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from pydantic import BaseModel
 
 
 class AnnotationType(str, Enum):
@@ -103,3 +104,16 @@ class ForwardResult:
     logits: list[float]  # per-position log-likelihoods
     sequence_score: float  # mean log-likelihood across positions
     embeddings: list[list[float]] | None = None
+
+class TissueSpec(BaseModel):
+    high_expression: list[str] = []
+    low_expression: list[str] = []
+
+
+class DesignSpec(BaseModel):
+    design_type: str
+    target_gene: str | None = None
+    organism: str | None = None
+    tissue_specificity: TissueSpec | None = None
+    therapeutic_context: str | None = None
+    constraints: list[str] = []

@@ -1,3 +1,10 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+*.egg
+
 # Dependencies
 node_modules/
 .pnp
