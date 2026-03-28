@@ -31,7 +31,7 @@ async def parse_intent(goal: str) -> DesignSpec:
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     response = await client.aio.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         contents=goal,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
