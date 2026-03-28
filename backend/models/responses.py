@@ -17,6 +17,7 @@ class CandidateScoresResponse(BaseModel):
     tissue_specificity: float
     off_target: float
     novelty: float
+    combined: float | None = None
 
 
 class BaseEditResponse(BaseModel):
@@ -36,8 +37,26 @@ class MutationResponse(BaseModel):
     predicted_impact: str
 
 
+class FollowupAcceptedResponse(BaseModel):
+    status: str = "partial_rerun_started"
+    steps_rerunning: list[str]
+
+
+class StructureResponse(BaseModel):
+    pdb_data: str
+    model: str = "mock"
+    confidence: float = 0.0
+
+
 class HealthResponse(BaseModel):
     status: str
     model: str
     gpu_available: bool
     inference_mode: str
+
+
+class AnalysisResponse(BaseModel):
+    sequence: str
+    regions: list[dict[str, object]]
+    scores: list[dict[str, float | int]]
+    proteins: list[dict[str, object]]

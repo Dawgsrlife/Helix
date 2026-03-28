@@ -9,6 +9,7 @@ from .domain import (
     SequenceRegion,
 )
 from .requests import (
+    AnalyzeRequest,
     BaseEditRequest,
     DesignRequest,
     FollowupEditRequest,
@@ -16,10 +17,13 @@ from .requests import (
     StructureRequest,
 )
 from .responses import (
+    AnalysisResponse,
     BaseEditResponse,
     DesignAcceptedResponse,
+    FollowupAcceptedResponse,
     HealthResponse,
     MutationResponse,
+    StructureResponse,
 )
 
 __all__ = [
@@ -31,13 +35,17 @@ __all__ = [
     "LikelihoodScore",
     "MutationScore",
     "SequenceRegion",
+    "AnalyzeRequest",
     "BaseEditRequest",
     "DesignRequest",
     "FollowupEditRequest",
     "MutationRequest",
     "StructureRequest",
+    "AnalysisResponse",
     "BaseEditResponse",
     "DesignAcceptedResponse",
+    "FollowupAcceptedResponse",
     "HealthResponse",
     "MutationResponse",
+    "StructureResponse",
 ]

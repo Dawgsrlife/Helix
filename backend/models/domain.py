@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class AnnotationType(str, Enum):
@@ -85,6 +85,24 @@ class CandidateScores:
             + 0.15 * self.novelty
         )
 
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "functional": self.functional,
+            "tissue_specificity": self.tissue_specificity,
+            "off_target": self.off_target,
+            "novelty": self.novelty,
+            "combined": self.combined,
+        }
+
+    def to_ws_event(self, candidate_id: int) -> dict[str, object]:
+        return {
+            "event": "candidate_scored",
+            "data": {
+                "candidate_id": candidate_id,
+                "scores": self.to_dict(),
+            },
+        }
+
 
 @dataclass
 class Candidate:
@@ -105,9 +123,27 @@ class ForwardResult:
     sequence_score: float  # mean log-likelihood across positions
     embeddings: list[list[float]] | None = None
 
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "logits": self.logits,
+            "sequence_score": self.sequence_score,
+        }
+        if self.embeddings is not None:
+            payload["embeddings"] = self.embeddings
+        return payload
+
+    def to_ws_event(self, candidate_id: int) -> dict[str, object]:
+        return {
+            "event": "forward_pass_complete",
+            "data": {
+                "candidate_id": candidate_id,
+                **self.to_dict(),
+            },
+        }
+
 class TissueSpec(BaseModel):
-    high_expression: list[str] = []
-    low_expression: list[str] = []
+    high_expression: list[str] = Field(default_factory=list)
+    low_expression: list[str] = Field(default_factory=list)
 
 
 class DesignSpec(BaseModel):
@@ -116,4 +152,7 @@ class DesignSpec(BaseModel):
     organism: str | None = None
     tissue_specificity: TissueSpec | None = None
     therapeutic_context: str | None = None
-    constraints: list[str] = []
+    constraints: list[str] = Field(default_factory=list)
+
+    def to_dict(self) -> dict[str, object]:
+        return self.model_dump(exclude_none=True)
