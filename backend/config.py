@@ -35,9 +35,11 @@ class Settings(BaseSettings):
     ncbi_api_key: str = ""
 
     # Intent parsing
+    intent_llm: str = "claude"
     gemini_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    intent_allow_live_calls: bool = False
 
     # Infrastructure
     redis_url: str = "redis://localhost:6379/0"

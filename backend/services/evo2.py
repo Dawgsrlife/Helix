@@ -127,15 +127,16 @@ class Evo2MockService(Evo2Service):
 
     async def forward(self, sequence: str) -> ForwardResult:
         logits = _mock_logits(sequence)
+        sequence_score = float(np.mean(logits)) if logits else 0.0
         return ForwardResult(
             logits=logits,
-            sequence_score=float(np.mean(logits)),
+            sequence_score=sequence_score,
             embeddings=None,
         )
 
     async def score(self, sequence: str) -> float:
         logits = _mock_logits(sequence)
-        return float(np.mean(logits))
+        return float(np.mean(logits)) if logits else 0.0
 
     async def score_mutation(
         self, sequence: str, position: int, alt_base: str
@@ -227,9 +228,10 @@ class Evo2LocalService(Evo2Service):
             None, model.forward, sequence  # type: ignore[union-attr]
         )
         logits_list = logits.tolist() if hasattr(logits, "tolist") else list(logits)
+        sequence_score = float(np.mean(logits_list)) if logits_list else 0.0
         return ForwardResult(
             logits=logits_list,
-            sequence_score=float(np.mean(logits_list)),
+            sequence_score=sequence_score,
             embeddings=None,  # skip embedding transfer for speed
         )
 

@@ -28,6 +28,15 @@ class DesignRequest(BaseModel):
     session_id: str | None = None
 
 
+class AnalyzeRequest(BaseModel):
+    sequence: str
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
 class BaseEditRequest(BaseModel):
     session_id: str
     candidate_id: int
