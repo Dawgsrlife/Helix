@@ -1,49 +1,69 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { Nucleotide, AnnotationType } from "@/types";
-import { BASE_COLORS, ANNOTATION_COLORS } from "@/lib/colorMap";
 
 interface BaseTokenProps {
   nucleotide: Nucleotide;
   position: number;
   annotationType?: AnnotationType;
   isHighlighted: boolean;
-  likelihoodScore?: number;
   onClick: (position: number) => void;
 }
 
-function BaseTokenComponent({
+const BASE_HEX: Record<Nucleotide, string> = {
+  A: "#6bbd7a",
+  T: "#d47a7a",
+  C: "#6b9fd4",
+  G: "#c9a855",
+  N: "#6b6b6b",
+};
+
+const REGION_TINT: Record<AnnotationType, string> = {
+  exon: "rgba(124, 107, 196, 0.08)",
+  intron: "transparent",
+  orf: "rgba(91, 181, 162, 0.08)",
+  prophage: "rgba(196, 107, 107, 0.08)",
+  trna: "rgba(107, 189, 122, 0.08)",
+  rrna: "rgba(201, 168, 85, 0.08)",
+  intergenic: "transparent",
+  unknown: "transparent",
+};
+
+function BaseTokenInner({
   nucleotide,
   position,
   annotationType,
   isHighlighted,
   onClick,
 }: BaseTokenProps) {
-  const baseColor = BASE_COLORS[nucleotide];
-  const bgColor = annotationType
-    ? ANNOTATION_COLORS[annotationType]
-    : "transparent";
+  const handleClick = useCallback(() => onClick(position), [onClick, position]);
+
+  const bg = isHighlighted
+    ? "rgba(91, 181, 162, 0.18)"
+    : annotationType
+      ? REGION_TINT[annotationType]
+      : "transparent";
 
   return (
     <span
-      onClick={() => onClick(position)}
-      className="inline-block w-[1ch] text-center cursor-pointer transition-all duration-75 leading-6 select-none"
+      onClick={handleClick}
+      data-pos={position}
+      className="inline-block w-[1ch] text-center cursor-pointer select-none"
       style={{
-        color: baseColor,
-        backgroundColor: isHighlighted
-          ? "rgba(59, 130, 246, 0.3)"
-          : annotationType
-            ? `color-mix(in srgb, ${bgColor} 15%, transparent)`
-            : "transparent",
-        borderBottom: isHighlighted ? "2px solid var(--accent-cyan)" : "2px solid transparent",
+        color: BASE_HEX[nucleotide],
+        backgroundColor: bg,
+        lineHeight: "22px",
+        fontSize: "13px",
+        borderBottom: isHighlighted
+          ? "1.5px solid #5bb5a2"
+          : "1.5px solid transparent",
       }}
-      title={`Position ${position}: ${nucleotide}${annotationType ? ` (${annotationType})` : ""}`}
     >
       {nucleotide}
     </span>
   );
 }
 
-const BaseToken = memo(BaseTokenComponent);
+const BaseToken = memo(BaseTokenInner);
 export default BaseToken;
