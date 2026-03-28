@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from backend.config import NCBI_API_KEY
+
 logger = logging.getLogger(__name__)
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -61,6 +63,7 @@ async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
                     "term": f"{gene}[gene] AND (pathogenic[clinsig] OR likely_pathogenic[clinsig])",
                     "retmax": max_results,
                     "retmode": "json",
+                    **({"api_key": NCBI_API_KEY} if NCBI_API_KEY else {}),
                 },
             )
             search_data = search_resp.json()
@@ -80,6 +83,7 @@ async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
                     "db": "clinvar",
                     "id": ",".join(id_list),
                     "retmode": "json",
+                    **({"api_key": NCBI_API_KEY} if NCBI_API_KEY else {}),
                 },
             )
             summary_data = summary_resp.json()

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     structure_mode: StructureMode = StructureMode.MOCK
     alphafold_api_key: str = ""
 
+    # NCBI E-utilities
+    ncbi_api_key: str = ""
+
     # Intent parsing
     gemini_api_key: str = ""
     anthropic_api_key: str = ""
@@ -51,7 +54,11 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# Convenience alias for intent parser
+# Convenience aliases
 GEMINI_API_KEY = settings.gemini_api_key
 if not GEMINI_API_KEY:
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+NCBI_API_KEY = settings.ncbi_api_key
+if not NCBI_API_KEY:
+    NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "")

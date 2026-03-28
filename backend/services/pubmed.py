@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 
 import httpx
 
+from backend.config import NCBI_API_KEY
+
 logger = logging.getLogger(__name__)
 
 EUTILS_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -128,6 +130,7 @@ async def search_literature(
                     "retmax": max_results,
                     "sort": "relevance",
                     "retmode": "json",
+                    **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
                 },
             )
             search_resp.raise_for_status()
@@ -147,6 +150,7 @@ async def search_literature(
                     "db": "pubmed",
                     "id": ",".join(pmid_list),
                     "rettype": "xml",
+                    **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
                 },
             )
             if fetch_resp.status_code == 429:
@@ -157,6 +161,7 @@ async def search_literature(
                         "db": "pubmed",
                         "id": ",".join(pmid_list),
                         "rettype": "xml",
+                        **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
                     },
                 )
             fetch_resp.raise_for_status()

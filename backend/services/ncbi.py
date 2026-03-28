@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 import asyncio
 
 import httpx
+from backend.config import NCBI_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
                     "term": term,
                     "retmax": 1,
                     "retmode": "json",
+                    **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
                 },
             )
             search_data = search_resp.json()
@@ -81,6 +83,7 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
                     "db": "gene",
                     "id": gene_id,
                     "retmode": "json",
+                    **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
                 },
             )
             summary_data = summary_resp.json()
