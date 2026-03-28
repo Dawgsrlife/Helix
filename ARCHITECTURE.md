@@ -236,69 +236,79 @@ pipeline_complete    → { candidates: [...] }
 
 ## 5. Module Ownership
 
+> **Note**: Dat could not attend the hackathon. His modules (intent_parser, explanation) run on heuristic/mock defaults. Vishnu or Henry can pick these up if time permits.
+
 | Module | Owner | Description | Status |
 |--------|-------|-------------|--------|
-| `services/evo2.py` | Vishnu | Evo2 model wrapper — local, NIM API, mock | Built |
-| `services/translation.py` | Vishnu | DNA to protein, ORF finding, GC content | Built |
-| `pipeline/evo2_score.py` | Vishnu | 4D scoring: functional, tissue, off-target, novelty | Built |
+| `services/evo2.py` | Vishnu | Evo2 model wrapper (mock, local, NIM API) | Built, tested |
+| `services/translation.py` | Vishnu | DNA to protein, ORF finding, GC content | Built, tested |
+| `pipeline/evo2_score.py` | Vishnu | 4D scoring: functional, tissue, off-target, novelty | Built, tested |
+| `pipeline/intent_parser.py` | Vishnu | LLM intent decomposition (heuristic default) | Built |
+| `pipeline/retrieval.py` | Vishnu | NCBI + PubMed + ClinVar parallel coordinator | Built |
+| `pipeline/orchestrator.py` | Vishnu | Async generation + followup pipelines | Built |
+| `ws/manager.py` | Vishnu | WebSocket session lifecycle + pending queue | Built, tested |
+| `ws/events.py` | Vishnu | Typed event contracts with `to_json()` | Built, tested |
+| `main.py` | Vishnu | FastAPI app, all endpoints, WS handler | Built, tested |
+| `models/domain.py` | Vishnu | Core types with serialization helpers | Built |
 | `cli/evo2_playground.py` | Vishnu | Interactive terminal for manual Evo2 testing | Built |
-| `pipeline/intent_parser.py` | Dat | LLM intent decomposition to structured spec | In progress |
-| `pipeline/explanation.py` | Dat | LLM mechanistic report generation | Planned |
-| `pipeline/retrieval.py` | Vishnu | NCBI MCP + PubMed RAG + ClinVar (parallel) | Planned |
-| `services/alphafold.py` | Vishnu | AlphaFold/ColabFold/ESMFold wrapper | Planned |
-| `pipeline/structure.py` | Vishnu | Structure prediction pipeline | Planned |
-| `pipeline/orchestrator.py` | Vishnu | Celery DAG controller, mode routing | Planned |
-| `ws/manager.py` | Vishnu | WebSocket connection manager | Planned |
-| `ws/events.py` | Vishnu | Event type definitions | Planned |
-| `main.py` | Vishnu | FastAPI app, CORS, WS endpoint | Planned |
-| Frontend workspace | Alex | All four panels, streaming, Mol* | In progress |
+| `pipeline/explanation.py` | Unowned | LLM mechanistic report (mock chunks) | Mock only |
+| `services/alphafold.py` | Unowned | AlphaFold/ColabFold/ESMFold wrapper | Not built |
+| Frontend workspace | Alex | All four panels, Obsidian design system | Built (3 agents) |
+| Integration wiring | Alex | Wire analyze/page.tsx, add Zustand store | In progress |
 | Demo script + pitch | Henry | 2-minute demo, judge Q&A prep | In progress |
 
 ---
 
-## 6. Backend File Map
+## 6. Backend File Map (as-built)
 
 ```
 backend/
-├── main.py                    FastAPI app, CORS, WebSocket endpoint
-├── config.py                  Pydantic settings, env-driven mode switching
-├── celery_app.py              Celery + Redis configuration
+├── main.py                    FastAPI app, CORS, WebSocket endpoint      [BUILT]
+├── config.py                  Pydantic settings, env-driven mode switching [BUILT]
+├── celery_app.py              Celery + Redis configuration               [CONFIG ONLY]
 ├── requirements.txt           Python dependencies
 │
 ├── models/
-│   ├── domain.py              Core types: ForwardResult, CandidateScores, Impact
-│   ├── requests.py            Pydantic request validation
-│   └── responses.py           API response models (matches frontend types)
+│   ├── domain.py              Core types with serialization helpers       [BUILT]
+│   ├── requests.py            Pydantic request validation                [BUILT]
+│   └── responses.py           API response models                        [BUILT]
 │
 ├── services/
-│   ├── evo2.py                Evo2Service ABC + Mock + Local + NIM implementations
-│   ├── translation.py         Codon table, translate(), find_orfs(), gc_content()
-│   ├── alphafold.py           AlphaFold/ColabFold/ESMFold wrapper
-│   ├── ncbi_mcp.py            FastMCP server for NCBI queries
-│   ├── pubmed_rag.py          Vector store + semantic search
-│   └── clinvar.py             ClinVar variant lookup
+│   ├── evo2.py                Evo2Service ABC + Mock + Local + NIM        [BUILT]
+│   ├── translation.py         Codon table, translate(), find_orfs()       [BUILT]
+│   ├── ncbi.py                NCBI gene info retrieval                   [BUILT]
+│   ├── pubmed.py              PubMed literature search                   [BUILT]
+│   └── clinvar.py             ClinVar pathogenic variant lookup           [BUILT]
 │
 ├── pipeline/
-│   ├── orchestrator.py        Celery DAG controller, generation vs edit mode routing
-│   ├── intent_parser.py       LLM intent decomposition (Dat's module)
-│   ├── retrieval.py           Parallel retrieval coordinator
-│   ├── evo2_generate.py       Candidate generation with streaming
-│   ├── evo2_score.py          4D scoring pipeline
-│   ├── structure.py           AlphaFold integration
-│   └── explanation.py         LLM mechanistic report (Dat's module)
+│   ├── orchestrator.py        Async generation + followup pipelines       [BUILT]
+│   ├── intent_parser.py       NL to DesignSpec (heuristic default)        [BUILT]
+│   ├── retrieval.py           Parallel retrieval coordinator              [BUILT]
+│   └── evo2_score.py          4D scoring + mutation rescoring             [BUILT]
 │
 ├── ws/
-│   ├── manager.py             WebSocket connection manager
-│   └── events.py              Event type definitions
+│   ├── manager.py             WebSocket session lifecycle + pending queue  [BUILT]
+│   └── events.py              Typed event contracts with to_json()         [BUILT]
 │
 ├── cli/
-│   └── evo2_playground.py     Interactive Rich terminal for manual testing
+│   └── evo2_playground.py     Interactive Rich terminal for testing        [BUILT]
 │
-└── tests/
-    ├── conftest.py            Shared fixtures (mock service, sample sequences)
-    ├── test_evo2_service.py   Evo2 service tests (67 tests, all passing)
-    ├── test_translation.py    DNA translation tests
-    └── test_evo2_score.py     Scoring pipeline tests
+└── tests/                     85 tests passing
+    ├── conftest.py
+    ├── test_evo2_service.py
+    ├── test_evo2_score.py
+    ├── test_translation.py
+    ├── test_intent_parser.py
+    ├── test_main_api.py
+    ├── test_orchestrator.py
+    ├── test_ws_events.py
+    └── test_ws_manager.py
+
+NOT YET BUILT:
+  services/alphafold.py        AlphaFold/ColabFold wrapper
+  pipeline/explanation.py      LLM mechanistic report (returns mock chunks)
+  pipeline/evo2_generate.py    Separate generation module (logic in orchestrator)
+  pipeline/structure.py        Separate structure module (mock in orchestrator)
 ```
 
 ---
