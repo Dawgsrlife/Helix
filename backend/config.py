@@ -1,19 +1,11 @@
+import os
 from enum import Enum
 
-from pydantic_settings import BaseSettings
-
-settings = Settings()
-import os
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
 load_dotenv()
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError(
-        "GEMINI_API_KEY environment variable is required. "
-        "Set it in your .env file."
-    )
 
 class Evo2Mode(str, Enum):
     LOCAL = "local"
@@ -39,8 +31,8 @@ class Settings(BaseSettings):
     structure_mode: StructureMode = StructureMode.MOCK
     alphafold_api_key: str = ""
 
-    # Intent parsing (Dat's module)
-    intent_llm: str = "claude"
+    # Intent parsing
+    gemini_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
@@ -55,3 +47,11 @@ class Settings(BaseSettings):
 
     # Allow extra env vars (teammates may add keys we don't own)
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+
+settings = Settings()
+
+# Convenience alias for intent parser
+GEMINI_API_KEY = settings.gemini_api_key
+if not GEMINI_API_KEY:
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
