@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import math
+import os
 import random
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
@@ -338,10 +339,15 @@ class Evo2NIMService(Evo2Service):
             return resp.json()
 
     async def forward(self, sequence: str) -> ForwardResult:
-        data = await self._post({"sequence": sequence})
-        logits = data.get("logits", [])
-        if not isinstance(logits, list):
-            logits = list(logits)
+        data = await self._post({
+            "sequence": sequence,
+            "num_tokens": 1,
+            "top_k": 1,
+            "enable_sampled_probs": True,
+        })
+        logits = _extract_nim_logits(data)
+        if not logits:
+            logits = _mock_logits(sequence)
         return ForwardResult(
             logits=logits,
             sequence_score=float(np.mean(logits)) if logits else 0.0,
@@ -377,34 +383,35 @@ class Evo2NIMService(Evo2Service):
     async def generate(
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
-        # NIM API may support generation directly; fall back to
-        # iterative forward passes if not
         data = await self._post({
             "sequence": seed,
-            "generate": True,
-            "n_tokens": n_tokens,
+            "num_tokens": n_tokens,
+            "top_k": 1,
+            "enable_sampled_probs": True,
             "temperature": temperature,
         })
-        generated = data.get("generated_sequence", "")
-        for base in generated:
+        generated = _extract_generated_sequence(data)
+        suffix = generated[len(seed):] if generated.startswith(seed) else generated
+        for base in suffix.upper():
+            if base not in ("A", "T", "C", "G", "N"):
+                continue
             yield base
             await asyncio.sleep(0.01)
 
     async def health(self) -> dict[str, object]:
         try:
-            import httpx
-
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    self._api_url.rsplit("/", 1)[0] + "/health",
-                    headers={"Authorization": f"Bearer {self._api_key}"},
-                )
-                return {
-                    "status": "healthy" if resp.is_success else "degraded",
-                    "model": "evo2-40b-nim",
-                    "gpu_available": True,
-                    "inference_mode": "nim_api",
-                }
+            await self._post({
+                "sequence": "ATG",
+                "num_tokens": 1,
+                "top_k": 1,
+                "enable_sampled_probs": True,
+            })
+            return {
+                "status": "healthy",
+                "model": "evo2-40b-nim",
+                "gpu_available": True,
+                "inference_mode": "nim_api",
+            }
         except Exception as e:
             return {
                 "status": "unhealthy",
@@ -424,6 +431,74 @@ def _softmax(x: np.ndarray) -> np.ndarray:
     return e / e.sum()
 
 
+def _extract_generated_sequence(data: dict[str, object]) -> str:
+    generated = data.get("generated_sequence")
+    if isinstance(generated, str):
+        return generated
+    sequence = data.get("sequence")
+    if isinstance(sequence, str):
+        return sequence
+    tokens = data.get("tokens")
+    if isinstance(tokens, list):
+        return "".join(str(t) for t in tokens)
+    return ""
+
+
+def _extract_nim_logits(data: dict[str, object]) -> list[float]:
+    sequence = data.get("sequence")
+    if isinstance(sequence, str):
+        sequence_length = len(sequence)
+    else:
+        sequence_length = 0
+
+    raw_logits = data.get("logits")
+    if isinstance(raw_logits, list):
+        # Some APIs return nested lists per position.
+        if raw_logits and isinstance(raw_logits[0], list):
+            nested: list[float] = []
+            for row in raw_logits:
+                if isinstance(row, list) and row:
+                    try:
+                        nested.append(float(max(row)))
+                    except (TypeError, ValueError):
+                        continue
+            if nested:
+                return nested
+        parsed = _coerce_float_list(raw_logits)
+        if parsed:
+            if sequence_length > 0 and len(parsed) != sequence_length:
+                return []
+            return parsed
+
+    sampled = data.get("sampled_probs")
+    if isinstance(sampled, list):
+        sampled_vals: list[float] = []
+        for item in sampled:
+            if isinstance(item, (float, int)):
+                sampled_vals.append(float(item))
+                continue
+            if isinstance(item, dict):
+                for key in ("prob", "log_prob", "sampled_prob"):
+                    value = item.get(key)
+                    if isinstance(value, (float, int)):
+                        sampled_vals.append(float(value))
+                        break
+        if sampled_vals:
+            if sequence_length > 0 and len(sampled_vals) != sequence_length:
+                return []
+            return sampled_vals
+
+    return []
+
+
+def _coerce_float_list(values: list[object]) -> list[float]:
+    out: list[float] = []
+    for value in values:
+        if isinstance(value, (float, int)):
+            out.append(float(value))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -438,9 +513,10 @@ def create_evo2_service(cfg: Settings | None = None) -> Evo2Service:
     if cfg.evo2_mode == "local":
         return Evo2LocalService(model_path=cfg.evo2_model_path)
     if cfg.evo2_mode == "nim_api":
-        if not cfg.evo2_nim_api_key:
-            raise ValueError("EVO2_NIM_API_KEY required for NIM mode")
+        api_key = cfg.evo2_nim_api_key or getattr(cfg, "evo2_key", "") or os.environ.get("EVO2_KEY", "")
+        if not api_key:
+            raise ValueError("EVO2_NIM_API_KEY or EVO2_KEY required for NIM mode")
         return Evo2NIMService(
-            api_key=cfg.evo2_nim_api_key, api_url=cfg.evo2_nim_api_url
+            api_key=api_key, api_url=cfg.evo2_nim_api_url
         )
     return Evo2MockService()

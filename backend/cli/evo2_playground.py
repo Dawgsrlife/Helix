@@ -5,7 +5,12 @@ Run from backend/:
     source .venv/bin/activate
     python -m cli.evo2_playground
 
+Non-interactive shortcuts:
+    python -m cli.evo2_playground --health
+    python -m cli.evo2_playground --demo
+
 Commands:
+    health                          Show active backend mode + health
     forward <sequence>              Per-position log-likelihoods with heatmap
     score <sequence>                Total sequence log-likelihood
     mutate <sequence> <pos> <base>  Score a single mutation
@@ -13,12 +18,14 @@ Commands:
     multiscore <sequence>           Full 4-dimensional scoring pipeline
     compare <seq1> <seq2>           Side-by-side 4D scoring comparison
     translate <sequence>            DNA -> protein translation + ORF finding
+    demo [sequence]                 Run a quick end-to-end showcase
     help                            Show this help
     quit / exit                     Exit
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
@@ -28,22 +35,23 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 from rich.text import Text
 
+from config import settings
 from models.domain import CandidateScores
-from pipeline.evo2_score import score_candidate, rescore_mutation
-from services.evo2 import Evo2MockService
+from pipeline.evo2_score import score_candidate
+from services.evo2 import Evo2MockService, Evo2Service, create_evo2_service
 from services.translation import (
     find_orfs,
     gc_content,
-    translate as dna_translate,
     reverse_complement,
+    translate as dna_translate,
 )
 
 console = Console()
-service = Evo2MockService()
+service: Evo2Service = Evo2MockService()
+service_source = "mock"
 
 # Color scale for log-likelihoods (green = high, red = low)
 _LL_COLORS = [
@@ -82,9 +90,49 @@ def _score_bar(label: str, value: float, invert: bool = False) -> str:
     return f"  {label:22s} [{color}]{bar}[/] {value:.4f}"
 
 
+def _mode_name() -> str:
+    mode = settings.evo2_mode
+    return str(mode.value) if hasattr(mode, "value") else str(mode)
+
+
+def resolve_service() -> Evo2Service:
+    """Resolve service from config with explicit mock fallback."""
+    global service_source
+    try:
+        svc = create_evo2_service(settings)
+        service_source = _mode_name()
+        return svc
+    except Exception as exc:
+        service_source = "mock-fallback"
+        console.print(
+            f"[yellow]Failed to initialize configured Evo2 backend:[/] {exc}. "
+            "Falling back to mock service."
+        )
+        return Evo2MockService()
+
+
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
+
+async def cmd_health() -> dict[str, object]:
+    health = await service.health()
+    table = Table(title="Evo2 Backend Health", show_header=False, border_style="bright_blue")
+    table.add_column("Field", style="bold")
+    table.add_column("Value")
+    table.add_row("Configured mode", _mode_name())
+    table.add_row("Resolved service", service_source)
+    table.add_row("Status", str(health.get("status", "unknown")))
+    table.add_row("Model", str(health.get("model", "unknown")))
+    table.add_row("Inference mode", str(health.get("inference_mode", "unknown")))
+    table.add_row("GPU available", str(bool(health.get("gpu_available", False))))
+    if "error" in health:
+        table.add_row("Error", str(health["error"]))
+    if service_source == "nim_api":
+        table.add_row("NIM URL", settings.evo2_nim_api_url)
+    console.print(table)
+    return health
 
 
 async def cmd_forward(sequence: str) -> None:
@@ -92,7 +140,7 @@ async def cmd_forward(sequence: str) -> None:
 
     # Render bases with heatmap coloring
     text = Text()
-    for i, (base, ll) in enumerate(zip(sequence.upper(), result.logits)):
+    for base, ll in zip(sequence.upper(), result.logits):
         text.append(base, style=_ll_color(ll))
 
     console.print(Panel(text, title="Sequence (colored by log-likelihood)", border_style="blue"))
@@ -101,13 +149,21 @@ async def cmd_forward(sequence: str) -> None:
     table = Table(show_header=False, box=None, padding=(0, 2))
     table.add_row("Sequence length", str(len(sequence)))
     table.add_row("Mean log-likelihood", f"{result.sequence_score:.6f}")
-    table.add_row("Min", f"{min(result.logits):.6f}")
-    table.add_row("Max", f"{max(result.logits):.6f}")
+    if result.logits:
+        table.add_row("Min", f"{min(result.logits):.6f}")
+        table.add_row("Max", f"{max(result.logits):.6f}")
+    else:
+        table.add_row("Min", "n/a")
+        table.add_row("Max", "n/a")
     table.add_row("GC content", f"{gc_content(sequence):.2%}")
     console.print(table)
 
     # Per-position detail (first 60 bases)
-    display_len = min(len(sequence), 60)
+    if not result.logits:
+        console.print("\n  [yellow]No per-position logits returned.[/]")
+        return
+
+    display_len = min(len(sequence), len(result.logits), 60)
     console.print(f"\n  Per-position log-likelihoods (first {display_len}):")
     line1 = Text("  ")
     line2 = Text("  ")
@@ -118,6 +174,11 @@ async def cmd_forward(sequence: str) -> None:
         line2.append(f"{ll:>6.3f}", style=_ll_color(ll))
     console.print(line1)
     console.print(line2)
+    if len(result.logits) < len(sequence):
+        console.print(
+            f"  [yellow]Note:[/] backend returned {len(result.logits)} position scores for "
+            f"{len(sequence)} bases (using available values)."
+        )
 
 
 async def cmd_score(sequence: str) -> None:
@@ -186,13 +247,22 @@ async def cmd_multiscore(sequence: str) -> None:
     console.print(f"\n  [bold]Combined score: {scores.combined:.4f}[/]")
 
     # Heatmap
-    display_len = min(len(sequence), 60)
+    if not per_pos:
+        console.print("\n  [yellow]No per-position scoring heatmap available.[/]")
+        return
+
+    display_len = min(len(sequence), len(per_pos), 60)
     text = Text("\n  Heatmap: ")
     for i in range(display_len):
         text.append(sequence[i].upper(), style=_ll_color(per_pos[i].score))
     if len(sequence) > 60:
         text.append(f"... (+{len(sequence) - 60} more)", style="dim")
     console.print(text)
+    if len(per_pos) < len(sequence):
+        console.print(
+            f"  [yellow]Note:[/] backend returned {len(per_pos)} per-position scores for "
+            f"{len(sequence)} bases (using available values)."
+        )
 
 
 async def cmd_compare(seq1: str, seq2: str) -> None:
@@ -249,6 +319,25 @@ async def cmd_translate(sequence: str) -> None:
             )
 
 
+async def cmd_demo(sequence: str) -> None:
+    console.print(Panel("[bold]Running quick Evo2 demo workflow[/]", border_style="bright_green"))
+    await cmd_health()
+    console.print()
+    await cmd_score(sequence)
+    console.print()
+
+    pos = min(5, len(sequence) - 1)
+    alt = "G" if sequence[pos].upper() != "G" else "A"
+    await cmd_mutate(sequence, pos, alt)
+    console.print()
+
+    seed = sequence[: max(12, min(20, len(sequence)))]
+    await cmd_generate(seed, n_tokens=12)
+    console.print()
+
+    await cmd_multiscore(sequence)
+
+
 def show_help() -> None:
     console.print(Panel(
         __doc__ or "",
@@ -257,16 +346,42 @@ def show_help() -> None:
     ))
 
 
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Helix Evo2 playground")
+    parser.add_argument("--health", action="store_true", help="Print backend health and exit")
+    parser.add_argument("--demo", action="store_true", help="Run a quick end-to-end demo and exit")
+    parser.add_argument(
+        "--sequence",
+        default="ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCCCCTGCAGAACTGA",
+        help="Sequence used for --demo",
+    )
+    return parser.parse_args(argv)
+
+
 # ---------------------------------------------------------------------------
 # REPL
 # ---------------------------------------------------------------------------
 
 
-async def main() -> None:
+async def main(argv: list[str] | None = None) -> None:
+    global service
+
+    args = _parse_args(argv)
+    service = resolve_service()
+
+    if args.health:
+        await cmd_health()
+        return
+
+    if args.demo:
+        await cmd_demo(args.sequence.upper())
+        return
+
     console.print(Panel(
         "[bold bright_blue]Helix Evo2 Playground[/]\n"
         "Interactive testing interface for the Evo2 service layer.\n"
-        "Type [bold]help[/] for commands.",
+        f"Configured mode: [bold]{_mode_name()}[/]  |  Resolved service: [bold]{service_source}[/]\n"
+        "Type [bold]health[/] to validate backend connectivity, [bold]help[/] for commands.",
         border_style="bright_blue",
     ))
 
@@ -291,8 +406,10 @@ async def main() -> None:
             if cmd in ("quit", "exit", "q"):
                 console.print("  Bye!")
                 break
-            elif cmd == "help":
+            if cmd == "help":
                 show_help()
+            elif cmd == "health":
+                await cmd_health()
             elif cmd == "forward":
                 seq = parts[1] if len(parts) > 1 else sample
                 await cmd_forward(seq)
@@ -319,6 +436,9 @@ async def main() -> None:
             elif cmd == "translate":
                 seq = parts[1] if len(parts) > 1 else sample
                 await cmd_translate(seq)
+            elif cmd == "demo":
+                seq = parts[1] if len(parts) > 1 else sample
+                await cmd_demo(seq)
             elif cmd == "sample":
                 console.print(f"  {sample}")
             else:

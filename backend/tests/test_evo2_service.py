@@ -2,8 +2,9 @@
 
 import pytest
 
+from config import Evo2Mode, Settings
 from models.domain import ForwardResult, Impact, MutationScore
-from services.evo2 import Evo2MockService, create_evo2_service
+from services.evo2 import Evo2MockService, Evo2NIMService, create_evo2_service
 
 
 # ---------------------------------------------------------------------------
@@ -11,8 +12,9 @@ from services.evo2 import Evo2MockService, create_evo2_service
 # ---------------------------------------------------------------------------
 
 class TestFactory:
-    def test_default_creates_mock(self) -> None:
-        service = create_evo2_service()
+    def test_explicit_mock_creates_mock(self) -> None:
+        cfg = Settings(evo2_mode=Evo2Mode.MOCK)
+        service = create_evo2_service(cfg)
         assert isinstance(service, Evo2MockService)
 
 
@@ -200,3 +202,80 @@ class TestHealth:
         assert h["status"] == "healthy"
         assert h["model"] == "mock"
         assert h["inference_mode"] == "mock"
+
+
+# ---------------------------------------------------------------------------
+# NIM API service
+# ---------------------------------------------------------------------------
+
+class TestNIMFactory:
+    def test_nim_mode_uses_evo2_key_alias(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("EVO2_NIM_API_KEY", raising=False)
+        monkeypatch.setenv("EVO2_KEY", "test-nim-key")
+        cfg = Settings(evo2_mode=Evo2Mode.NIM_API)
+        service = create_evo2_service(cfg)
+        assert isinstance(service, Evo2NIMService)
+
+
+class TestNIMService:
+    @pytest.mark.asyncio
+    async def test_generate_uses_nvidia_payload_shape(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+
+        captured_payload: dict[str, object] = {}
+
+        async def fake_post(payload: dict[str, object]) -> dict[str, object]:
+            captured_payload.update(payload)
+            return {"generated_sequence": "ATGCCG"}
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        out = []
+        async for token in service.generate("ATG", n_tokens=3, temperature=0.7):
+            out.append(token)
+
+        assert "".join(out) == "CCG"
+        assert captured_payload["sequence"] == "ATG"
+        assert captured_payload["num_tokens"] == 3
+        assert captured_payload["top_k"] == 1
+        assert captured_payload["enable_sampled_probs"] is True
+
+    @pytest.mark.asyncio
+    async def test_forward_uses_logits_when_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+
+        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
+            return {"logits": [-0.1, -0.2, -0.3]}
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        result = await service.forward("ATG")
+
+        assert result.logits == [-0.1, -0.2, -0.3]
+        assert result.sequence_score < 0
+
+    @pytest.mark.asyncio
+    async def test_forward_falls_back_when_logits_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+
+        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
+            return {"message": "ok"}
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        result = await service.forward("ATGGATT")
+
+        assert len(result.logits) == 7
+        assert isinstance(result.sequence_score, float)
+
+    @pytest.mark.asyncio
+    async def test_health_checks_generate_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+
+        async def fake_post(payload: dict[str, object]) -> dict[str, object]:
+            assert payload["sequence"] == "ATG"
+            assert payload["num_tokens"] == 1
+            return {"generated_sequence": "ATGA"}
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        health = await service.health()
+
+        assert health["status"] == "healthy"
+        assert health["inference_mode"] == "nim_api"

@@ -24,7 +24,8 @@ class Settings(BaseSettings):
     # Evo2
     evo2_mode: Evo2Mode = Evo2Mode.MOCK
     evo2_nim_api_key: str = ""
-    evo2_nim_api_url: str = "https://build.nvidia.com/arc/evo2-40b"
+    evo2_key: str = ""
+    evo2_nim_api_url: str = "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate"
     evo2_model_path: str = "arcinstitute/evo2_7b"
 
     # Structure prediction
