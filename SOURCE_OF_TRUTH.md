@@ -179,7 +179,67 @@ Researcher types goal in Chat panel. Frontend sends `POST /api/design`. Backend 
 
 ---
 
-## 10. Rule for future changes
+## 10. Frontend design system (Obsidian Protocol)
+
+### Colors
+
+| Token | Hex | Usage |
+|-------|-----|-------|
+| `--surface-void` | #0c0c0e | Page background |
+| `--surface-base` | #131315 | Panel backgrounds |
+| `--surface-raised` | #1b1b1d | Elevated panels, inputs |
+| `--surface-elevated` | #232326 | Active/hover surfaces |
+| `--surface-overlay` | #2a2a2c | Modals, dropdowns |
+| `--text-primary` | #e5e1e4 | Headings, important text |
+| `--text-secondary` | #8a8a8a | Body text |
+| `--text-muted` | #6b6b6b | Labels |
+| `--text-faint` | #4a4a4a | Placeholders, line numbers |
+| `--accent` | #5bb5a2 | CTAs, active states, progress |
+| `--base-a` | #6bbd7a | Adenine |
+| `--base-t` | #d47a7a | Thymine |
+| `--base-c` | #6b9fd4 | Cytosine |
+| `--base-g` | #c9a855 | Guanine |
+
+### Typography
+
+- Sans: Inter. Mono: JetBrains Mono. One family each.
+- H1: 28px weight 500. Body: 14px weight 400. Labels: 11px uppercase tracking 0.08em. Code: 13px mono.
+
+### Animation
+
+- Duration: 0.2-0.3s. Easing: cubic-bezier(0.16, 1, 0.3, 1). Stagger: 30ms per item.
+- GSAP for sequence timelines. Framer Motion for everything else.
+
+### Rules
+
+- Tonal surface separation, not borders. Section by shifting background hex, not adding 1px strokes.
+- Color carries meaning, not decoration. Bases are colored because that is data. Everything else is grayscale.
+- Minimal border-radius (8px max). No pills on buttons.
+- No pure black (#000000). No pure white (#FFFFFF). Use the surface/text tokens.
+
+---
+
+## 11. Code conventions
+
+- SOLID. One component = one concern.
+- No `any` types.
+- No fetch logic inside components. Use hooks.
+- No nested ternaries in JSX.
+- API responses mapped to domain types at the boundary (hooks/lib), never inside components.
+- Zustand for shared pipeline state. Local useState for component-internal state.
+- Zustand selectors to prevent unnecessary re-renders: `useStore((s) => s.field)`.
+
+---
+
+## 12. Prize tracks
+
+Targeting: **Grand Prize**, **Societal Impact (ASUS)**, **Best UI/UX**, **Most Creative**.
+
+The ASUS Societal Impact track is the strongest fit. We are using ASUS hardware (GX10) to compress drug discovery timelines. The prize is more ASUS hardware.
+
+---
+
+## 13. Rule for future changes
 
 Every architecture or doc update must include:
 1. An **as-built** section (what exists in code now).
