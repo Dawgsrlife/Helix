@@ -4,68 +4,56 @@ import { useEffect, useRef } from "react";
 import Link from "next/link";
 import gsap from "gsap";
 
-const SEQUENCE_FRAGMENT = "ATGGCTAGCATCGATCGATCGATCGTAGCTAGCTAGCTAGCATCGATCGATCGATCGTAG";
+const SEQUENCE_LINE = "ATGGCTAGCATCGATCGATCGATCGTAGCTAGCTAGCTAGCATCGATCG";
+
+const BASE_COLORS: Record<string, string> = {
+  A: "var(--base-a)",
+  T: "var(--base-t)",
+  C: "var(--base-c)",
+  G: "var(--base-g)",
+};
 
 export default function Home() {
   const heroRef = useRef<HTMLDivElement>(null);
-  const seqRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!heroRef.current) return;
 
-    const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
 
-    tl.fromTo(
-      heroRef.current.querySelector("[data-wordmark]"),
-      { opacity: 0, y: -8 },
-      { opacity: 1, y: 0, duration: 0.5 }
-    )
-      .fromTo(
-        heroRef.current.querySelector("[data-headline]"),
-        { opacity: 0, y: 20 },
-        { opacity: 1, y: 0, duration: 0.7 },
-        "-=0.2"
+      tl.fromTo(
+        "[data-wordmark]",
+        { opacity: 0, y: -8 },
+        { opacity: 1, y: 0, duration: 0.5 }
       )
-      .fromTo(
-        heroRef.current.querySelector("[data-subtext]"),
-        { opacity: 0, y: 16 },
-        { opacity: 1, y: 0, duration: 0.6 },
-        "-=0.3"
-      )
-      .fromTo(
-        heroRef.current.querySelector("[data-cta]"),
-        { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.5 },
-        "-=0.2"
-      )
-      .fromTo(
-        heroRef.current.querySelector("[data-preview]"),
-        { opacity: 0, y: 30, scale: 0.98 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.8 },
-        "-=0.1"
-      );
+        .fromTo(
+          "[data-headline]",
+          { opacity: 0, y: 20 },
+          { opacity: 1, y: 0, duration: 0.7 },
+          "-=0.2"
+        )
+        .fromTo(
+          "[data-subtext]",
+          { opacity: 0, y: 16 },
+          { opacity: 1, y: 0, duration: 0.6 },
+          "-=0.3"
+        )
+        .fromTo(
+          "[data-cta]",
+          { opacity: 0, y: 12 },
+          { opacity: 1, y: 0, duration: 0.5 },
+          "-=0.2"
+        )
+        .fromTo(
+          "[data-preview]",
+          { opacity: 0, y: 24, scale: 0.98 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.8 },
+          "-=0.1"
+        );
+    }, heroRef);
 
-    return () => {
-      tl.kill();
-    };
-  }, []);
-
-  // Typewriter for sequence ticker
-  useEffect(() => {
-    if (!seqRef.current) return;
-    const chars = seqRef.current.querySelectorAll("[data-base]");
-    gsap.fromTo(
-      chars,
-      { opacity: 0 },
-      {
-        opacity: 1,
-        duration: 0.05,
-        stagger: 0.04,
-        ease: "none",
-        repeat: -1,
-        repeatDelay: 2,
-      }
-    );
+    return () => ctx.revert();
   }, []);
 
   return (
@@ -77,7 +65,8 @@ export default function Home() {
       {/* Nav */}
       <nav
         data-wordmark
-        className="opacity-0 flex items-center justify-between px-8 py-5"
+        style={{ opacity: 0 }}
+        className="flex items-center justify-between px-8 py-5"
       >
         <span
           className="text-sm tracking-[-0.04em] font-bold uppercase"
@@ -90,20 +79,14 @@ export default function Home() {
             href="https://github.com/Dawgsrlife/Helix"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[13px] transition-colors"
+            className="text-[13px] hover:opacity-80 transition-opacity"
             style={{ color: "var(--text-muted)" }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.color = "var(--text-secondary)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.color = "var(--text-muted)")
-            }
           >
             GitHub
           </a>
           <Link
             href="/analyze"
-            className="text-[13px] px-4 py-1.5 rounded-md transition-all"
+            className="text-[13px] px-4 py-1.5 rounded-md transition-opacity hover:opacity-90"
             style={{
               background: "var(--text-primary)",
               color: "var(--surface-void)",
@@ -119,8 +102,8 @@ export default function Home() {
         <div className="py-24 md:py-32">
           <h1
             data-headline
-            className="opacity-0 text-[clamp(2.5rem,5vw,3.5rem)] font-medium leading-[1.1] tracking-[-0.02em] mb-6"
-            style={{ color: "var(--text-primary)" }}
+            style={{ opacity: 0, color: "var(--text-primary)" }}
+            className="text-[clamp(2.5rem,5vw,3.5rem)] font-medium leading-[1.1] tracking-[-0.02em] mb-6"
           >
             Design DNA
             <br />
@@ -131,17 +114,17 @@ export default function Home() {
 
           <p
             data-subtext
-            className="opacity-0 text-[17px] leading-relaxed max-w-[480px] mb-10"
-            style={{ color: "var(--text-secondary)" }}
+            style={{ opacity: 0, color: "var(--text-secondary)" }}
+            className="text-[17px] leading-relaxed max-w-[480px] mb-10"
           >
             Helix pairs Evo 2 with AlphaFold to give researchers a workspace
             for sequence design, annotation, and structural analysis.
           </p>
 
-          <div data-cta className="opacity-0 flex items-center gap-4">
+          <div data-cta style={{ opacity: 0 }} className="flex items-center gap-4">
             <Link
               href="/analyze"
-              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-all hover:opacity-90"
+              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-opacity hover:opacity-90"
               style={{
                 background: "var(--text-primary)",
                 color: "var(--surface-void)",
@@ -153,18 +136,10 @@ export default function Home() {
               href="https://github.com/Dawgsrlife/Helix"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-colors"
+              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-opacity hover:opacity-80"
               style={{
                 color: "var(--text-muted)",
-                border: "1px solid var(--ghost-border)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = "var(--text-secondary)";
-                e.currentTarget.style.borderColor = "var(--text-faint)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = "var(--text-muted)";
-                e.currentTarget.style.borderColor = "var(--ghost-border)";
+                border: "1px solid rgba(255,255,255,0.08)",
               }}
             >
               GitHub
@@ -174,12 +149,12 @@ export default function Home() {
       </main>
 
       {/* Product preview */}
-      <section data-preview className="opacity-0 px-8 md:px-16 lg:px-24 pb-24">
+      <section data-preview style={{ opacity: 0 }} className="px-8 md:px-16 lg:px-24 pb-24">
         <div
           className="rounded-lg overflow-hidden"
           style={{
             background: "var(--surface-base)",
-            border: "1px solid var(--ghost-border)",
+            border: "1px solid rgba(255,255,255,0.06)",
           }}
         >
           {/* Mock IDE header */}
@@ -194,10 +169,7 @@ export default function Home() {
               >
                 Helix
               </span>
-              <span
-                className="text-[11px]"
-                style={{ color: "var(--text-faint)" }}
-              >
+              <span style={{ color: "var(--text-faint)" }} className="text-[11px]">
                 /
               </span>
               <span
@@ -209,8 +181,8 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-2">
               <div
-                className="w-[6px] h-[6px] rounded-full animate-pulse-soft"
-                style={{ background: "var(--accent)" }}
+                className="w-[6px] h-[6px] rounded-full"
+                style={{ background: "var(--accent)", animation: "pulse-soft 2s ease-in-out infinite" }}
               />
               <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>
                 Evo 2 ready
@@ -220,7 +192,8 @@ export default function Home() {
 
           {/* Mock sequence content */}
           <div className="px-5 py-6">
-            <div ref={seqRef} className="font-mono text-[13px] leading-[22px] mb-4">
+            {/* Sequence line */}
+            <div className="font-mono text-[13px] leading-[22px] mb-4">
               <div className="flex gap-4">
                 <span
                   className="text-[11px] w-10 text-right shrink-0 tabular-nums select-none"
@@ -229,22 +202,8 @@ export default function Home() {
                   1
                 </span>
                 <span>
-                  {SEQUENCE_FRAGMENT.split("").map((base, i) => (
-                    <span
-                      key={i}
-                      data-base
-                      className="opacity-0"
-                      style={{
-                        color:
-                          base === "A"
-                            ? "var(--base-a)"
-                            : base === "T"
-                              ? "var(--base-t)"
-                              : base === "C"
-                                ? "var(--base-c)"
-                                : "var(--base-g)",
-                      }}
-                    >
+                  {SEQUENCE_LINE.split("").map((base, i) => (
+                    <span key={i} style={{ color: BASE_COLORS[base] ?? "var(--text-muted)" }}>
                       {base}
                     </span>
                   ))}
@@ -257,27 +216,15 @@ export default function Home() {
               className="h-4 rounded-sm flex overflow-hidden mb-4"
               style={{ background: "var(--surface-raised)" }}
             >
-              <div
-                className="h-full"
-                style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }}
-              />
-              <div
-                className="h-full"
-                style={{ width: "15%", background: "var(--annotation-intron)", opacity: 0.5 }}
-              />
-              <div
-                className="h-full"
-                style={{ width: "35%", background: "var(--annotation-orf)", opacity: 0.4 }}
-              />
-              <div
-                className="h-full"
-                style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }}
-              />
+              <div style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }} />
+              <div style={{ width: "15%", background: "var(--annotation-intron)", opacity: 0.5 }} />
+              <div style={{ width: "35%", background: "var(--annotation-orf)", opacity: 0.4 }} />
+              <div style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }} />
             </div>
 
             {/* Likelihood bars */}
             <div className="flex items-end gap-[2px] h-16">
-              {Array.from({ length: 60 }, (_, i) => {
+              {Array.from({ length: 48 }, (_, i) => {
                 const h = Math.abs(Math.sin(i * 0.3) * 0.7 + Math.sin(i * 0.7) * 0.3);
                 return (
                   <div
