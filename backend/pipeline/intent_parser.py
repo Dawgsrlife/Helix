@@ -1,5 +1,7 @@
-import anthropic
-from backend.config import CLAUDE_API_KEY
+import json
+from google import genai
+from google.genai import types
+from backend.config import GEMINI_API_KEY
 from backend.models.domain import DesignSpec
 
 SYSTEM_PROMPT = """You are a genomic design assistant. Your role is to decompose \
@@ -19,29 +21,24 @@ from context.
 For constraints, extract specific requirements like "novel_sequence", \
 "no_known_pathogenic_variants", "high_gc_content", "codon_optimized", etc."""
 
-TOOL_NAME = "parse_design_spec"
-
-TOOL_DEFINITION = {
-    "name": TOOL_NAME,
-    "description": (
-        "Parse a natural language genomic design goal into a structured "
-        "biological specification."
-    ),
-    "input_schema": DesignSpec.model_json_schema(),
-}
-
 
 async def parse_intent(goal: str) -> DesignSpec:
-    client = anthropic.AsyncAnthropic(api_key=CLAUDE_API_KEY)
-    response = await client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        tools=[TOOL_DEFINITION],
-        tool_choice={"type": "tool", "name": TOOL_NAME},
-        messages=[{"role": "user", "content": goal}],
+    """Decompose a natural language design goal into a structured DesignSpec.
+
+    Uses Gemini's structured output (response_schema) to guarantee valid JSON
+    matching the DesignSpec Pydantic model.
+    """
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    response = await client.aio.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=goal,
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            response_mime_type="application/json",
+            response_schema=DesignSpec,
+        ),
     )
-    tool_use_block = next(
-        block for block in response.content if block.type == "tool_use"
-    )
-    return DesignSpec.model_validate(tool_use_block.input)
+
+    parsed = json.loads(response.text)
+    return DesignSpec.model_validate(parsed)
