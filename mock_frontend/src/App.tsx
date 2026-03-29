@@ -8,6 +8,7 @@ import { StageFlow } from "./components/StageFlow";
 import { GenomeLanes } from "./components/GenomeLanes";
 import { Leaderboard } from "./components/Leaderboard";
 import { ProteinPanel } from "./components/ProteinPanel";
+import { RegulatoryPanel } from "./components/RegulatoryPanel";
 import { ChatPanel } from "./components/ChatPanel";
 import { ScientificDrawer } from "./components/ScientificDrawer";
 
@@ -28,6 +29,7 @@ export default function App() {
   const [apiBase, setApiBase] = useState(state.apiBase);
   const [goal, setGoal] = useState(DEFAULT_GOAL);
   const [candidateCount, setCandidateCount] = useState(DEFAULT_CANDIDATES);
+  const [truthMode, setTruthMode] = useState<"demo_fallback" | "real_only">(state.truthMode);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [enteredIde, setEnteredIde] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
@@ -48,7 +50,7 @@ export default function App() {
 
   async function submitDesign(runProfile: "demo" | "live" = "demo"): Promise<void> {
     const requestedCandidates = Math.max(1, Math.min(10, candidateCount));
-    dispatch({ type: "INIT_DESIGN_SUBMIT", apiBase, requestedCandidates });
+    dispatch({ type: "INIT_DESIGN_SUBMIT", apiBase, requestedCandidates, truthMode });
     const sessionId = makeSessionId();
 
     try {
@@ -57,13 +59,15 @@ export default function App() {
         goal,
         sessionId,
         numCandidates: requestedCandidates,
-        runProfile
+        runProfile,
+        truthMode
       });
       dispatch({
         type: "DESIGN_ACCEPTED",
         sessionId: design.session_id,
         wsUrl: design.ws_url,
         runProfile,
+        truthMode,
         goal
       });
       setEnteredIde(true);
@@ -200,7 +204,14 @@ export default function App() {
                 max={10}
                 value={candidateCount}
                 onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
-              />
+                />
+            </label>
+            <label>
+              Truth Mode
+              <select value={truthMode} onChange={(event) => setTruthMode(event.target.value as "demo_fallback" | "real_only")}>
+                <option value="demo_fallback">Demo Fallback</option>
+                <option value="real_only">Real Only</option>
+              </select>
             </label>
           </div>
           <div className="landing-buttons">
@@ -254,6 +265,13 @@ export default function App() {
                   value={candidateCount}
                   onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
                 />
+              </label>
+              <label>
+                Truth Mode
+                <select value={truthMode} onChange={(event) => setTruthMode(event.target.value as "demo_fallback" | "real_only")}>
+                  <option value="demo_fallback">Demo Fallback</option>
+                  <option value="real_only">Real Only</option>
+                </select>
               </label>
               <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
                 {state.isSubmittingDesign ? "Starting..." : "Run Silent Demo"}
@@ -314,6 +332,11 @@ export default function App() {
               <div className="card protein-stage-card">
                 <h2>Folded Protein Studio</h2>
                 <ProteinPanel candidate={activeCandidate} />
+              </div>
+
+              <div className="card regulatory-stage-card">
+                <h2>Regulatory Control Map</h2>
+                <RegulatoryPanel candidate={activeCandidate} />
               </div>
 
               <div className="card">

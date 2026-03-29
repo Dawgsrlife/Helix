@@ -95,8 +95,9 @@ async def test_generation_pipeline_requested_candidates_are_all_present() -> Non
 
     manifest = ws.sent[0]
     assert manifest["event"] == "pipeline_manifest"
-    seed_map = manifest["data"]["candidate_seed_sequences"]
-    assert sorted(int(candidate_id) for candidate_id in seed_map.keys()) == [0, 1, 2, 3, 4]
+    assert manifest["data"]["truth_mode"] == "demo_fallback"
+    seeded_events = [event for event in ws.sent if event["event"] == "candidate_seeded"]
+    assert sorted(event["data"]["candidate_id"] for event in seeded_events) == [0, 1, 2, 3, 4]
 
 
 @pytest.mark.asyncio

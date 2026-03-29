@@ -30,6 +30,7 @@ class DesignRequest(BaseModel):
     session_id: str | None = None
     num_candidates: int | None = None
     run_profile: Literal["demo", "live"] = "demo"
+    truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"
 
 
 class AnalyzeRequest(BaseModel):

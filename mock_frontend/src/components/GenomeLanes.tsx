@@ -43,6 +43,7 @@ export function GenomeLanes({
       {candidateOrder.map((candidateId, index) => {
         const candidate = candidates[candidateId];
         const sequence = candidate?.sequence ?? "";
+        const shownSequence = sequence.slice(0, 220);
         const isActive = activeCandidateId === candidateId;
         return (
           <motion.div
@@ -58,11 +59,43 @@ export function GenomeLanes({
               <span className={`status ${candidate?.status ?? "queued"}`}>{candidate?.status ?? "queued"}</span>
               <span className="length">{sequence.length} bp</span>
             </div>
+            <div className="lane-heatmap" aria-label="Per-base confidence heatmap">
+              {shownSequence.length === 0 ? (
+                <div className="lane-placeholder">Heatmap pending…</div>
+              ) : (
+                shownSequence.split("").map((_base, position) => {
+                  const heat = candidate?.baseHeat[position];
+                  const likelihood = candidate?.perPositionScores[position];
+                  const likelihoodHeat = heatFromScore(likelihood);
+                  const mutationBoost = heat ? Math.min(1, Math.abs(heat.deltaLikelihood) * 25) : 0;
+                  const value = Math.max(likelihoodHeat, mutationBoost);
+                  const selected = isActive && selectedPosition === position;
+                  const color = heat
+                    ? heat.deltaLikelihood >= 0
+                      ? `rgba(9, 212, 156, ${0.25 + value * 0.65})`
+                      : `rgba(255, 90, 111, ${0.25 + value * 0.65})`
+                    : `rgba(9, 212, 156, ${0.12 + value * 0.6})`;
+                  return (
+                    <span
+                      key={`heat-${candidateId}-${position}`}
+                      className={`heat-cell ${selected ? "selected" : ""}`}
+                      style={{ backgroundColor: color }}
+                      title={`Position ${position}${likelihood !== undefined ? ` | score ${likelihood.toFixed(3)}` : ""}`}
+                    />
+                  );
+                })
+              )}
+            </div>
+            <div className="heat-legend">
+              <span>Low confidence</span>
+              <span className="heat-legend-bar" />
+              <span>High confidence</span>
+            </div>
             <div className="lane-seq" role="list">
-              {sequence.length === 0 ? (
+              {shownSequence.length === 0 ? (
                 <div className="lane-placeholder">Streaming bases...</div>
               ) : (
-                sequence.slice(0, 200).split("").map((base, position) => {
+                shownSequence.split("").map((base, position) => {
                   const heat = candidate?.baseHeat[position];
                   const likelihood = candidate?.perPositionScores[position];
                   const likelihoodHeat = heatFromScore(likelihood);

@@ -171,6 +171,8 @@ class Evo2MockService(Evo2Service):
     ) -> AsyncGenerator[str, None]:
         rng = random.Random(_deterministic_seed(seed + str(n_tokens)))
         last = seed[-1].upper() if seed else "A"
+        # Keep long-sequence demos snappy while preserving visible token streaming.
+        token_delay = 0.004 if n_tokens >= 160 else 0.012
 
         for _ in range(n_tokens):
             weights = _TRANSITION.get(last, _TRANSITION["A"])
@@ -189,7 +191,7 @@ class Evo2MockService(Evo2Service):
             last = chosen
             yield chosen
             # Simulate inference latency
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(token_delay)
 
     async def health(self) -> dict[str, object]:
         return {

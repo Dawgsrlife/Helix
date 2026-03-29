@@ -39,6 +39,7 @@ p {
 
 button,
 input,
+select,
 textarea {
   font-family: inherit;
 }
@@ -138,7 +139,7 @@ textarea {
 
 .landing-controls {
   display: grid;
-  grid-template-columns: 1fr 220px;
+  grid-template-columns: minmax(0, 1fr) 220px 220px;
   gap: 12px;
 }
 
@@ -287,6 +288,7 @@ textarea {
 }
 
 input,
+select,
 textarea {
   border: 1px solid rgba(143, 171, 207, 0.28);
   background: rgba(6, 11, 20, 0.9);
@@ -490,6 +492,48 @@ button.secondary {
   font-family: "IBM Plex Mono", monospace;
 }
 
+.lane-heatmap {
+  margin-top: 8px;
+  height: 18px;
+  border: 1px solid rgba(144, 169, 204, 0.2);
+  border-radius: 8px;
+  background: rgba(4, 10, 18, 0.9);
+  overflow: hidden;
+  display: flex;
+}
+
+.heat-cell {
+  flex: 1;
+  min-width: 1px;
+}
+
+.heat-cell.selected {
+  outline: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.heat-legend {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.heat-legend-bar {
+  width: 72px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    rgba(9, 212, 156, 0.2),
+    rgba(9, 212, 156, 0.55),
+    rgba(255, 90, 111, 0.75)
+  );
+  border: 1px solid rgba(144, 169, 204, 0.26);
+}
+
 .lane-placeholder {
   color: var(--muted);
   font-size: 12px;
@@ -631,6 +675,56 @@ button.secondary {
 .protein-fallback {
   color: #ffb3bf;
   font-size: 12px;
+}
+
+.regulatory-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.regulatory-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.regulatory-summary span {
+  border: 1px solid rgba(144, 169, 204, 0.24);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(5, 11, 20, 0.82);
+}
+
+.regulatory-canvas-wrap {
+  border: 1px solid rgba(144, 169, 204, 0.2);
+  border-radius: 12px;
+  background: rgba(4, 11, 20, 0.94);
+  overflow: hidden;
+}
+
+.regulatory-canvas {
+  width: 100%;
+  height: 340px;
+  display: block;
+}
+
+.regulatory-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.legend-chip {
+  border: 1px solid rgba(144, 169, 204, 0.25);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgba(9, 18, 31, 0.85);
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
 }
 
 .chat-panel {

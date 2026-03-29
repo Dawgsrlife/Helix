@@ -15,7 +15,8 @@ describe("pipelineReducer", () => {
         session_id: "s1",
         requested_candidates: 5,
         candidate_ids: [0, 1, 2, 3, 4],
-        run_profile: "demo"
+        run_profile: "demo",
+        truth_mode: "demo_fallback"
       }
     });
 
@@ -32,6 +33,7 @@ describe("pipelineReducer", () => {
         requested_candidates: 1,
         candidate_ids: [0],
         run_profile: "demo",
+        truth_mode: "demo_fallback",
         candidate_seed_sequences: { "0": "ATG" }
       }
     });
@@ -54,7 +56,8 @@ describe("pipelineReducer", () => {
         session_id: "s1",
         requested_candidates: 1,
         candidate_ids: [0],
-        run_profile: "demo"
+        run_profile: "demo",
+        truth_mode: "demo_fallback"
       }
     });
     const first = pipelineReducer(withManifest, {
@@ -86,7 +89,8 @@ describe("pipelineReducer", () => {
         session_id: "s2",
         requested_candidates: 2,
         candidate_ids: [0, 1],
-        run_profile: "demo"
+        run_profile: "demo",
+        truth_mode: "demo_fallback"
       }
     });
     const done = pipelineReducer(withManifest, {

@@ -13,12 +13,15 @@ from models.domain import DesignSpec
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
-from pipeline.retrieval import retrieve_context
+from pipeline.retrieval import RetrievalResult, retrieve_context
 from services.evo2 import Evo2MockService, Evo2Service
 from services.mock_pdb import build_mock_pdb_from_dna
+from services.regulatory_viz import build_regulatory_map
 from services.structure import predict_structure
 from config import settings, StructureMode
 from ws.events import (
+    CandidateSeedData,
+    CandidateSeedEvent,
     CandidateStatusData,
     CandidateStatusEvent,
     CandidateScoredData,
@@ -33,6 +36,8 @@ from ws.events import (
     PipelineManifestEvent,
     PipelineCompleteData,
     PipelineCompleteEvent,
+    RegulatoryMapReadyData,
+    RegulatoryMapReadyEvent,
     RetrievalProgressData,
     RetrievalProgressEvent,
     StageStatusData,
@@ -44,6 +49,7 @@ from ws.manager import WebSocketManager
 
 DEFAULT_SEED = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
 CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
+SpecUpdateCallback = Callable[[DesignSpec], Awaitable[None] | None]
 STAGE_ORDER = ["intent", "retrieval", "generation", "scoring", "structure", "explanation", "complete"]
 STAGE_RANK = {"pending": 0, "active": 1, "done": 2, "failed": 2}
 
@@ -51,6 +57,7 @@ STAGE_RANK = {"pending": 0, "active": 1, "done": 2, "failed": 2}
 @dataclass
 class PipelineProfile:
     run_profile: str
+    truth_mode: str
     candidate_workers: int
     retrieval_timeout: float
     generation_timeout: float
@@ -67,6 +74,7 @@ class CandidateRuntime:
     sequence: str = ""
     scores: dict[str, float] | None = None
     pdb_data: str | None = None
+    regulatory_map: dict[str, object] | None = None
     confidence: float | None = None
     error: str | None = None
 
@@ -85,6 +93,7 @@ class CandidateRuntime:
             "sequence": self.sequence,
             "scores": self.scores,
             "pdb_data": self.pdb_data,
+            "regulatory_map": self.regulatory_map,
             "confidence": self.confidence,
             "error": self.error,
         }
@@ -132,27 +141,30 @@ class StageTracker:
         )
 
 
-def _profile(run_profile: str) -> PipelineProfile:
+def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
+    use_structure_fallback = truth_mode != "real_only"
     if run_profile == "live":
         return PipelineProfile(
             run_profile="live",
+            truth_mode=truth_mode,
             candidate_workers=3,
             retrieval_timeout=20.0,
             generation_timeout=25.0,
             scoring_timeout=20.0,
             structure_timeout=65.0,
             explanation_timeout=20.0,
-            use_structure_fallback=True,
+            use_structure_fallback=use_structure_fallback,
         )
     return PipelineProfile(
         run_profile="demo",
+        truth_mode=truth_mode,
         candidate_workers=4,
         retrieval_timeout=4.0,
         generation_timeout=8.0,
         scoring_timeout=8.0,
         structure_timeout=4.0,
         explanation_timeout=10.0,
-        use_structure_fallback=True,
+        use_structure_fallback=use_structure_fallback,
     )
 
 
@@ -162,19 +174,21 @@ async def run_generation_pipeline(
     service: Evo2Service,
     session_id: str,
     goal: str,
-    n_tokens: int = 36,
+    n_tokens: int | None = None,
     n_candidates: int = 1,
     run_profile: str = "demo",
+    truth_mode: str = "demo_fallback",
     seed_sequence: str = DEFAULT_SEED,
     on_candidate_ready: CandidateUpdateCallback | None = None,
+    on_spec_ready: SpecUpdateCallback | None = None,
 ) -> None:
     candidate_count = max(1, min(int(n_candidates), 10))
-    profile = _profile(run_profile)
+    profile = _profile(run_profile, truth_mode)
     fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     runtime: dict[int, CandidateRuntime] = {cid: CandidateRuntime(id=cid) for cid in range(candidate_count)}
     runtime_lock = asyncio.Lock()
-    candidate_seeds = {cid: _vary_seed(seed_sequence, cid) for cid in range(candidate_count)}
+    candidate_seeds: dict[int, str] = {}
     first_explanation_task: asyncio.Task[None] | None = None
     first_explained_candidate_id: int | None = None
     finished_generation = 0
@@ -189,7 +203,8 @@ async def run_generation_pipeline(
                 requested_candidates=candidate_count,
                 candidate_ids=list(range(candidate_count)),
                 run_profile=profile.run_profile,
-                candidate_seed_sequences=candidate_seeds,
+                truth_mode=profile.truth_mode,
+                candidate_seed_sequences={},
             )
         ).to_json(),
     )
@@ -205,10 +220,14 @@ async def run_generation_pipeline(
 
     await tracker.set("intent", "active", 0.05)
     spec = await _emit_intent(manager, session_id, goal)
+    if on_spec_ready is not None:
+        callback_result = on_spec_ready(spec)
+        if inspect.isawaitable(callback_result):
+            await callback_result
     await tracker.set("intent", "done", 1.0)
 
     await tracker.set("retrieval", "active", 0.05)
-    await _emit_retrieval(
+    retrieval_result = await _emit_retrieval(
         manager,
         session_id,
         spec,
@@ -217,6 +236,23 @@ async def run_generation_pipeline(
     )
     await tracker.set("retrieval", "done", 1.0)
 
+    candidate_seeds, seed_source = _build_candidate_seeds(
+        seed_sequence=seed_sequence,
+        retrieval_result=retrieval_result,
+        candidate_count=candidate_count,
+    )
+    for candidate_id, seeded_sequence in sorted(candidate_seeds.items()):
+        await manager.send_event(
+            session_id,
+            CandidateSeedEvent(
+                data=CandidateSeedData(
+                    candidate_id=candidate_id,
+                    sequence=seeded_sequence,
+                    source=seed_source,
+                )
+            ).to_json(),
+        )
+
     await tracker.set("generation", "active", 0.01)
     await tracker.set("scoring", "pending", 0.0)
     await tracker.set("structure", "pending", 0.0)
@@ -224,6 +260,9 @@ async def run_generation_pipeline(
     await tracker.set("complete", "pending", 0.0)
 
     semaphore = asyncio.Semaphore(min(profile.candidate_workers, candidate_count))
+    uses_protein_structure = _uses_protein_structure(spec.design_type)
+    emit_regulatory_overlay = not uses_protein_structure
+    target_sequence_length = _default_target_sequence_length(spec.design_type, profile.run_profile)
 
     async def _attempt_first_explanation(candidate: CandidateRuntime) -> None:
         nonlocal first_explanation_task, first_explained_candidate_id
@@ -260,6 +299,11 @@ async def run_generation_pipeline(
         nonlocal finished_generation, finished_scoring, finished_structure
         async with semaphore:
             varied_seed = candidate_seeds[candidate_id]
+            tokens_to_generate = (
+                int(n_tokens)
+                if n_tokens is not None
+                else max(96, target_sequence_length - len(varied_seed))
+            )
             # Keep temperature in [0.7, 1.0] to stay within NIM API limits.
             # Diversity comes from seed variation + temperature spread.
             temperature = min(1.0, 0.7 + (0.03 * candidate_id))
@@ -273,7 +317,11 @@ async def run_generation_pipeline(
 
             try:
                 async with asyncio.timeout(profile.generation_timeout):
-                    async for token in service.generate(varied_seed, n_tokens=n_tokens, temperature=temperature):
+                    async for token in service.generate(
+                        varied_seed,
+                        n_tokens=tokens_to_generate,
+                        temperature=temperature,
+                    ):
                         position = len(generated)
                         generated += token
                         await manager.send_event(
@@ -289,7 +337,7 @@ async def run_generation_pipeline(
                     candidate_id=candidate_id,
                     generated=generated,
                     seed_length=len(varied_seed),
-                    n_tokens=n_tokens,
+                    n_tokens=tokens_to_generate,
                     temperature=temperature,
                     fallback_service=fallback_service,
                 )
@@ -301,7 +349,7 @@ async def run_generation_pipeline(
                     candidate_id=candidate_id,
                     generated=generated,
                     seed_length=len(varied_seed),
-                    n_tokens=n_tokens,
+                    n_tokens=tokens_to_generate,
                     temperature=temperature,
                     fallback_service=fallback_service,
                 )
@@ -401,7 +449,9 @@ async def run_generation_pipeline(
 
             pdb_data: str | None = None
             confidence: float | None = None
+            regulatory_map: dict[str, object] | None = None
             structure_error: str | None = None
+
             try:
                 async with asyncio.timeout(profile.structure_timeout):
                     if settings.structure_mode == StructureMode.ESMFOLD:
@@ -439,6 +489,19 @@ async def run_generation_pipeline(
                     data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
                 ).to_json(),
             )
+
+            if emit_regulatory_overlay:
+                regulatory_map = build_regulatory_map(generated)
+                await manager.send_event(
+                    session_id,
+                    RegulatoryMapReadyEvent(
+                        data=RegulatoryMapReadyData(
+                            candidate_id=candidate_id,
+                            regulatory_map=regulatory_map,
+                        )
+                    ).to_json(),
+                )
+
             await manager.send_event(
                 session_id,
                 CandidateStatusEvent(
@@ -452,6 +515,7 @@ async def run_generation_pipeline(
                 sequence=generated,
                 scores=score_dict,
                 pdb_data=pdb_data,
+                regulatory_map=regulatory_map,
                 confidence=confidence,
                 error=None,
             )
@@ -530,12 +594,25 @@ async def run_followup_pipeline(
     candidate_id: int = 0,
     base_sequence: str = DEFAULT_SEED,
     run_profile: str = "demo",
+    truth_mode: str = "demo_fallback",
+    design_type_hint: str | None = None,
     on_candidate_ready: CandidateUpdateCallback | None = None,
+    on_spec_ready: SpecUpdateCallback | None = None,
 ) -> list[str]:
+    profile = _profile(run_profile, truth_mode)
     tracker = StageTracker(manager, session_id)
     await tracker.emit_initial()
     await tracker.set("intent", "active", 0.1)
     spec = await _emit_intent(manager, session_id, message)
+    if design_type_hint and not any(
+        token in message.lower()
+        for token in ("coding", "protein", "peptide", "orf", "regulatory", "enhancer", "promoter")
+    ):
+        spec.design_type = design_type_hint
+    if on_spec_ready is not None:
+        callback_result = on_spec_ready(spec)
+        if inspect.isawaitable(callback_result):
+            await callback_result
     await tracker.set("intent", "done", 1.0)
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
 
@@ -572,20 +649,66 @@ async def run_followup_pipeline(
 
     pdb_data: str | None = None
     confidence: float | None = None
+    regulatory_map: dict[str, object] | None = None
     if settings.structure_mode == StructureMode.ESMFOLD:
         result = await predict_structure(base)
         if result is not None:
             pdb_data = result.pdb_data
             confidence = result.confidence
-    if pdb_data is None:
+    if pdb_data is None and profile.use_structure_fallback:
         pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
-
+    if pdb_data is None:
+        await manager.send_event(
+            session_id,
+            CandidateStatusEvent(
+                data=CandidateStatusData(
+                    candidate_id=candidate_id,
+                    status="failed",
+                    reason="structure_unavailable",
+                )
+            ).to_json(),
+        )
+        await tracker.set("structure", "failed", 1.0)
+        await tracker.set("complete", "done", 1.0)
+        await manager.send_event(
+            session_id,
+            PipelineCompleteEvent(
+                data=PipelineCompleteData(
+                    requested_candidates=1,
+                    completed_candidates=0,
+                    failed_candidates=1,
+                    candidates=[
+                        {
+                            "id": candidate_id,
+                            "status": "failed",
+                            "sequence": base,
+                            "scores": scores.to_dict(),
+                            "pdb_data": None,
+                            "regulatory_map": None,
+                            "confidence": None,
+                            "error": "structure_unavailable",
+                        },
+                    ],
+                )
+            ).to_json(),
+        )
+        return steps
     await manager.send_event(
         session_id,
         StructureReadyEvent(
             data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
         ).to_json(),
     )
+
+    if not _uses_protein_structure(spec.design_type):
+        regulatory_map = build_regulatory_map(base)
+        await manager.send_event(
+            session_id,
+            RegulatoryMapReadyEvent(
+                data=RegulatoryMapReadyData(candidate_id=candidate_id, regulatory_map=regulatory_map)
+            ).to_json(),
+        )
+
     await manager.send_event(
         session_id,
         CandidateStatusEvent(
@@ -626,6 +749,7 @@ async def run_followup_pipeline(
                         "sequence": base,
                         "scores": scores.to_dict(),
                         "pdb_data": pdb_data,
+                        "regulatory_map": regulatory_map,
                         "confidence": confidence,
                         "error": None,
                     },
@@ -649,7 +773,7 @@ async def _emit_retrieval(
     spec: DesignSpec,
     tracker: StageTracker | None = None,
     timeout_seconds: float = 5.0,
-) -> None:
+) -> RetrievalResult | None:
     import dataclasses
 
     result = None
@@ -686,6 +810,7 @@ async def _emit_retrieval(
             completed += 1
         if tracker is not None:
             await tracker.set("retrieval", "active", completed / len(sources))
+    return result
 
 
 async def _fill_with_demo_tokens(
@@ -720,6 +845,39 @@ def _simple_mutate(sequence: str, position: int, new_base: str) -> str:
     if position < 0 or position >= len(sequence):
         return sequence
     return sequence[:position] + new_base + sequence[position + 1 :]
+
+
+def _uses_protein_structure(design_type: str | None) -> bool:
+    if not design_type:
+        return False
+    key = design_type.lower()
+    return any(token in key for token in ("coding", "protein", "peptide", "orf"))
+
+
+def _default_target_sequence_length(design_type: str | None, run_profile: str) -> int:
+    # Keep demo fast while making sequences visibly non-trivial.
+    if run_profile == "live":
+        return 960 if _uses_protein_structure(design_type) else 720
+    return 520 if _uses_protein_structure(design_type) else 420
+
+
+def _select_context_seed(retrieval_result: RetrievalResult | None, fallback_seed: str) -> tuple[str, str]:
+    if retrieval_result and retrieval_result.ncbi and retrieval_result.ncbi.reference_sequence:
+        reference = retrieval_result.ncbi.reference_sequence
+        if len(reference) >= 180:
+            return reference[: min(260, len(reference))], "retrieval_context"
+    return fallback_seed, "fallback_seed"
+
+
+def _build_candidate_seeds(
+    *,
+    seed_sequence: str,
+    retrieval_result: RetrievalResult | None,
+    candidate_count: int,
+) -> tuple[dict[int, str], str]:
+    base_seed, source = _select_context_seed(retrieval_result, seed_sequence)
+    seeds = {cid: _vary_seed(base_seed, cid) for cid in range(candidate_count)}
+    return seeds, source
 
 
 def _vary_seed(sequence: str, candidate_id: int) -> str:

@@ -12,6 +12,7 @@ export async function postDesign(args: {
   sessionId: string;
   numCandidates: number;
   runProfile: "demo" | "live";
+  truthMode: "demo_fallback" | "real_only";
 }): Promise<DesignAcceptedResponse> {
   const response = await fetch(`${args.apiBase}/api/design`, {
     method: "POST",
@@ -20,7 +21,8 @@ export async function postDesign(args: {
       goal: args.goal,
       session_id: args.sessionId,
       num_candidates: args.numCandidates,
-      run_profile: args.runProfile
+      run_profile: args.runProfile,
+      truth_mode: args.truthMode
     })
   });
 
