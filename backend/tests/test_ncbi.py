@@ -3,7 +3,7 @@
 import asyncio
 import time
 import pytest
-from backend.services.ncbi import fetch_gene_info, NCBIResult
+from services.ncbi import fetch_gene_info, NCBIResult
 
 # NCBI E-utilities rate limit: 3 requests/sec without API key.
 # Each test that hits the live API sleeps briefly to stay under the limit.

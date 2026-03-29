@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from backend.config import NCBI_API_KEY
+from config import NCBI_API_KEY
 
 logger = logging.getLogger(__name__)
 

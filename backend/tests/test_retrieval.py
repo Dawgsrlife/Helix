@@ -2,11 +2,11 @@
 
 import asyncio
 import pytest
-from backend.models.domain import DesignSpec
-from backend.pipeline.retrieval import retrieve_context, RetrievalResult
-from backend.services.ncbi import NCBIResult
-from backend.services.pubmed import PubMedResult
-from backend.services.clinvar import ClinVarResult
+from models.domain import DesignSpec
+from pipeline.retrieval import retrieve_context, RetrievalResult
+from services.ncbi import NCBIResult
+from services.pubmed import PubMedResult
+from services.clinvar import ClinVarResult
 
 
 class TestRetrieveContext:

@@ -10,10 +10,10 @@ import asyncio
 import logging
 from dataclasses import dataclass
 
-from backend.models.domain import DesignSpec
-from backend.services.clinvar import ClinVarResult, lookup_variants
-from backend.services.ncbi import NCBIResult, fetch_gene_info
-from backend.services.pubmed import PubMedResult, search_literature
+from models.domain import DesignSpec
+from services.clinvar import ClinVarResult, lookup_variants
+from services.ncbi import NCBIResult, fetch_gene_info
+from services.pubmed import PubMedResult, search_literature
 
 logger = logging.getLogger(__name__)
 

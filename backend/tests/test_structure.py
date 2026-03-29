@@ -2,7 +2,7 @@
 
 import asyncio
 import pytest
-from backend.services.structure import (
+from services.structure import (
     predict_structure,
     StructurePrediction,
     _extract_mean_plddt,

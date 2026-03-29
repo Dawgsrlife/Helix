@@ -2,7 +2,7 @@
 
 import asyncio
 import pytest
-from backend.services.pubmed import (
+from services.pubmed import (
     search_literature,
     PubMedResult,
     PubMedArticle,

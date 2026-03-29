@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from backend.services.translation import translate
+from services.translation import translate
 
 logger = logging.getLogger(__name__)
 
