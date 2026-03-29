@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import { useHelixStore } from "@/lib/store";
 import { ArrowRight, ArrowUpRight, ArrowDownRight, Minus, Box } from "lucide-react";
@@ -18,7 +18,6 @@ export default function CompareView() {
   const activePdb = useHelixStore((s) => s.activePdb);
   const originalPdb = useHelixStore((s) => s.originalPdb);
   const theme = useHelixStore((s) => s.theme);
-  const [structureView, setStructureView] = useState<"original" | "current">("current");
 
   const candA = candidates[0];
   const candB = candidates[1];
@@ -259,50 +258,43 @@ export default function CompareView() {
           </div>
         </div>
 
-        {/* ── STRUCTURE COMPARISON ── */}
+        {/* ── STRUCTURE COMPARISON: side by side ── */}
         {(activePdb || originalPdb) && (
           <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-raised)" }}>
-            <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
-              <div className="flex items-center gap-2">
-                <Box size={14} style={{ color: "var(--accent)" }} />
-                <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                  3D Structure Comparison
+            <div className="flex items-center gap-2 px-5 py-3" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+              <Box size={14} style={{ color: "var(--accent)" }} />
+              <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
+                3D Structure — Before & After
+              </span>
+              {originalPdb === activePdb && (
+                <span className="text-[10px] ml-auto" style={{ color: "var(--text-faint)" }}>
+                  No edits yet — both show the same structure
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
+              <div className="px-4 py-2 text-center" style={{ borderRight: "1px solid var(--ghost-border)" }}>
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Original</span>
+              </div>
+              <div className="px-4 py-2 text-center">
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: originalPdb !== activePdb ? "var(--accent)" : "var(--text-muted)" }}>
+                  {originalPdb !== activePdb ? "After Edits" : "Current"}
                 </span>
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => setStructureView("original")}
-                  className="px-3 py-1 rounded text-[10px] font-medium uppercase tracking-wider transition-colors"
-                  style={{
-                    background: structureView === "original" ? "color-mix(in oklch, var(--accent), transparent 88%)" : "transparent",
-                    color: structureView === "original" ? "var(--accent)" : "var(--text-faint)",
-                  }}>
-                  Original
-                </button>
-                <button onClick={() => setStructureView("current")}
-                  className="px-3 py-1 rounded text-[10px] font-medium uppercase tracking-wider transition-colors"
-                  style={{
-                    background: structureView === "current" ? "color-mix(in oklch, var(--accent), transparent 88%)" : "transparent",
-                    color: structureView === "current" ? "var(--accent)" : "var(--text-faint)",
-                  }}>
-                  After Edits
-                </button>
+            </div>
+            <div className="grid grid-cols-2">
+              <div className="h-[320px]" style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)", borderRight: "1px solid var(--ghost-border)" }}>
+                <ProteinViewer
+                  pdbData={originalPdb || undefined}
+                  theme={theme}
+                />
               </div>
-            </div>
-            <div className="h-[350px]" style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)" }}>
-              <ProteinViewer
-                pdbData={structureView === "original" ? (originalPdb || undefined) : (activePdb || undefined)}
-                theme={theme}
-                isFullscreen={false}
-              />
-            </div>
-            <div className="px-5 py-2 text-center">
-              <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>
-                {structureView === "original"
-                  ? "Original structure before edits"
-                  : originalPdb !== activePdb
-                    ? "Re-folded structure after mutations"
-                    : "No edits applied yet — structure unchanged"}
-              </span>
+              <div className="h-[320px]" style={{ background: theme === "dark" ? "var(--surface-void)" : "var(--surface-base)" }}>
+                <ProteinViewer
+                  pdbData={activePdb || undefined}
+                  theme={theme}
+                />
+              </div>
             </div>
           </div>
         )}
