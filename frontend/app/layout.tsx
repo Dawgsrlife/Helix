@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Noto_Serif, Space_Grotesk } from "next/font/google";
 import { cn } from "@/lib/utils";
 import "./globals.css";
 
@@ -15,6 +15,19 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+const notoSerif = Noto_Serif({
+  subsets: ["latin"],
+  variable: "--font-headline",
+  display: "swap",
+  style: ["normal", "italic"],
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-label",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Helix",
   description:
@@ -27,7 +40,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={cn("dark", inter.variable, jetbrainsMono.variable)}>
+    <html
+      lang="en"
+      className={cn(
+        "dark",
+        inter.variable,
+        jetbrainsMono.variable,
+        notoSerif.variable,
+        spaceGrotesk.variable
+      )}
+    >
       <body className="antialiased min-h-screen">{children}</body>
     </html>
   );

@@ -1,76 +1,39 @@
 "use client";
 
-import { useEffect, useRef } from "react";
 import Link from "next/link";
-import gsap from "gsap";
+import { Dna, FlaskConical, Search, BarChart3 } from "lucide-react";
 
 const SEQUENCE_LINE = "ATGGCTAGCATCGATCGATCGATCGTAGCTAGCTAGCTAGCATCGATCG";
 
 const BASE_COLORS: Record<string, string> = {
-  A: "var(--base-a)",
-  T: "var(--base-t)",
-  C: "var(--base-c)",
-  G: "var(--base-g)",
+  A: "#6bbd7a",
+  T: "#d47a7a",
+  C: "#6b9fd4",
+  G: "#c9a855",
 };
 
+const FEATURES = [
+  { icon: Dna, label: "Module 01", title: "Sequencing" },
+  { icon: Search, label: "Module 02", title: "Proteomics" },
+  { icon: FlaskConical, label: "Module 03", title: "Synthesis" },
+  { icon: BarChart3, label: "Module 04", title: "Analysis" },
+];
+
 export default function Home() {
-  const heroRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!heroRef.current) return;
-
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
-
-      tl.fromTo(
-        "[data-wordmark]",
-        { opacity: 0, y: -8 },
-        { opacity: 1, y: 0, duration: 0.5 }
-      )
-        .fromTo(
-          "[data-headline]",
-          { opacity: 0, y: 20 },
-          { opacity: 1, y: 0, duration: 0.7 },
-          "-=0.2"
-        )
-        .fromTo(
-          "[data-subtext]",
-          { opacity: 0, y: 16 },
-          { opacity: 1, y: 0, duration: 0.6 },
-          "-=0.3"
-        )
-        .fromTo(
-          "[data-cta]",
-          { opacity: 0, y: 12 },
-          { opacity: 1, y: 0, duration: 0.5 },
-          "-=0.2"
-        )
-        .fromTo(
-          "[data-preview]",
-          { opacity: 0, y: 24, scale: 0.98 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.8 },
-          "-=0.1"
-        );
-    }, heroRef);
-
-    return () => ctx.revert();
-  }, []);
-
   return (
-    <div
-      ref={heroRef}
-      className="min-h-screen flex flex-col"
-      style={{ background: "var(--surface-void)" }}
-    >
-      {/* Nav */}
+    <div className="min-h-screen" style={{ background: "#0e0e10", color: "#fffbfe" }}>
+      {/* Fixed Nav */}
       <nav
-        data-wordmark
-        style={{ opacity: 0 }}
-        className="flex items-center justify-between px-8 py-5"
+        className="fixed top-0 w-full z-50 flex justify-between items-center px-8 h-16"
+        style={{
+          background: "rgba(14, 14, 16, 0.8)",
+          backdropFilter: "blur(20px)",
+          borderBottom: "0.5px solid rgba(255,255,255,0.1)",
+        }}
       >
         <span
-          className="text-sm tracking-[-0.04em] font-bold uppercase"
-          style={{ color: "var(--text-primary)" }}
+          className="text-xl tracking-tighter italic"
+          style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif", color: "#93edd9" }}
         >
           Helix
         </span>
@@ -79,17 +42,19 @@ export default function Home() {
             href="https://github.com/Dawgsrlife/Helix"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[13px] hover:opacity-80 transition-opacity"
-            style={{ color: "var(--text-muted)" }}
+            className="text-gray-400 hover:text-[#93edd9] transition-colors duration-300 uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px" }}
           >
             GitHub
           </a>
           <Link
             href="/analyze"
-            className="text-[13px] px-4 py-1.5 rounded-md transition-opacity hover:opacity-90"
+            className="px-5 py-2 uppercase tracking-widest hover:bg-[#93edd9] hover:text-[#0e0e10] transition-all duration-300"
             style={{
-              background: "var(--text-primary)",
-              color: "var(--surface-void)",
+              fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+              fontSize: "10px",
+              border: "0.5px solid rgba(255,255,255,0.2)",
+              color: "#fffbfe",
             }}
           >
             Open IDE
@@ -98,36 +63,47 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <main className="flex-1 flex flex-col items-start justify-center px-8 md:px-16 lg:px-24 max-w-5xl">
-        <div className="py-24 md:py-32">
-          <h1
-            data-headline
-            style={{ opacity: 0, color: "var(--text-primary)" }}
-            className="text-[clamp(2.5rem,5vw,3.5rem)] font-medium leading-[1.1] tracking-[-0.02em] mb-6"
-          >
-            Design DNA
-            <br />
-            the way you write
-            <br />
-            software.
-          </h1>
+      <section className="relative min-h-screen flex flex-col items-center justify-center pt-32 pb-20 px-6 overflow-hidden">
+        {/* Background glow */}
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(147,237,217,0.08) 0%, transparent 70%)" }}
+          />
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, #0e0e10, transparent 30%, transparent 70%, #0e0e10)" }} />
+        </div>
 
+        <div className="relative z-10 text-center max-w-5xl animate-[fade-in-up_0.8s_ease-out_both]">
           <p
-            data-subtext
-            style={{ opacity: 0, color: "var(--text-secondary)" }}
-            className="text-[17px] leading-relaxed max-w-[480px] mb-10"
+            className="uppercase tracking-[0.4em] mb-8"
+            style={{
+              fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+              fontSize: "10px",
+              color: "#93edd9",
+              animation: "pulse 3s ease-in-out infinite",
+            }}
           >
-            Helix pairs Evo 2 with AlphaFold to give researchers a workspace
-            for sequence design, annotation, and structural analysis.
+            Powered by Evo 2
           </p>
-
-          <div data-cta style={{ opacity: 0 }} className="flex items-center gap-4">
+          <h1
+            className="italic text-6xl md:text-9xl tracking-tighter mb-12 leading-tight"
+            style={{
+              fontFamily: "var(--font-headline), 'Noto Serif', serif",
+              background: "linear-gradient(to bottom, #fffbfe, #93edd9)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Design DNA.
+          </h1>
+          <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
             <Link
               href="/analyze"
-              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-opacity hover:opacity-90"
+              className="px-10 py-4 uppercase tracking-widest text-xs hover:bg-[#93edd9] transition-all duration-500 shadow-2xl"
               style={{
-                background: "var(--text-primary)",
-                color: "var(--surface-void)",
+                fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+                background: "#fffbfe",
+                color: "#000000",
               }}
             >
               Get started
@@ -136,119 +112,265 @@ export default function Home() {
               href="https://github.com/Dawgsrlife/Helix"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-6 py-2.5 rounded-md text-[14px] font-medium transition-opacity hover:opacity-80"
+              className="px-10 py-4 uppercase tracking-widest text-xs hover:border-[#93edd9] transition-all duration-500"
               style={{
-                color: "var(--text-muted)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+                border: "0.5px solid rgba(255,255,255,0.2)",
+                color: "#fffbfe",
               }}
             >
               GitHub
             </a>
           </div>
         </div>
-      </main>
 
-      {/* Product preview */}
-      <section data-preview style={{ opacity: 0 }} className="px-8 md:px-16 lg:px-24 pb-24">
-        <div
-          className="rounded-lg overflow-hidden"
-          style={{
-            background: "var(--surface-base)",
-            border: "1px solid rgba(255,255,255,0.06)",
-          }}
-        >
-          {/* Mock IDE header */}
-          <div
-            className="flex items-center justify-between px-5 py-3"
-            style={{ background: "var(--surface-raised)" }}
+        {/* Scroll indicator */}
+        <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-4 opacity-40">
+          <span
+            className="uppercase tracking-[0.3em]"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "9px" }}
           >
-            <div className="flex items-center gap-3">
-              <span
-                className="text-[11px] font-bold tracking-[-0.04em] uppercase"
-                style={{ color: "var(--text-primary)" }}
+            Scroll to explore
+          </span>
+          <div className="w-[1px] h-12" style={{ background: "linear-gradient(to bottom, #93edd9, transparent)" }} />
+        </div>
+      </section>
+
+      {/* Workspace Showcase */}
+      <section className="relative py-40 px-6 md:px-20" style={{ background: "#0e0e10" }}>
+        <div className="max-w-[1400px] mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-end mb-24">
+            <div className="lg:col-span-8">
+              <h2
+                className="italic text-5xl md:text-7xl leading-[1.1] mb-8"
+                style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif" }}
               >
-                Helix
-              </span>
-              <span style={{ color: "var(--text-faint)" }} className="text-[11px]">
-                /
-              </span>
-              <span
-                className="text-[11px] font-mono"
-                style={{ color: "var(--text-muted)" }}
-              >
-                h_sapiens_BRCA1.seq
-              </span>
+                A clinical canvas for <br />
+                <span style={{ color: "rgba(147, 237, 217, 0.6)" }}>biological precision.</span>
+              </h2>
             </div>
-            <div className="flex items-center gap-2">
-              <div
-                className="w-[6px] h-[6px] rounded-full"
-                style={{ background: "var(--accent)", animation: "pulse-soft 2s ease-in-out infinite" }}
-              />
-              <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>
-                Evo 2 ready
-              </span>
+            <div className="lg:col-span-4 lg:pb-4">
+              <p className="text-sm leading-relaxed max-w-sm" style={{ color: "#adaaad" }}>
+                Helix introduces a frictionless interface for genomic sequencing,
+                allowing researchers to manipulate molecular strands with atomic detail.
+              </p>
             </div>
           </div>
 
-          {/* Mock sequence content */}
-          <div className="px-5 py-6">
-            {/* Sequence line */}
-            <div className="font-mono text-[13px] leading-[22px] mb-4">
-              <div className="flex gap-4">
-                <span
-                  className="text-[11px] w-10 text-right shrink-0 tabular-nums select-none"
-                  style={{ color: "var(--text-faint)" }}
-                >
-                  1
-                </span>
-                <span>
-                  {SEQUENCE_LINE.split("").map((base, i) => (
-                    <span key={i} style={{ color: BASE_COLORS[base] ?? "var(--text-muted)" }}>
-                      {base}
-                    </span>
-                  ))}
-                </span>
-              </div>
-            </div>
-
-            {/* Annotation bar */}
+          {/* Mock IDE Preview */}
+          <div className="relative group">
             <div
-              className="h-4 rounded-sm flex overflow-hidden mb-4"
-              style={{ background: "var(--surface-raised)" }}
+              className="absolute -inset-1 opacity-30 group-hover:opacity-50 transition-opacity duration-700"
+              style={{ background: "linear-gradient(to right, rgba(147,237,217,0.2), transparent)", filter: "blur(48px)" }}
+            />
+            <div
+              className="relative overflow-hidden"
+              style={{
+                backdropFilter: "blur(40px)",
+                background: "rgba(31, 31, 34, 0.6)",
+                border: "0.5px solid rgba(255,255,255,0.1)",
+                boxShadow: "0 20px 80px rgba(0,0,0,0.4)",
+              }}
             >
-              <div style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }} />
-              <div style={{ width: "15%", background: "var(--annotation-intron)", opacity: 0.5 }} />
-              <div style={{ width: "35%", background: "var(--annotation-orf)", opacity: 0.4 }} />
-              <div style={{ width: "25%", background: "var(--annotation-exon)", opacity: 0.5 }} />
-            </div>
+              {/* Window chrome */}
+              <div className="h-10 flex items-center px-4 gap-2" style={{ borderBottom: "0.5px solid rgba(255,255,255,0.1)" }}>
+                <div className="w-2 h-2 rounded-full" style={{ background: "rgba(239,68,68,0.4)" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: "rgba(234,179,8,0.4)" }} />
+                <div className="w-2 h-2 rounded-full" style={{ background: "rgba(34,197,94,0.4)" }} />
+              </div>
 
-            {/* Likelihood bars */}
-            <div className="flex items-end gap-[2px] h-16">
-              {Array.from({ length: 48 }, (_, i) => {
-                const h = Math.abs(Math.sin(i * 0.3) * 0.7 + Math.sin(i * 0.7) * 0.3);
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 rounded-t-sm"
-                    style={{
-                      height: `${Math.max(h * 100, 8)}%`,
-                      background: "var(--accent)",
-                      opacity: 0.4 + h * 0.4,
-                    }}
-                  />
-                );
-              })}
+              {/* Mock content */}
+              <div className="px-5 py-6">
+                <div className="font-mono text-[13px] leading-[22px] mb-4" style={{ fontFamily: "var(--font-mono), monospace" }}>
+                  <div className="flex gap-4">
+                    <span className="text-[11px] w-10 text-right shrink-0 tabular-nums select-none" style={{ color: "#48474a" }}>1</span>
+                    <span>
+                      {SEQUENCE_LINE.split("").map((base, i) => (
+                        <span key={i} style={{ color: BASE_COLORS[base] }}>{base}</span>
+                      ))}
+                    </span>
+                  </div>
+                </div>
+                {/* Annotation bar */}
+                <div className="h-4 flex overflow-hidden mb-4" style={{ background: "#19191c" }}>
+                  <div style={{ width: "25%", background: "#7c6bc4", opacity: 0.5 }} />
+                  <div style={{ width: "15%", background: "#3a3a3c", opacity: 0.5 }} />
+                  <div style={{ width: "35%", background: "#5bb5a2", opacity: 0.4 }} />
+                  <div style={{ width: "25%", background: "#7c6bc4", opacity: 0.5 }} />
+                </div>
+                {/* Likelihood bars */}
+                <div className="flex items-end gap-[2px] h-16">
+                  {Array.from({ length: 48 }, (_, i) => {
+                    const h = Math.abs(Math.sin(i * 0.3) * 0.7 + Math.sin(i * 0.7) * 0.3);
+                    return (
+                      <div
+                        key={i}
+                        className="flex-1 rounded-t-sm"
+                        style={{ height: `${Math.max(h * 100, 8)}%`, background: "#93edd9", opacity: 0.4 + h * 0.4 }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           </div>
         </div>
-
-        <p
-          className="text-[12px] mt-6 text-center"
-          style={{ color: "var(--text-faint)" }}
-        >
-          Evo 2 &middot; 40B parameters &middot; 9 trillion base pairs &middot; All domains of life
-        </p>
       </section>
+
+      {/* Synthesize Life - Features */}
+      <section className="relative py-40 overflow-hidden" style={{ background: "#000000" }}>
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="flex flex-col md:flex-row gap-32 items-start">
+            <div className="w-full md:w-1/2">
+              <div className="md:sticky md:top-40">
+                <span
+                  className="uppercase tracking-[0.3em]"
+                  style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "9px", color: "#93edd9" }}
+                >
+                  The Vision
+                </span>
+                <h3
+                  className="italic text-6xl mt-8 mb-12"
+                  style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif" }}
+                >
+                  Synthesize Life.
+                </h3>
+                <p className="text-lg leading-relaxed mb-12 max-w-md" style={{ color: "#adaaad" }}>
+                  We aren't just reading data. We are writing the future. From CRISPR
+                  optimization to synthetic protein folding, Helix provides the modular
+                  architecture required for the next century of medicine.
+                </p>
+                <Link
+                  href="/analyze"
+                  className="flex items-center gap-4 group"
+                >
+                  <span
+                    className="h-[1px] w-12 group-hover:w-20 transition-all duration-500"
+                    style={{ background: "#93edd9" }}
+                  />
+                  <span
+                    className="uppercase tracking-widest text-xs"
+                    style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", color: "#93edd9" }}
+                  >
+                    Start designing
+                  </span>
+                </Link>
+              </div>
+            </div>
+
+            {/* Bento grid */}
+            <div
+              className="w-full md:w-1/2 grid grid-cols-2 gap-px"
+              style={{ background: "rgba(255,255,255,0.05)", border: "0.5px solid rgba(255,255,255,0.1)" }}
+            >
+              {FEATURES.map(({ icon: Icon, label, title }) => (
+                <div
+                  key={title}
+                  className="p-12 flex flex-col gap-8 aspect-square justify-between"
+                  style={{ background: "#0e0e10" }}
+                >
+                  <Icon size={36} style={{ color: "#93edd9" }} strokeWidth={1.2} />
+                  <div>
+                    <p
+                      className="uppercase tracking-widest mb-4 opacity-50"
+                      style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px" }}
+                    >
+                      {label}
+                    </p>
+                    <h4
+                      className="text-2xl"
+                      style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif" }}
+                    >
+                      {title}
+                    </h4>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="py-60 px-6 text-center relative" style={{ background: "#0e0e10" }}>
+        <div className="absolute inset-0 flex justify-center items-center pointer-events-none">
+          <div
+            className="w-[600px] h-[600px] rounded-full"
+            style={{ background: "rgba(147, 237, 217, 0.1)", filter: "blur(120px)" }}
+          />
+        </div>
+        <div className="relative z-10 max-w-3xl mx-auto">
+          <h2
+            className="italic text-5xl md:text-8xl mb-16 tracking-tighter"
+            style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif" }}
+          >
+            The future is <br /> being written.
+          </h2>
+          <Link
+            href="/analyze"
+            className="inline-block px-12 py-5 uppercase tracking-[0.2em] text-sm hover:scale-105 transition-all duration-300 shadow-2xl"
+            style={{
+              fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+              background: "#93edd9",
+              color: "#002821",
+            }}
+          >
+            Initialize Sequence
+          </Link>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-20 px-8" style={{ borderTop: "0.5px solid rgba(255,255,255,0.05)", background: "#000000" }}>
+        <div className="flex flex-col md:flex-row justify-between items-start gap-12">
+          <div>
+            <div
+              className="text-3xl italic tracking-tighter mb-4"
+              style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif", color: "#93edd9" }}
+            >
+              Helix
+            </div>
+            <p
+              className="uppercase tracking-widest"
+              style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#adaaad" }}
+            >
+              Genomic Design IDE - YHack 2026
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-20">
+            {[
+              { title: "Product", links: ["Sequencing", "Synthesis", "Analysis"] },
+              { title: "Resources", links: ["Documentation", "GitHub", "Evo 2 Paper"] },
+              { title: "Team", links: ["Alex (Frontend)", "Vishnu (Backend)", "Henry (Demo)"] },
+            ].map(({ title, links }) => (
+              <div key={title} className="flex flex-col gap-4">
+                <span
+                  className="uppercase tracking-widest mb-2"
+                  style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#93edd9" }}
+                >
+                  {title}
+                </span>
+                {links.map((link) => (
+                  <span key={link} className="text-xs transition-colors cursor-default" style={{ color: "#adaaad" }}>
+                    {link}
+                  </span>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div
+          className="mt-20 pt-10 flex justify-between items-center opacity-40"
+          style={{ borderTop: "0.5px solid rgba(255,255,255,0.05)" }}
+        >
+          <p
+            className="uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "9px" }}
+          >
+            &copy; 2026 Project Helix. Built at YHack.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
