@@ -10,6 +10,7 @@ from uuid import uuid4
 from models.domain import DesignSpec
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
+from pipeline.explanation import generate_explanation
 from pipeline.retrieval import retrieve_context
 from services.evo2 import Evo2Service
 from services.structure import predict_structure
@@ -93,15 +94,13 @@ async def run_generation_pipeline(
         ).to_json(),
     )
 
-    for chunk in [
-        "Candidate preserves core promoter-like motifs.",
-        "Predicted expression bias aligns with requested tissue profile.",
-    ]:
-        await manager.send_event(
-            session_id,
-            ExplanationChunkEvent(data=ExplanationChunkData(text=chunk)).to_json(),
-        )
-        await asyncio.sleep(0.03)
+    await generate_explanation(
+        sequence=generated,
+        scores=scores.to_dict(),
+        spec=spec,
+        manager=manager,
+        session_id=session_id,
+    )
 
     if on_candidate_ready is not None:
         callback_result = on_candidate_ready(candidate_id, generated)
