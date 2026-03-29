@@ -64,7 +64,8 @@ export default function PipelineStatus() {
 
   if (pipelineStatus !== "analyzing") return null;
 
-  const progress = ((completedStages.length) / STAGES.length) * 100;
+  const allDone = completedStages.length >= STAGES.length;
+  const progress = allDone ? 100 : ((completedStages.length) / STAGES.length) * 100;
 
   // Determine active stage index
   const activeStageIdx = isStreaming
@@ -142,6 +143,21 @@ export default function PipelineStatus() {
             );
           })}
         </div>
+
+        {/* Completion state */}
+        {allDone && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-6 flex items-center gap-3 px-3 py-3 rounded-lg"
+            style={{ background: "rgba(91,181,162,0.08)" }}>
+            <Check size={16} style={{ color: "var(--accent)" }} />
+            <span className="text-[13px] font-medium" style={{ color: "var(--accent)" }}>
+              Pipeline complete — loading results
+            </span>
+            <Loader2 size={14} className="animate-spin ml-auto" style={{ color: "var(--accent)" }} />
+          </motion.div>
+        )}
       </div>
     </div>
   );

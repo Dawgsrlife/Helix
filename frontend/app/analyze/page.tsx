@@ -99,7 +99,8 @@ export default function AnalyzePage() {
         {SIDEBAR_ITEMS.map(({ icon: Icon, label, viewMode: target }) => {
           const isActive = viewMode === target || (target === "ide" && viewMode === "compare");
           return (
-            <button key={target} title={label} onClick={() => setViewMode(target)}
+            <button key={target} title={label}
+              onClick={() => analysisResult ? setViewMode(target) : setViewMode("input")}
               className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
               style={{
                 color: isActive ? "var(--accent)" : "var(--text-faint)",
@@ -117,7 +118,7 @@ export default function AnalyzePage() {
           style={{ background: "var(--surface-base)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
           <div className="flex items-center gap-2">
             <HelixLogo size="sm" className="text-[var(--accent)]" />
-            {viewMode !== "input" && (
+            {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
                 <ChevronRight size={14} style={{ color: "var(--text-faint)" }} />
                 <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>{VIEW_LABELS[viewMode]}</span>
@@ -125,7 +126,7 @@ export default function AnalyzePage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {viewMode !== "input" && (
+            {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
                 <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                   {(["analyze", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
