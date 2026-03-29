@@ -209,22 +209,27 @@ function AnalyzePageInner() {
     setRescoring(false);
   }, [rawSequence, rescoring]);
 
-  // 3D ↔ sequence linking: clicking residue in 3D highlights in sequence
+  // 3D ↔ sequence linking
+  const [clickedResidue, setClickedResidue] = useState<number | null>(null);
+
   const handleResidueClick = useCallback((residueSeq: number) => {
-    // Map residue index to approximate base position (3 bases per residue)
     const basePos = (residueSeq - 1) * 3;
     if (basePos >= 0 && basePos < (bases.length || rawSequence.length)) {
       setSelectedPosition(basePos);
     }
+    setClickedResidue(residueSeq);
     setHighlightResidues([residueSeq]);
   }, [bases.length, rawSequence.length, setSelectedPosition, setHighlightResidues]);
 
   const handleResidueHover = useCallback((residueSeq: number | null) => {
-    // Subtle highlight on hover, don't change selected position
+    // Show hover highlight but don't clear clicked residue
     if (residueSeq !== null) {
       setHighlightResidues([residueSeq]);
+    } else if (clickedResidue !== null) {
+      // Restore clicked residue highlight when hover leaves
+      setHighlightResidues([clickedResidue]);
     }
-  }, [setHighlightResidues]);
+  }, [setHighlightResidues, clickedResidue]);
 
   // Sidebar hover state for spring animation
   const [hoveredNav, setHoveredNav] = useState<string | null>(null);
@@ -676,12 +681,12 @@ function AnalyzePageInner() {
                     <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>
                       <ScienceTooltip term="residue">Residue Inspector</ScienceTooltip>
                     </span>
-                    {highlightResidues.length > 0 ? (
-                      <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    {clickedResidue !== null ? (
+                      <motion.div className="space-y-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} key={clickedResidue}>
                         <div>
                           <span className="text-[11px] uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Residue</span>
                           <div className="text-lg font-semibold font-mono" style={{ color: "var(--text-primary)" }}>
-                            #{highlightResidues[0]}
+                            #{clickedResidue}
                           </div>
                         </div>
                         {selectedPosition !== null && (
