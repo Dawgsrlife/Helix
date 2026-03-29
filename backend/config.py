@@ -20,6 +20,11 @@ class StructureMode(str, Enum):
     MOCK = "mock"
 
 
+class SessionStoreMode(str, Enum):
+    MEMORY = "memory"
+    REDIS = "redis"
+
+
 class Settings(BaseSettings):
     # Evo2
     evo2_mode: Evo2Mode = Evo2Mode.MOCK
@@ -44,6 +49,9 @@ class Settings(BaseSettings):
 
     # Infrastructure
     redis_url: str = "redis://localhost:6379/0"
+    session_store_mode: SessionStoreMode = SessionStoreMode.REDIS
+    session_ttl_seconds: int = 7200
+    session_key_prefix: str = "helix:session"
     celery_broker: str = "redis://localhost:6379/1"
     frontend_url: str = "http://localhost:3000"
     port: int = 8000

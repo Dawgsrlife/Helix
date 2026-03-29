@@ -1,9 +1,13 @@
 """Shared test fixtures."""
 
+import os
 import sys
 from pathlib import Path
 
 import pytest
+
+# Tests run with in-memory session state unless a test explicitly opts into Redis.
+os.environ.setdefault("SESSION_STORE_MODE", "memory")
 
 # Add backend root to path so imports work
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

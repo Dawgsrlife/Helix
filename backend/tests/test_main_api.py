@@ -1,7 +1,9 @@
 """Integration tests for FastAPI endpoints and websocket pipeline."""
 
 from fastapi.testclient import TestClient
+import pytest
 
+import main
 from main import app
 
 
@@ -155,3 +157,43 @@ def test_edit_base_persists_mutation_across_calls() -> None:
     )
     assert second.status_code == 200
     assert second.json()["reference_base"] == "T"
+
+
+def test_followup_then_edit_reflects_updated_candidate_state() -> None:
+    client = TestClient(app)
+    session_id = "followup-persist"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+    followup = client.post(
+        "/api/edit/followup",
+        json={"session_id": session_id, "message": "make this more tissue-specific", "candidate_id": 0},
+    )
+    assert followup.status_code == 202
+
+    # followup mutates position 20 to C in the current heuristic pipeline
+    edit = client.post(
+        "/api/edit/base",
+        json={"session_id": session_id, "candidate_id": 0, "position": 20, "new_base": "A"},
+    )
+    assert edit.status_code == 200
+    assert edit.json()["reference_base"] == "C"
+
+
+def test_edit_base_returns_423_when_candidate_locked(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "lock-session"})
+
+    class _FailLock:
+        async def __aenter__(self):
+            raise main.SessionLockTimeoutError("lock-session", 0)
+
+        async def __aexit__(self, _exc_type, _exc, _tb):
+            return False
+
+    monkeypatch.setattr(main.session_store, "candidate_guard", lambda _sid, _cid: _FailLock())
+
+    res = client.post(
+        "/api/edit/base",
+        json={"session_id": "lock-session", "candidate_id": 0, "position": 0, "new_base": "A"},
+    )
+    assert res.status_code == 423
+    assert res.json()["detail"] == "candidate is busy; retry shortly"

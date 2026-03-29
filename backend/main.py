@@ -25,7 +25,7 @@ from models.responses import (
     MutationResponse,
     StructureResponse,
 )
-from config import StructureMode, settings
+from config import SessionStoreMode, StructureMode, settings
 from pipeline.evo2_score import rescore_mutation, score_candidate
 from pipeline.orchestrator import (
     DEFAULT_SEED,
@@ -34,7 +34,12 @@ from pipeline.orchestrator import (
     run_generation_pipeline,
 )
 from services.evo2 import create_evo2_service
-from services.session_store import CandidateNotFoundError, SessionNotFoundError, SessionStore
+from services.session_store import (
+    CandidateNotFoundError,
+    SessionLockTimeoutError,
+    SessionNotFoundError,
+    create_session_store,
+)
 from services.structure import predict_structure
 from services.translation import find_orfs
 from ws.manager import WebSocketManager
@@ -50,7 +55,20 @@ app.add_middleware(
 
 ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
-session_store = SessionStore(default_seed=DEFAULT_SEED)
+session_store = create_session_store(settings, DEFAULT_SEED)
+
+
+@app.on_event("startup")
+async def _startup_checks() -> None:
+    if settings.session_store_mode == SessionStoreMode.REDIS:
+        redis_ok = await session_store.ping()
+        if not redis_ok:
+            raise RuntimeError("Redis session store is enabled but unreachable.")
+
+
+@app.on_event("shutdown")
+async def _shutdown_cleanup() -> None:
+    await session_store.close()
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
@@ -77,22 +95,23 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
-    session_store.initialize_session(session_id)
+    await session_store.initialize_session(session_id)
+    await session_store.set_pending_goal(session_id, request.goal)
     if ws_manager.has_session(session_id):
-        asyncio.create_task(
-            run_generation_pipeline(
-                manager=ws_manager,
-                service=evo2_service,
-                session_id=session_id,
-                goal=request.goal,
-                seed_sequence=DEFAULT_SEED,
-                on_candidate_ready=lambda candidate_id, sequence: session_store.set_candidate_sequence(
-                    session_id, candidate_id, sequence
-                ),
+        pending_goal = await session_store.pop_pending_goal(session_id)
+        if pending_goal is not None:
+            asyncio.create_task(
+                run_generation_pipeline(
+                    manager=ws_manager,
+                    service=evo2_service,
+                    session_id=session_id,
+                    goal=pending_goal,
+                    seed_sequence=DEFAULT_SEED,
+                    on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
+                        session_id, candidate_id, sequence
+                    ),
+                )
             )
-        )
-    else:
-        session_store.set_pending_goal(session_id, request.goal)
     return DesignAcceptedResponse(
         session_id=session_id,
         ws_url=_build_ws_url(http_request, session_id),
@@ -102,24 +121,26 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
 @app.post("/api/edit/base", response_model=BaseEditResponse)
 async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
     try:
-        sequence = session_store.require_candidate_sequence(request.session_id, request.candidate_id)
+        async with session_store.candidate_guard(request.session_id, request.candidate_id):
+            sequence = await session_store.require_candidate_sequence(request.session_id, request.candidate_id)
+            if request.position < 0 or request.position >= len(sequence):
+                raise HTTPException(status_code=422, detail="position out of range")
+
+            updated_scores, delta = await rescore_mutation(
+                evo2_service,
+                sequence=sequence,
+                position=request.position,
+                new_base=request.new_base,
+            )
+            mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
+            mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
+            await session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
+    except SessionLockTimeoutError as exc:
+        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
     except CandidateNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
-
-    if request.position < 0 or request.position >= len(sequence):
-        raise HTTPException(status_code=422, detail="position out of range")
-
-    updated_scores, delta = await rescore_mutation(
-        evo2_service,
-        sequence=sequence,
-        position=request.position,
-        new_base=request.new_base,
-    )
-    mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
-    mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
-    session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
 
     return BaseEditResponse(
         position=request.position,
@@ -142,11 +163,14 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
     candidate_id = request.candidate_id or 0
     try:
-        base_sequence = session_store.require_candidate_sequence(request.session_id, candidate_id)
+        async with session_store.candidate_guard(request.session_id, candidate_id):
+            base_sequence = await session_store.require_candidate_sequence(request.session_id, candidate_id)
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
     except CandidateNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"candidate {candidate_id} not found") from exc
+    except SessionLockTimeoutError as exc:
+        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
 
     asyncio.create_task(
         run_followup_pipeline(
@@ -156,7 +180,7 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
             message=request.message,
             candidate_id=candidate_id,
             base_sequence=base_sequence,
-            on_candidate_ready=lambda updated_candidate_id, sequence: session_store.set_candidate_sequence(
+            on_candidate_ready=lambda updated_candidate_id, sequence: _persist_candidate_sequence(
                 request.session_id, updated_candidate_id, sequence
             ),
         )
@@ -208,17 +232,21 @@ async def health() -> HealthResponse:
 @app.websocket("/ws/pipeline/{session_id}")
 async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
     await ws_manager.connect(websocket, session_id)
-    pending_goal = session_store.pop_pending_goal(session_id)
+    pending_goal = await session_store.pop_pending_goal(session_id)
     if pending_goal is not None:
-        await run_generation_pipeline(
-            manager=ws_manager,
-            service=evo2_service,
-            session_id=session_id,
-            goal=pending_goal,
-            seed_sequence=session_store.seed_for_session(session_id),
-            on_candidate_ready=lambda candidate_id, sequence: session_store.set_candidate_sequence(
-                session_id, candidate_id, sequence
-            ),
+        async with session_store.candidate_guard(session_id, 0):
+            seed_sequence = await session_store.seed_for_session(session_id)
+        asyncio.create_task(
+            run_generation_pipeline(
+                manager=ws_manager,
+                service=evo2_service,
+                session_id=session_id,
+                goal=pending_goal,
+                seed_sequence=seed_sequence,
+                on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
+                    session_id, candidate_id, sequence
+                ),
+            )
         )
     try:
         while True:
@@ -230,6 +258,11 @@ def _build_ws_url(http_request: Request, session_id: str) -> str:
     ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"
     host = http_request.headers.get("host") or http_request.url.netloc
     return f"{ws_scheme}://{host}/ws/pipeline/{session_id}"
+
+
+async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
+    async with session_store.candidate_guard(session_id, candidate_id):
+        await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
 
 
 def _mock_pdb_from_sequence(sequence: str) -> str:
