@@ -11,10 +11,13 @@ interface PipelineStore extends PipelineState {
 export const usePipelineStore = create<PipelineStore>((set) => ({
   ...createInitialState(),
   dispatch: (action) =>
-    set((state) => ({
-      ...pipelineReducer(state, action),
-      dispatch: state.dispatch
-    }))
+    set((state) => {
+      const { dispatch, ...pipelineState } = state;
+      return {
+        ...pipelineReducer(pipelineState, action),
+        dispatch
+      };
+    })
 }));
 
 export function resetPipelineStore(): void {
