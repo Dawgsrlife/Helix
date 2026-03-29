@@ -202,7 +202,7 @@ function AnalyzePageInner() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* ── HEADER (glassmorphic) ── */}
         <header className="h-14 shrink-0 flex items-center justify-between px-6"
-          style={{ background: "oklch(0.085 0.003 280 / 0.6)", backdropFilter: "blur(20px) saturate(1.8)", borderBottom: "0.5px solid var(--ghost-border)" }}>
+          style={{ background: "color-mix(in oklch, var(--surface-base), transparent 40%)", backdropFilter: "blur(20px) saturate(1.8)", borderBottom: "0.5px solid var(--ghost-border)" }}>
           <div className="flex items-center gap-3">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
@@ -218,7 +218,7 @@ function AnalyzePageInner() {
                     <button key={m} onClick={() => setViewMode(m)}
                       className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
                       style={{
-                        background: viewMode === m ? "oklch(0.72 0.12 175 / 0.1)" : "transparent",
+                        background: viewMode === m ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
                         color: viewMode === m ? "var(--accent-bright)" : "var(--text-faint)",
                       }}>
                       {VIEW_LABELS[m]}

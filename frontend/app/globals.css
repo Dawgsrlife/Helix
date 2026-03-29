@@ -303,6 +303,24 @@ body {
   border-left: 2px solid var(--accent);
 }
 
+/* Smooth transitions for interactive elements */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Card hover lift */
+.hover-lift {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px oklch(0 0 0 / 0.2);
+}
+
+/* Rounded corners everywhere for clean UX */
+.rounded-surface { border-radius: 12px; }
+.rounded-panel { border-radius: 8px; }
+
 /* Status pulse with glow */
 .status-pulse {
   width: 8px;
