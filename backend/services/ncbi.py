@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 import asyncio
 
 import httpx
-from config import NCBI_API_KEY
+from config import NCBI_API_KEY, NCBI_EMAIL, NCBI_TOOL
 
 logger = logging.getLogger(__name__)
 
@@ -45,31 +47,73 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, params: dict, max
     return resp
 
 
+def _eutils_params(params: dict[str, object]) -> dict[str, object]:
+    merged = dict(params)
+    if NCBI_API_KEY:
+        merged["api_key"] = NCBI_API_KEY
+    if NCBI_TOOL:
+        merged["tool"] = NCBI_TOOL
+    if NCBI_EMAIL:
+        merged["email"] = NCBI_EMAIL
+    return merged
+
+
+def _safe_json_response(response: httpx.Response) -> dict:
+    try:
+        parsed = response.json()
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        # NCBI can return malformed JSON with raw control chars in ERROR fields.
+        cleaned = re.sub(r"[\x00-\x1f]", "", response.text)
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            logger.warning("Failed to parse NCBI JSON payload", exc_info=True)
+            return {}
+
+
+def _extract_id_list(search_data: dict) -> list[str]:
+    payload = search_data.get("esearchresult")
+    if not isinstance(payload, dict):
+        return []
+    if payload.get("ERROR"):
+        logger.warning("NCBI esearch error: %s", payload.get("ERROR"))
+    ids = payload.get("idlist")
+    return [str(item) for item in ids] if isinstance(ids, list) else []
+
+
 async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
     """Fetch gene summary from NCBI Gene database."""
     if not gene:
         return NCBIResult()
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            term = f"{gene}[gene]"
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": "Helix/0.1 (genomic-design-ide)"},
+        ) as client:
+            terms = [f"{gene}[gene]"]
             if organism:
-                term += f" AND {organism}[orgn]"
+                terms.insert(0, f"{gene}[gene] AND {organism}[orgn]")
+                terms.append(f"{gene}[gene] AND {organism}[organism]")
 
-            search_resp = await _get_with_retry(
-                client,
-                f"{EUTILS_BASE}/esearch.fcgi",
-                params={
-                    "db": "gene",
-                    "term": term,
-                    "retmax": 1,
-                    "retmode": "json",
-                    **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
-                },
-            )
-            search_data = search_resp.json()
-
-            id_list = search_data.get("esearchresult", {}).get("idlist", [])
+            id_list: list[str] = []
+            for term in terms:
+                search_resp = await _get_with_retry(
+                    client,
+                    f"{EUTILS_BASE}/esearch.fcgi",
+                    params=_eutils_params({
+                        "db": "gene",
+                        "term": term,
+                        "retmax": 1,
+                        "retmode": "json",
+                    }),
+                )
+                search_data = _safe_json_response(search_resp)
+                id_list = _extract_id_list(search_data)
+                if id_list:
+                    break
             if not id_list:
                 return NCBIResult(symbol=gene)
 
@@ -81,14 +125,13 @@ async def fetch_gene_info(gene: str, organism: str | None = None) -> NCBIResult:
             summary_resp = await _get_with_retry(
                 client,
                 f"{EUTILS_BASE}/esummary.fcgi",
-                params={
+                params=_eutils_params({
                     "db": "gene",
                     "id": gene_id,
                     "retmode": "json",
-                    **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
-                },
+                }),
             )
-            summary_data = summary_resp.json()
+            summary_data = _safe_json_response(summary_resp)
 
             entry = summary_data.get("result", {}).get(gene_id, {})
             if not entry:
@@ -134,20 +177,30 @@ async def _fetch_reference_sequence(
 ) -> tuple[str, str]:
     try:
         term = f"{gene}[Gene Name] AND biomol_genomic[PROP] AND srcdb_refseq[PROP]"
+        terms = [term]
         if organism:
-            term += f" AND {organism}[Organism]"
-        search_resp = await _get_with_retry(
-            client,
-            f"{EUTILS_BASE}/esearch.fcgi",
-            params={
-                "db": "nuccore",
-                "term": term,
-                "retmax": 1,
-                "retmode": "json",
-                **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
-            },
-        )
-        id_list = search_resp.json().get("esearchresult", {}).get("idlist", [])
+            terms[0] += f" AND {organism}[Organism]"
+            terms.append(f"{gene}[Gene Name] AND {organism}[Organism] AND srcdb_refseq[PROP]")
+            terms.append(f"{gene}[Gene] AND {organism}[Organism]")
+        terms.append(f"{gene}[Gene Name] AND srcdb_refseq[PROP]")
+        terms.append(f"{gene}[Gene]")
+
+        id_list: list[str] = []
+        for query in terms:
+            search_resp = await _get_with_retry(
+                client,
+                f"{EUTILS_BASE}/esearch.fcgi",
+                params=_eutils_params({
+                    "db": "nuccore",
+                    "term": query,
+                    "retmax": 1,
+                    "retmode": "json",
+                }),
+            )
+            search_data = _safe_json_response(search_resp)
+            id_list = _extract_id_list(search_data)
+            if id_list:
+                break
         if not id_list:
             return "", ""
         nuccore_id = id_list[0]
@@ -155,13 +208,12 @@ async def _fetch_reference_sequence(
         fasta_resp = await _get_with_retry(
             client,
             f"{EUTILS_BASE}/efetch.fcgi",
-            params={
+            params=_eutils_params({
                 "db": "nuccore",
                 "id": nuccore_id,
                 "rettype": "fasta",
                 "retmode": "text",
-                **({} if not NCBI_API_KEY else {"api_key": NCBI_API_KEY}),
-            },
+            }),
         )
         fasta_text = fasta_resp.text
         lines = [line.strip() for line in fasta_text.splitlines() if line.strip()]

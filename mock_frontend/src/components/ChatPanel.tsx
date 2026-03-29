@@ -2,6 +2,13 @@ import { FormEvent, useMemo, useState } from "react";
 
 import type { CandidateState, PipelineState } from "../types";
 
+function scoreBand(value: number): string {
+  if (value >= 0.75) return "Strong";
+  if (value >= 0.55) return "Promising";
+  if (value >= 0.4) return "Weak";
+  return "Low";
+}
+
 export function ChatPanel({
   activeCandidate,
   chat,
@@ -33,9 +40,17 @@ export function ChatPanel({
   const candidateSummary = useMemo(() => {
     if (!activeCandidate?.scores) return "Select a scored candidate to start an agentic refinement loop.";
     const score = activeCandidate.scores;
-    return `Candidate #${activeCandidate.id} | function ${score.functional.toFixed(3)} | tissue ${score.tissue_specificity.toFixed(
-      3
-    )} | safety ${(1 - score.off_target).toFixed(3)} | novelty ${score.novelty.toFixed(3)}`;
+    const combined =
+      typeof score.combined === "number"
+        ? score.combined
+        : score.functional * 0.45 + score.tissue_specificity * 0.25 + (1 - score.off_target) * 0.2 + score.novelty * 0.1;
+    const safety = 1 - score.off_target;
+    return (
+      `Candidate #${activeCandidate.id} | combined ${combined.toFixed(3)} (${scoreBand(combined)}) | ` +
+      `likely-to-work ${score.functional.toFixed(3)} (${scoreBand(score.functional)}) | ` +
+      `tissue-fit ${score.tissue_specificity.toFixed(3)} (${scoreBand(score.tissue_specificity)}) | ` +
+      `safety ${safety.toFixed(3)} (${scoreBand(safety)})`
+    );
   }, [activeCandidate]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -80,7 +95,7 @@ export function ChatPanel({
       <div className="tool-trail">
         <h4>Tool Execution</h4>
         {agentToolTrail.length === 0 ? (
-          <p>No tool calls yet.</p>
+          <p>No tool calls yet. Send a prompt and Helix will always run at least fallback scoring.</p>
         ) : (
           agentToolTrail.slice(0, 6).map((entry, index) => (
             <div key={`${entry.at}-${entry.tool}-${index}`} className={`tool-row ${entry.status}`}>

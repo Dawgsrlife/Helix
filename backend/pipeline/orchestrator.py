@@ -159,7 +159,7 @@ def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
         run_profile="demo",
         truth_mode=truth_mode,
         candidate_workers=4,
-        retrieval_timeout=4.0,
+        retrieval_timeout=25.0,
         generation_timeout=8.0,
         scoring_timeout=8.0,
         structure_timeout=4.0,
@@ -233,6 +233,7 @@ async def run_generation_pipeline(
         spec,
         tracker=tracker,
         timeout_seconds=profile.retrieval_timeout,
+        allow_demo_fallback=profile.truth_mode == "demo_fallback",
     )
     await tracker.set("retrieval", "done", 1.0)
 
@@ -600,6 +601,7 @@ async def run_followup_pipeline(
     on_spec_ready: SpecUpdateCallback | None = None,
 ) -> list[str]:
     profile = _profile(run_profile, truth_mode)
+    fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     await tracker.emit_initial()
     await tracker.set("intent", "active", 0.1)
@@ -616,18 +618,41 @@ async def run_followup_pipeline(
     await tracker.set("intent", "done", 1.0)
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
 
+    await manager.send_event(
+        session_id,
+        CandidateStatusEvent(
+            data=CandidateStatusData(candidate_id=candidate_id, status="running")
+        ).to_json(),
+    )
+
+    await tracker.set("generation", "active", 0.2)
     base = base_sequence
     if "novel" in message.lower():
         base = _simple_mutate(base, 12, "G")
     if "tissue" in message.lower() and len(base) > 20:
         base = _simple_mutate(base, 20, "C")
+    await tracker.set("generation", "done", 1.0)
 
     await tracker.set("scoring", "active", 0.2)
-    scores, per_position = await score_candidate(
-        service,
-        base,
-        target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-    )
+    try:
+        async with asyncio.timeout(profile.scoring_timeout):
+            scores, per_position = await score_candidate(
+                service,
+                base,
+                target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
+            )
+    except TimeoutError:
+        scores, per_position = await score_candidate(
+            fallback_service,
+            base,
+            target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
+        )
+    except Exception:
+        scores, per_position = await score_candidate(
+            fallback_service,
+            base,
+            target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
+        )
     await manager.send_event(
         session_id,
         CandidateScoredEvent(
@@ -650,21 +675,31 @@ async def run_followup_pipeline(
     pdb_data: str | None = None
     confidence: float | None = None
     regulatory_map: dict[str, object] | None = None
-    if settings.structure_mode == StructureMode.ESMFOLD:
-        result = await predict_structure(base)
-        if result is not None:
-            pdb_data = result.pdb_data
-            confidence = result.confidence
+    structure_error: str | None = None
+    try:
+        async with asyncio.timeout(profile.structure_timeout):
+            if settings.structure_mode == StructureMode.ESMFOLD:
+                result = await predict_structure(base)
+                if result is not None:
+                    pdb_data = result.pdb_data
+                    confidence = result.confidence
+            elif settings.structure_mode == StructureMode.MOCK:
+                pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
+    except TimeoutError:
+        structure_error = "structure_timeout"
+    except Exception as exc:
+        structure_error = f"structure_error:{exc}"
     if pdb_data is None and profile.use_structure_fallback:
         pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
     if pdb_data is None:
+        reason = structure_error or "structure_unavailable"
         await manager.send_event(
             session_id,
             CandidateStatusEvent(
                 data=CandidateStatusData(
                     candidate_id=candidate_id,
                     status="failed",
-                    reason="structure_unavailable",
+                    reason=reason,
                 )
             ).to_json(),
         )
@@ -686,7 +721,7 @@ async def run_followup_pipeline(
                             "pdb_data": None,
                             "regulatory_map": None,
                             "confidence": None,
-                            "error": "structure_unavailable",
+                            "error": reason,
                         },
                     ],
                 )
@@ -773,6 +808,7 @@ async def _emit_retrieval(
     spec: DesignSpec,
     tracker: StageTracker | None = None,
     timeout_seconds: float = 5.0,
+    allow_demo_fallback: bool = False,
 ) -> RetrievalResult | None:
     import dataclasses
 
@@ -797,8 +833,12 @@ async def _emit_retrieval(
                 result_dict = {}
             status = "complete"
         else:
-            result_dict = {}
-            status = "failed"
+            if allow_demo_fallback:
+                result_dict = _build_retrieval_fallback(source_name, spec)
+                status = "complete"
+            else:
+                result_dict = {}
+                status = "failed"
 
         await manager.send_event(
             session_id,
@@ -811,6 +851,55 @@ async def _emit_retrieval(
         if tracker is not None:
             await tracker.set("retrieval", "active", completed / len(sources))
     return result
+
+
+def _build_retrieval_fallback(source_name: str, spec: DesignSpec) -> dict[str, object]:
+    gene = spec.target_gene or "GENE"
+    if source_name == "ncbi":
+        return {
+            "gene": gene,
+            "organism": spec.organism,
+            "chromosome": "demo_chr",
+            "start": 0,
+            "end": 420,
+            "strand": "+",
+            "summary": f"Demo fallback genomic context synthesized for {gene}.",
+            "reference_accession": "DEMO_REFSEQ",
+            "reference_sequence": (DEFAULT_SEED * 8)[:420],
+            "fallback": True,
+        }
+    if source_name == "pubmed":
+        return {
+            "query": f"{gene} {spec.therapeutic_context or spec.design_type}",
+            "count": 2,
+            "papers": [
+                {
+                    "pmid": "DEMO-PMID-1",
+                    "title": f"{gene} regulatory control in neural tissue (demo fallback)",
+                    "year": 2024,
+                    "journal": "Helix Demo Journal",
+                    "authors": ["Fallback, A.", "Demo, B."],
+                    "abstract": "Synthetic fallback context used when live literature retrieval is unavailable.",
+                },
+                {
+                    "pmid": "DEMO-PMID-2",
+                    "title": f"Sequence design constraints for {spec.design_type} (demo fallback)",
+                    "year": 2023,
+                    "journal": "Helix Methods",
+                    "authors": ["Demo, C."],
+                    "abstract": "Fallback evidence to preserve end-to-end demo continuity.",
+                },
+            ],
+            "fallback": True,
+        }
+    return {
+        "gene": gene,
+        "variants": [],
+        "pathogenic_count": 0,
+        "benign_count": 0,
+        "summary": f"No live ClinVar records available for {gene}; using safe empty fallback.",
+        "fallback": True,
+    }
 
 
 async def _fill_with_demo_tokens(

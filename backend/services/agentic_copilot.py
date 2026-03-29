@@ -20,7 +20,9 @@ from services.session_store import SessionStore
 from services.translation import reverse_complement
 
 BASES = ("A", "T", "C", "G")
-MAX_VARIANTS_TO_EVAL = 180
+MAX_VARIANTS_TO_EVAL = 48
+MAX_OPTIMIZE_CONCURRENCY = 8
+VARIANT_SCORE_TIMEOUT_SECONDS = 6.0
 EDIT_RE = re.compile(
     r"(?:position|pos|base|bp)\s*(\d+)\D+(?:to|with|as|=)\s*([ATCG])\b",
     flags=re.IGNORECASE,
@@ -298,6 +300,40 @@ class AgenticCopilot:
             if result.comparison is not None:
                 comparison = result.comparison
 
+            # Guarantee useful agent output: when a tool fails, fall back to a live candidate score.
+            if result.call.status == "failed":
+                try:
+                    fallback_result = await self._tool_explain(candidate_id=candidate_id, sequence=sequence)
+                except Exception:
+                    scores, per_position = await score_candidate(Evo2MockService(), sequence)
+                    score_dict = scores.to_dict()
+                    fallback_result = _ToolExecution(
+                        call=AgentToolCall(
+                            tool="score_candidate",
+                            status="ok",
+                            summary="Scored active candidate with mock fallback.",
+                        ),
+                        note=(
+                            f"Recovered with fallback scoring. Candidate #{candidate_id} combined "
+                            f"{score_dict['combined']:.3f}, functional {score_dict['functional']:.3f}, "
+                            f"tissue {score_dict['tissue_specificity']:.3f}, off-target {score_dict['off_target']:.3f}."
+                        ),
+                        candidate_update=AgentCandidateUpdate(
+                            candidate_id=candidate_id,
+                            sequence=sequence,
+                            scores=score_dict,
+                            per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
+                        ),
+                    )
+                tool_calls.append(fallback_result.call.to_dict())
+                execution_notes.append(
+                    f"Recovered via fallback scoring after {tool or 'unknown_tool'} failure. "
+                    f"{fallback_result.note}"
+                )
+                if fallback_result.candidate_update is not None:
+                    candidate_update = _merge_candidate_updates(candidate_update, fallback_result.candidate_update)
+                    sequence = fallback_result.candidate_update.sequence
+
         return {
             "tool_calls": tool_calls,
             "execution_notes": execution_notes,
@@ -425,12 +461,24 @@ class AgenticCopilot:
             step = max(1, len(variant_specs) // MAX_VARIANTS_TO_EVAL)
             variant_specs = variant_specs[::step][:MAX_VARIANTS_TO_EVAL]
 
-        async def _score_variant(position: int, alt: str) -> tuple[int, str, str, CandidateScores]:
-            variant = sequence[:position] + alt + sequence[position + 1 :]
-            scores, _ = await score_candidate(self._service, variant)
-            return position, alt, variant, scores
+        semaphore = asyncio.Semaphore(MAX_OPTIMIZE_CONCURRENCY)
 
-        scored = await asyncio.gather(*[_score_variant(position, alt) for position, alt in variant_specs])
+        async def _score_variant(position: int, alt: str) -> tuple[int, str, str, CandidateScores] | None:
+            variant = sequence[:position] + alt + sequence[position + 1 :]
+            try:
+                async with semaphore:
+                    scores, _ = await asyncio.wait_for(
+                        score_candidate(self._service, variant),
+                        timeout=VARIANT_SCORE_TIMEOUT_SECONDS,
+                    )
+                return position, alt, variant, scores
+            except Exception:
+                return None
+
+        scored_rows = await asyncio.gather(*[_score_variant(position, alt) for position, alt in variant_specs])
+        scored = [row for row in scored_rows if row is not None]
+        if not scored:
+            raise RuntimeError("optimization could not evaluate any variant")
         best_position, best_alt, best_variant, best_scores = max(
             scored,
             key=lambda row: _objective_score(row[3], objective),
@@ -515,11 +563,13 @@ class AgenticCopilot:
         from_base: str | None = None,
         to_base: str | None = None,
     ) -> _ToolExecution:
-        transformed = _apply_transform(sequence, mode, from_base=from_base, to_base=to_base)
-        if transformed == sequence:
+        original = sequence.upper()
+        transformed = _apply_transform(original, mode, from_base=from_base, to_base=to_base)
+        changed_bases = sum(1 for before, after in zip(original, transformed, strict=True) if before != after)
+        if transformed == original:
             note = f"Requested transform '{mode}' produced no sequence change."
         else:
-            note = f"Applied transform '{mode}' to candidate #{candidate_id}."
+            note = f"Applied transform '{mode}' to candidate #{candidate_id} ({changed_bases} bases changed)."
 
         await self._session_store.set_candidate_sequence(session_id, candidate_id, transformed)
         scores, per_position = await score_candidate(self._service, transformed)
@@ -714,6 +764,7 @@ def _apply_transform(
     from_base: str | None = None,
     to_base: str | None = None,
 ) -> str:
+    sequence = sequence.upper()
     mode = mode.strip().lower()
     if mode == "all_t":
         return "T" * len(sequence)
@@ -726,6 +777,8 @@ def _apply_transform(
     if mode == "reverse_complement":
         return reverse_complement(sequence)
     if mode == "replace_base":
+        from_base = (from_base or "").upper()
+        to_base = (to_base or "").upper()
         if from_base not in BASES or to_base not in BASES:
             return sequence
         if from_base == to_base:

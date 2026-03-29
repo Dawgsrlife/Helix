@@ -23,6 +23,7 @@ class WebSocketManager:
 
     def disconnect(self, session_id: str) -> None:
         self._connections.pop(session_id, None)
+        self._send_locks.pop(session_id, None)
 
     async def send_event(self, session_id: str, event: dict[str, object]) -> None:
         websocket = self._connections.get(session_id)

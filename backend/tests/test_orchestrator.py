@@ -48,6 +48,63 @@ async def test_generation_pipeline_emits_key_events() -> None:
 
 
 @pytest.mark.asyncio
+async def test_demo_profile_retrieval_uses_fallback_payloads_when_sources_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-retrieval-fallback")
+
+    async def _missing_retrieval(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _missing_retrieval)
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-retrieval-fallback",
+        goal="Design promoter",
+        n_tokens=2,
+        run_profile="demo",
+        truth_mode="demo_fallback",
+    )
+
+    retrieval_events = [event for event in ws.sent if event["event"] == "retrieval_progress"]
+    assert len(retrieval_events) == 3
+    assert all(event["data"]["status"] == "complete" for event in retrieval_events)
+    assert all(event["data"]["result"].get("fallback") is True for event in retrieval_events)
+
+
+@pytest.mark.asyncio
+async def test_real_only_retrieval_reports_failure_when_sources_fail(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-retrieval-real-only")
+
+    async def _missing_retrieval(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(orchestrator, "retrieve_context", _missing_retrieval)
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-retrieval-real-only",
+        goal="Design promoter",
+        n_tokens=2,
+        run_profile="demo",
+        truth_mode="real_only",
+    )
+
+    retrieval_events = [event for event in ws.sent if event["event"] == "retrieval_progress"]
+    assert len(retrieval_events) == 3
+    assert all(event["data"]["status"] == "failed" for event in retrieval_events)
+
+
+@pytest.mark.asyncio
 async def test_generation_pipeline_uses_custom_seed() -> None:
     manager = WebSocketManager()
     ws = _FakeWebSocket()
@@ -141,6 +198,37 @@ async def test_followup_pipeline_uses_provided_base_sequence() -> None:
     assert complete["event"] == "pipeline_complete"
     candidate_sequence = complete["data"]["candidates"][0]["sequence"]
     assert len(candidate_sequence) == len(base_sequence)
+
+
+@pytest.mark.asyncio
+async def test_followup_pipeline_recovers_when_structure_prediction_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-follow-structure-fail")
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("esmfold unavailable")
+
+    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
+    monkeypatch.setattr(orchestrator, "predict_structure", _boom)
+
+    await run_followup_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-follow-structure-fail",
+        message="make this more tissue-specific",
+        candidate_id=0,
+        base_sequence="ATGCCGATGCCGATGCCG",
+        run_profile="demo",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["failed_candidates"] == 0
+    assert complete["data"]["candidates"][0]["status"] == "structured"
+    assert complete["data"]["candidates"][0]["pdb_data"]
 
 
 @pytest.mark.asyncio
