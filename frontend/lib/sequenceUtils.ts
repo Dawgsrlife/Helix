@@ -2,12 +2,10 @@ import type { Base, Nucleotide, AnnotationType, SequenceRegion } from "@/types";
 
 const VALID_BASES = new Set(["A", "T", "C", "G", "N"]);
 
-/** Validate that a string contains only ATCGN characters */
 export function isValidSequence(seq: string): boolean {
   return seq.split("").every((ch) => VALID_BASES.has(ch.toUpperCase()));
 }
 
-/** Clean and normalize raw input to uppercase ATCGN */
 export function normalizeSequence(raw: string): string {
   return raw
     .replace(/\s+/g, "")
@@ -15,7 +13,6 @@ export function normalizeSequence(raw: string): string {
     .toUpperCase();
 }
 
-/** Parse a raw sequence string into an array of Base objects */
 export function parseSequence(
   raw: string,
   regions?: SequenceRegion[]
@@ -30,7 +27,6 @@ export function parseSequence(
   }));
 }
 
-/** Get the annotation type at a given position */
 export function getAnnotationAtPosition(
   position: number,
   regions: SequenceRegion[]
@@ -39,7 +35,6 @@ export function getAnnotationAtPosition(
   return region?.type;
 }
 
-/** Chunk a sequence into lines of given length for display */
 export function chunkSequence(seq: string, lineLength: number): string[] {
   const chunks: string[] = [];
   for (let i = 0; i < seq.length; i += lineLength) {
@@ -48,12 +43,10 @@ export function chunkSequence(seq: string, lineLength: number): string[] {
   return chunks;
 }
 
-/** Format a position number with commas */
 export function formatPosition(pos: number): string {
   return pos.toLocaleString();
 }
 
-/** Calculate GC content of a sequence */
 export function gcContent(seq: string): number {
   const normalized = normalizeSequence(seq);
   if (normalized.length === 0) return 0;
@@ -61,7 +54,6 @@ export function gcContent(seq: string): number {
   return gc / normalized.length;
 }
 
-/** Get complement of a nucleotide */
 export function complement(base: Nucleotide): Nucleotide {
   const map: Record<Nucleotide, Nucleotide> = {
     A: "T",
@@ -73,11 +65,35 @@ export function complement(base: Nucleotide): Nucleotide {
   return map[base];
 }
 
-/** Get reverse complement of a sequence */
 export function reverseComplement(seq: string): string {
   return seq
     .split("")
     .reverse()
     .map((b) => complement(b.toUpperCase() as Nucleotide))
     .join("");
+}
+
+// Mock data for standalone demo rendering
+
+export const MOCK_SEQUENCE =
+  "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGATATAACCAAAAGGAGCCTACAAGAAAGTACGAGATTTAGTCAACTTGTTGAAGAGCTATTGAAAATCATTTGTGCTTTTCAGCTTGACACAGGTTTGGAGTATGCAAACAGCTATAATTTTGCAAAAAAGGAAAATAACTCTCCTGAACATCTAAAAGATGAAGTTTCTATCATCCAAAGTATGGGCTACAGAAACCGTGCCAAAAGACTTCTACAGAGTGAACCCGAAAATCCTTCCTTGCAGGAAACCAGTCTCAGTGTCCAACTCTCTAACCTTGGAACTGTGAGAACTCTAAGGACCTGCCTTCAGACAAGCTTCAGAATCTTCGAATAAGTCCTACTGAGCCACAGTCAAGAATGTTAACAGGG";
+
+export const MOCK_REGIONS: SequenceRegion[] = [
+  { start: 0, end: 72, type: "exon", label: "Exon 1" },
+  { start: 72, end: 135, type: "intron", label: "Intron 1" },
+  { start: 135, end: 249, type: "exon", label: "Exon 2" },
+  { start: 249, end: 312, type: "orf", label: "ORF-1" },
+  { start: 312, end: 378, type: "intron", label: "Intron 2" },
+  { start: 378, end: 465, type: "exon", label: "Exon 3" },
+  { start: 465, end: 500, type: "intergenic" },
+];
+
+export function generateMockScores(length: number) {
+  const scores = [];
+  for (let i = 0; i < length; i++) {
+    const wave = Math.sin(i / 15) * 2;
+    const noise = (Math.sin(i * 7.3) * 0.5 + Math.sin(i * 13.1) * 0.3);
+    scores.push({ position: i, score: -(Math.abs(wave + noise) + 0.5) });
+  }
+  return scores;
 }

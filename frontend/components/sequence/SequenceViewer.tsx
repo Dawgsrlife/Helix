@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import gsap from "gsap";
 import type { Base, SequenceRegion } from "@/types";
 import BaseToken from "./BaseToken";
-import { formatPosition } from "@/lib/sequenceUtils";
 
 interface SequenceViewerProps {
   bases: Base[];
@@ -13,7 +12,7 @@ interface SequenceViewerProps {
   onBaseClick: (position: number) => void;
 }
 
-const BASES_PER_LINE = 80;
+const BASES_PER_LINE = 60;
 const BASES_PER_BLOCK = 10;
 
 export default function SequenceViewer({
@@ -25,71 +24,98 @@ export default function SequenceViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const hasAnimated = useRef(false);
 
-  // GSAP stagger animation on initial load
+  // GSAP stagger reveal: bases fade in left-to-right on first load
   useEffect(() => {
-    if (!containerRef.current || hasAnimated.current || bases.length === 0) return;
+    if (!containerRef.current || hasAnimated.current || bases.length === 0)
+      return;
     hasAnimated.current = true;
 
-    const tokens = containerRef.current.querySelectorAll("[data-base-token]");
-    // Only animate the first visible chunk for performance
-    const visibleTokens = Array.from(tokens).slice(0, BASES_PER_LINE * 3);
+    const tokens = containerRef.current.querySelectorAll("[data-pos]");
+    const visible = Array.from(tokens).slice(0, BASES_PER_LINE * 4);
 
-    gsap.fromTo(
-      visibleTokens,
-      { opacity: 0, y: 4 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.3,
-        stagger: 0.002,
-        ease: "power2.out",
-      }
-    );
+    gsap.set(visible, { opacity: 0, y: 3 });
+    gsap.to(visible, {
+      opacity: 1,
+      y: 0,
+      duration: 0.25,
+      stagger: 0.0015,
+      ease: "power2.out",
+    });
 
     return () => {
-      gsap.killTweensOf(visibleTokens);
+      gsap.killTweensOf(visible);
     };
   }, [bases.length]);
 
+  // Pre-compute lines for rendering
+  const lines = useMemo(() => {
+    const result: Base[][] = [];
+    for (let i = 0; i < bases.length; i += BASES_PER_LINE) {
+      result.push(bases.slice(i, i + BASES_PER_LINE));
+    }
+    return result;
+  }, [bases]);
+
   if (bases.length === 0) {
     return (
-      <div className="text-[var(--text-muted)] text-sm">
-        No sequence loaded
+      <div className="flex items-center justify-center h-full" style={{ color: "var(--text-faint)" }}>
+        <span style={{ fontSize: "13px" }}>No sequence loaded</span>
       </div>
     );
   }
 
-  // Split bases into lines
-  const lines: Base[][] = [];
-  for (let i = 0; i < bases.length; i += BASES_PER_LINE) {
-    lines.push(bases.slice(i, i + BASES_PER_LINE));
-  }
-
   return (
-    <div ref={containerRef} className="font-mono text-sm leading-relaxed">
+    <div
+      ref={containerRef}
+      className="font-mono overflow-auto"
+      style={{ fontSize: "13px", lineHeight: "22px" }}
+    >
       {lines.map((line, lineIdx) => {
         const lineStart = lineIdx * BASES_PER_LINE;
         return (
-          <div key={lineIdx} className="flex items-start gap-4 hover:bg-[var(--bg-panel)] rounded px-2 -mx-2">
-            {/* Position gutter */}
-            <span className="text-[var(--text-muted)] text-xs w-16 text-right pt-1 select-none shrink-0 tabular-nums">
-              {formatPosition(lineStart)}
+          <div
+            key={lineIdx}
+            className="flex items-start gap-3"
+            style={{
+              paddingLeft: "8px",
+              paddingRight: "8px",
+              borderRadius: "2px",
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27, 27, 29, 0.5)";
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";
+            }}
+          >
+            {/* Line number gutter */}
+            <span
+              className="select-none shrink-0 text-right tabular-nums"
+              style={{
+                width: "48px",
+                color: "var(--text-faint)",
+                fontSize: "11px",
+                lineHeight: "22px",
+                paddingTop: "0px",
+              }}
+            >
+              {lineStart}
             </span>
 
-            {/* Bases with block spacing */}
-            <div className="flex-1">
+            {/* Base tokens with block spacing */}
+            <div className="flex-1 flex flex-wrap">
               {line.map((base, i) => (
                 <span
                   key={base.position}
-                  data-base-token
-                  className={i > 0 && i % BASES_PER_BLOCK === 0 ? "ml-2" : ""}
+                  style={{
+                    marginLeft: i > 0 && i % BASES_PER_BLOCK === 0 ? "6px" : "0",
+                  }}
                 >
                   <BaseToken
                     nucleotide={base.nucleotide}
                     position={base.position}
                     annotationType={base.annotationType}
                     isHighlighted={base.position === highlightedPosition}
-                    likelihoodScore={base.likelihoodScore}
                     onClick={onBaseClick}
                   />
                 </span>

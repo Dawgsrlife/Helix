@@ -1,43 +1,37 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import type { MutationEffect } from "@/types";
+import { useCallback } from "react";
 import { predictMutation } from "@/lib/api";
-
-interface MutationSimState {
-  effect: MutationEffect | null;
-  isLoading: boolean;
-  error: string | null;
-}
+import { useHelixStore } from "@/lib/store";
 
 export function useMutationSim() {
-  const [state, setState] = useState<MutationSimState>({
-    effect: null,
-    isLoading: false,
-    error: null,
-  });
+  const mutationEffect = useHelixStore((s) => s.mutationEffect);
+  const mutationLoading = useHelixStore((s) => s.mutationLoading);
+  const setMutationEffect = useHelixStore((s) => s.setMutationEffect);
+  const setMutationLoading = useHelixStore((s) => s.setMutationLoading);
 
   const simulate = useCallback(
     async (sequence: string, position: number, alternateBase: string) => {
-      setState({ effect: null, isLoading: true, error: null });
+      setMutationLoading(true);
+      setMutationEffect(null);
 
       try {
+        // Hits local Next.js API routes (mock) or real backend via NEXT_PUBLIC_API_URL
         const effect = await predictMutation(sequence, position, alternateBase);
-        setState({ effect, isLoading: false, error: null });
-        return effect;
-      } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "Mutation simulation failed";
-        setState({ effect: null, isLoading: false, error: message });
-        return null;
+        setMutationEffect(effect);
+      } catch {
+        // Silently fail for demo, mutation panel stays empty
+      } finally {
+        setMutationLoading(false);
       }
     },
-    []
+    [setMutationEffect, setMutationLoading]
   );
 
   const reset = useCallback(() => {
-    setState({ effect: null, isLoading: false, error: null });
-  }, []);
+    setMutationEffect(null);
+    setMutationLoading(false);
+  }, [setMutationEffect, setMutationLoading]);
 
-  return { ...state, simulate, reset };
+  return { effect: mutationEffect, isLoading: mutationLoading, simulate, reset };
 }
