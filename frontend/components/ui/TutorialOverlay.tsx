@@ -117,24 +117,39 @@ export default function TutorialOverlay({
   const totalSteps = STEPS.length;
   const step = STEPS[currentStep];
 
+  // Snapshot of waitFor condition when step was entered
+  const [conditionMetOnEntry, setConditionMetOnEntry] = useState(false);
+
   // Reset on open
   useEffect(() => {
     if (isOpen) {
       setCurrentStep(0);
+      setConditionMetOnEntry(false);
       onViewChange("input");
     }
   }, [isOpen, onViewChange]);
 
-  // Auto-advance when waitFor condition is met
+  // When step changes, snapshot whether its condition is already met
   useEffect(() => {
-    if (!isOpen || !step.waitFor) return;
+    if (!step.waitFor) {
+      setConditionMetOnEntry(false);
+      return;
+    }
+    const state = { viewMode, hasAnalysis: !!analysisResult };
+    setConditionMetOnEntry(step.waitFor(state));
+    // Only run on step change, not on every state update
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Auto-advance only on transition: was false on entry → now true
+  useEffect(() => {
+    if (!isOpen || !step.waitFor || conditionMetOnEntry) return;
     const state = { viewMode, hasAnalysis: !!analysisResult };
     if (step.waitFor(state)) {
-      // Small delay so the view renders before advancing
       const timer = setTimeout(() => setCurrentStep((s) => s + 1), 400);
       return () => clearTimeout(timer);
     }
-  }, [isOpen, viewMode, analysisResult, step, currentStep]);
+  }, [isOpen, viewMode, analysisResult, step, conditionMetOnEntry]);
 
   const completeTutorial = useCallback(() => {
     try { localStorage.setItem(LS_KEY, "true"); } catch {}
