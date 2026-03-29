@@ -115,8 +115,8 @@ Rules:
         setIsTyping(false);
         return;
       }
-    } catch {
-      // Backend chat endpoint not available — use local smart responses
+    } catch (err) {
+      console.debug("[Helio] Backend agent chat unavailable, using local responses:", err);
     }
 
     // Fallback: context-aware local responses
