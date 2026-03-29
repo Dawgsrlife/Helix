@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 VALID_BASES = frozenset("ATCGN")
@@ -57,6 +57,13 @@ class FollowupEditRequest(BaseModel):
     session_id: str
     message: str
     candidate_id: int | None = None
+
+
+class AgentChatRequest(BaseModel):
+    session_id: str
+    candidate_id: int = 0
+    message: str
+    history: list[dict[str, str]] = Field(default_factory=list)
 
 
 class MutationRequest(BaseModel):

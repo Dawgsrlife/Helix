@@ -1,4 +1,5 @@
 import type {
+  AgentChatResponse,
   CandidateState,
   PipelineEvent,
   PipelineState,
@@ -31,6 +32,8 @@ export type PipelineAction =
   | { type: "BASE_EDIT_ERROR"; message: string }
   | { type: "FOLLOWUP_PENDING"; message: string }
   | { type: "FOLLOWUP_ACCEPTED"; message: string; steps: string[] }
+  | { type: "AGENT_PENDING"; message: string }
+  | { type: "AGENT_RESPONSE"; response: AgentChatResponse }
   | { type: "RESET" };
 
 function nowTag(): string {
@@ -48,6 +51,7 @@ function emptyCandidate(id: number): CandidateState {
     sequence: "",
     streamOffset: null,
     scores: null,
+    perPositionScores: {},
     confidence: null,
     pdbData: "",
     error: null,
@@ -102,6 +106,10 @@ function recomputeLaymanSummary(state: PipelineState): PipelineState {
   state.laymanSummary =
     `Top candidate #${topCandidate.id} | likely-to-work: ${verdict(topCandidate.scores.functional)} | ` +
     `tissue-fit: ${verdict(topCandidate.scores.tissue_specificity)} | safety: ${verdict(topCandidate.scores.off_target, true)}`;
+  if (state.candidateComparison.length > 0) {
+    const leader = state.candidateComparison[0];
+    state.laymanSummary += ` | leaderboard leader: #${leader.candidate_id} (${leader.combined.toFixed(3)})`;
+  }
   return state;
 }
 
@@ -142,9 +150,12 @@ export function createInitialState(apiBase = "http://localhost:8000"): PipelineS
     explanationByCandidate: {},
     eventLog: [],
     chat: [],
+    agentToolTrail: [],
+    candidateComparison: [],
     laymanSummary: "Enter a design goal to generate ranked DNA candidates.",
     isSubmittingDesign: false,
     isSubmittingFollowup: false,
+    isSubmittingAgent: false,
     selectedPosition: null,
     editFeedback: ""
   };
@@ -235,6 +246,11 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
     case "candidate_scored": {
       const candidate = ensureCandidate(state, payload.data.candidate_id);
       candidate.scores = payload.data.scores;
+      if (payload.data.per_position_scores) {
+        candidate.perPositionScores = Object.fromEntries(
+          payload.data.per_position_scores.map((row) => [row.position, Number(row.score)])
+        );
+      }
       if (candidate.status !== "failed") {
         candidate.status = "scored";
       }
@@ -247,6 +263,10 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
       candidate.confidence = payload.data.confidence ?? null;
       if (candidate.status !== "failed") {
         candidate.status = "structured";
+      }
+      const active = state.activeCandidateId === null ? null : state.candidates[state.activeCandidateId];
+      if (!active || active.status !== "structured" || !active.pdbData) {
+        state.activeCandidateId = payload.data.candidate_id;
       }
       break;
     }
@@ -274,6 +294,12 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
         state,
         `pipeline complete (${payload.data.completed_candidates}/${payload.data.requested_candidates} ready)`
       );
+      const bestStructured = Object.values(state.candidates)
+        .filter((candidate) => candidate.status === "structured" && candidate.scores)
+        .sort((a, b) => rankScore(b.scores) - rankScore(a.scores))[0];
+      if (bestStructured) {
+        state.activeCandidateId = bestStructured.id;
+      }
       break;
     }
   }
@@ -372,6 +398,55 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       next.chat.push({ role: "system", text: `Follow-up accepted: ${action.steps.join(", ")}`, at: nowTag() });
       pushEvent(next, `follow-up accepted (${action.steps.join(", ")})`);
       return next;
+    }
+
+    case "AGENT_PENDING": {
+      const next = structuredClone(state);
+      next.isSubmittingAgent = true;
+      next.chat.push({ role: "user", text: action.message, at: nowTag() });
+      return next;
+    }
+
+    case "AGENT_RESPONSE": {
+      const next = structuredClone(state);
+      next.isSubmittingAgent = false;
+      next.chat.push({ role: "assistant", text: action.response.assistant_message, at: nowTag() });
+
+      for (const call of action.response.tool_calls) {
+        next.agentToolTrail.unshift({ ...call, at: nowTag() });
+      }
+      if (next.agentToolTrail.length > 40) {
+        next.agentToolTrail.length = 40;
+      }
+
+      const update = action.response.candidate_update;
+      if (update) {
+        const candidate = ensureCandidate(next, update.candidate_id);
+        candidate.sequence = update.sequence;
+        candidate.scores = update.scores;
+        candidate.status = candidate.status === "structured" ? "structured" : "scored";
+        candidate.perPositionScores = Object.fromEntries(
+          (update.per_position_scores ?? []).map((row) => [row.position, Number(row.score)])
+        );
+        if (update.mutation && typeof update.mutation.position === "number") {
+          const position = update.mutation.position;
+          const delta =
+            typeof update.mutation.delta_likelihood === "number"
+              ? Number(update.mutation.delta_likelihood)
+              : 0;
+          candidate.baseHeat[position] = {
+            deltaLikelihood: delta,
+            impact: String(update.mutation.predicted_impact ?? "moderate"),
+            updatedAt: Date.now()
+          };
+          next.editFeedback = `Agent applied mutation at ${position}`;
+        }
+      }
+      if (action.response.comparison) {
+        next.candidateComparison = action.response.comparison;
+      }
+
+      return recomputeLaymanSummary(next);
     }
 
     case "RESET":

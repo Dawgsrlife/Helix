@@ -80,6 +80,7 @@ class GenerationTokenEvent(BaseModel):
 class CandidateScoredData(BaseModel):
     candidate_id: int
     scores: dict[str, float]
+    per_position_scores: list[dict[str, float | int]] = Field(default_factory=list)
 
 
 class CandidateScoredEvent(BaseModel):

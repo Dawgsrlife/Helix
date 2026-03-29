@@ -1,4 +1,5 @@
 import type {
+  AgentChatResponse,
   BaseEditResponse,
   DesignAcceptedResponse,
   FollowupAcceptedResponse,
@@ -75,6 +76,31 @@ export async function postFollowup(args: {
   }
 
   return (await response.json()) as FollowupAcceptedResponse;
+}
+
+export async function postAgentChat(args: {
+  apiBase: string;
+  sessionId: string;
+  candidateId: number;
+  message: string;
+  history?: Array<{ role: string; text: string }>;
+}): Promise<AgentChatResponse> {
+  const response = await fetch(`${args.apiBase}/api/agent/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: args.sessionId,
+      candidate_id: args.candidateId,
+      message: args.message,
+      history: args.history ?? []
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Agent chat failed (${response.status}): ${await response.text()}`);
+  }
+
+  return (await response.json()) as AgentChatResponse;
 }
 
 export function connectPipelineSocket(args: {

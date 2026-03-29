@@ -24,6 +24,7 @@ export interface CandidateState {
   sequence: string;
   streamOffset: number | null;
   scores: CandidateScores | null;
+  perPositionScores: Record<number, number>;
   confidence: number | null;
   pdbData: string;
   error: string | null;
@@ -57,9 +58,19 @@ export interface PipelineState {
   explanationByCandidate: Record<number, string>;
   eventLog: string[];
   chat: Array<{ role: "system" | "user" | "assistant"; text: string; at: string }>;
+  agentToolTrail: Array<{ tool: string; status: string; summary: string; at: string }>;
+  candidateComparison: Array<{
+    candidate_id: number;
+    combined: number;
+    functional: number;
+    tissue_specificity: number;
+    off_target: number;
+    novelty: number;
+  }>;
   laymanSummary: string;
   isSubmittingDesign: boolean;
   isSubmittingFollowup: boolean;
+  isSubmittingAgent: boolean;
   selectedPosition: number | null;
   editFeedback: string;
 }
@@ -80,7 +91,14 @@ export type PipelineEvent =
   | { event: "retrieval_progress"; data: { source: "ncbi" | "pubmed" | "clinvar"; status: RetrievalState["status"]; result?: Record<string, unknown> } }
   | { event: "candidate_status"; data: { candidate_id: number; status: CandidateStatus; reason?: string | null } }
   | { event: "generation_token"; data: { candidate_id: number; token: string; position: number } }
-  | { event: "candidate_scored"; data: { candidate_id: number; scores: CandidateScores } }
+  | {
+      event: "candidate_scored";
+      data: {
+        candidate_id: number;
+        scores: CandidateScores;
+        per_position_scores?: Array<{ position: number; score: number }>;
+      };
+    }
   | { event: "structure_ready"; data: { candidate_id: number; pdb_data: string; confidence?: number | null } }
   | { event: "explanation_chunk"; data: { candidate_id: number; text: string } }
   | {
@@ -119,4 +137,40 @@ export interface BaseEditResponse {
 export interface FollowupAcceptedResponse {
   status: string;
   steps_rerunning: string[];
+}
+
+export interface AgentToolCall {
+  tool: string;
+  status: string;
+  summary: string;
+}
+
+export interface AgentCandidateUpdate {
+  candidate_id: number;
+  sequence: string;
+  scores: CandidateScores;
+  mutation?: {
+    position: number;
+    reference_base: string;
+    new_base: string;
+    delta_likelihood?: number;
+    predicted_impact?: string;
+    delta_combined?: number;
+    objective?: string;
+  };
+  per_position_scores?: Array<{ position: number; score: number }>;
+}
+
+export interface AgentChatResponse {
+  assistant_message: string;
+  tool_calls: AgentToolCall[];
+  candidate_update?: AgentCandidateUpdate | null;
+  comparison?: Array<{
+    candidate_id: number;
+    combined: number;
+    functional: number;
+    tissue_specificity: number;
+    off_target: number;
+    novelty: number;
+  }> | null;
 }

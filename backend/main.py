@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from models.requests import (
     AnalyzeRequest,
+    AgentChatRequest,
     BaseEditRequest,
     DesignRequest,
     FollowupEditRequest,
@@ -17,6 +18,9 @@ from models.requests import (
 )
 from models.responses import (
     AnalysisResponse,
+    AgentCandidateUpdateResponse,
+    AgentChatResponse,
+    AgentToolCallResponse,
     BaseEditResponse,
     CandidateScoresResponse,
     DesignAcceptedResponse,
@@ -35,6 +39,7 @@ from pipeline.orchestrator import (
 )
 from services.evo2 import create_evo2_service
 from services.mock_pdb import build_mock_pdb_from_dna
+from services.agentic_copilot import AgenticCopilot
 from services.session_store import (
     CandidateNotFoundError,
     SessionLockTimeoutError,
@@ -57,6 +62,7 @@ app.add_middleware(
 ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
+copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
 
 
 @app.on_event("startup")
@@ -188,6 +194,41 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
     return FollowupAcceptedResponse(steps_rerunning=steps)
 
 
+@app.post("/api/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
+    try:
+        async with session_store.candidate_guard(request.session_id, request.candidate_id):
+            result = await copilot.chat(
+                session_id=request.session_id,
+                candidate_id=request.candidate_id,
+                message=request.message,
+            )
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except CandidateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
+    except SessionLockTimeoutError as exc:
+        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
+
+    candidate_update = None
+    if result.candidate_update is not None:
+        update = result.candidate_update
+        candidate_update = AgentCandidateUpdateResponse(
+            candidate_id=update.candidate_id,
+            sequence=update.sequence,
+            scores=CandidateScoresResponse(**update.scores),
+            mutation=update.mutation,
+            per_position_scores=update.per_position_scores,
+        )
+
+    return AgentChatResponse(
+        assistant_message=result.assistant_message,
+        tool_calls=[AgentToolCallResponse(**tool.to_dict()) for tool in result.tool_calls],
+        candidate_update=candidate_update,
+        comparison=result.comparison,
+    )
+
+
 @app.post("/api/mutations", response_model=MutationResponse)
 async def mutations(request: MutationRequest) -> MutationResponse:
     if request.position < 0 or request.position >= len(request.sequence):
@@ -247,4 +288,3 @@ def _build_ws_url(http_request: Request, session_id: str) -> str:
 async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
     async with session_store.candidate_guard(session_id, candidate_id):
         await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
-

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { postDesign, connectPipelineSocket, postBaseEdit, postFollowup } from "./lib/api";
+import { postDesign, connectPipelineSocket, postAgentChat, postBaseEdit, postFollowup } from "./lib/api";
 import { usePipelineStore } from "./store/usePipelineStore";
 import { AutoplayRibbon } from "./components/AutoplayRibbon";
 import { StageFlow } from "./components/StageFlow";
@@ -134,6 +134,37 @@ export default function App() {
         message,
         steps: response.steps_rerunning
       });
+    } catch (error) {
+      dispatch({ type: "BASE_EDIT_ERROR", message: String(error) });
+    }
+  }
+
+  async function handleAgentMessage(message: string): Promise<void> {
+    if (!state.sessionId || !activeCandidate) {
+      dispatch({ type: "BASE_EDIT_ERROR", message: "Run a design and select a candidate first." });
+      return;
+    }
+    dispatch({ type: "AGENT_PENDING", message });
+    try {
+      const response = await postAgentChat({
+        apiBase,
+        sessionId: state.sessionId,
+        candidateId: activeCandidate.id,
+        message,
+        history: state.chat.slice(-10).map((entry) => ({ role: entry.role, text: entry.text }))
+      });
+      dispatch({ type: "AGENT_RESPONSE", response });
+
+      // If user asks for reruns/variants, keep existing follow-up pipeline behavior too.
+      const lowered = message.toLowerCase();
+      if (
+        lowered.includes("rerun")
+        || lowered.includes("regenerate")
+        || lowered.includes("variants")
+        || lowered.includes("generate")
+      ) {
+        await handleFollowup(message);
+      }
     } catch (error) {
       dispatch({ type: "BASE_EDIT_ERROR", message: String(error) });
     }
@@ -308,8 +339,10 @@ export default function App() {
                   activeCandidate={activeCandidate}
                   chat={state.chat}
                   explanationByCandidate={state.explanationByCandidate}
-                  onSubmitFollowup={handleFollowup}
-                  isSubmitting={state.isSubmittingFollowup}
+                  agentToolTrail={state.agentToolTrail}
+                  candidateComparison={state.candidateComparison}
+                  onSubmitAgent={handleAgentMessage}
+                  isSubmitting={state.isSubmittingAgent || state.isSubmittingFollowup}
                 />
               </div>
             </aside>

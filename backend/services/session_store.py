@@ -58,6 +58,10 @@ class SessionStore(ABC):
         pass
 
     @abstractmethod
+    async def list_candidate_sequences(self, session_id: str) -> dict[int, str]:
+        pass
+
+    @abstractmethod
     def candidate_guard(self, session_id: str, candidate_id: int) -> AsyncIterator[None]:
         pass
 
@@ -112,6 +116,13 @@ class MemorySessionStore(SessionStore):
             if sequence is None:
                 raise CandidateNotFoundError(session_id, candidate_id)
             return sequence
+
+    async def list_candidate_sequences(self, session_id: str) -> dict[int, str]:
+        async with self._lock:
+            candidates = self._candidates.get(session_id)
+            if candidates is None:
+                raise SessionNotFoundError(session_id)
+            return dict(candidates)
 
     @asynccontextmanager
     async def candidate_guard(self, session_id: str, candidate_id: int) -> AsyncIterator[None]:
@@ -186,6 +197,20 @@ class RedisSessionStore(SessionStore):
         if not exists:
             raise SessionNotFoundError(session_id)
         raise CandidateNotFoundError(session_id, candidate_id)
+
+    async def list_candidate_sequences(self, session_id: str) -> dict[int, str]:
+        key = self._candidate_key(session_id)
+        if not await self._client.exists(key):
+            raise SessionNotFoundError(session_id)
+
+        payload = await self._client.hgetall(key)
+        out: dict[int, str] = {}
+        for candidate_id, sequence in payload.items():
+            try:
+                out[int(candidate_id)] = str(sequence)
+            except ValueError:
+                continue
+        return out
 
     @asynccontextmanager
     async def candidate_guard(self, session_id: str, candidate_id: int) -> AsyncIterator[None]:

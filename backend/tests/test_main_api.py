@@ -159,6 +159,46 @@ def test_followup_endpoint() -> None:
     assert "evo2_scoring" in body["steps_rerunning"]
 
 
+def test_agent_chat_explain_endpoint() -> None:
+    client = TestClient(app)
+    session_id = "agent-explain"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    res = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "explain this candidate"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert "assistant_message" in body
+    assert body["tool_calls"][0]["tool"] == "score_candidate"
+    assert body["candidate_update"]["candidate_id"] == 0
+    assert "combined" in body["candidate_update"]["scores"]
+
+
+def test_agent_chat_explicit_edit_persists_sequence() -> None:
+    client = TestClient(app)
+    session_id = "agent-edit"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    edit = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "change base position 5 to G"},
+    )
+    assert edit.status_code == 200
+    body = edit.json()
+    assert body["candidate_update"]["mutation"]["position"] == 5
+    assert body["candidate_update"]["mutation"]["new_base"] == "G"
+
+    # Base should now be persisted as G; next mutation reports G as reference.
+    verify = client.post(
+        "/api/edit/base",
+        json={"session_id": session_id, "candidate_id": 0, "position": 5, "new_base": "A"},
+    )
+    assert verify.status_code == 200
+    assert verify.json()["reference_base"] == "G"
+
+
 def test_design_accepts_run_profile() -> None:
     client = TestClient(app)
     res = client.post(

@@ -244,7 +244,7 @@ async def test_demo_profile_uses_structure_fallback_when_structure_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_live_profile_marks_failed_when_structure_unavailable(
+async def test_live_profile_uses_structure_fallback_when_structure_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = WebSocketManager()
@@ -268,8 +268,8 @@ async def test_live_profile_marks_failed_when_structure_unavailable(
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
-    assert complete["data"]["failed_candidates"] == 1
-    assert complete["data"]["candidates"][0]["status"] == "failed"
+    assert complete["data"]["failed_candidates"] == 0
+    assert complete["data"]["candidates"][0]["status"] == "structured"
 
 
 @pytest.mark.asyncio

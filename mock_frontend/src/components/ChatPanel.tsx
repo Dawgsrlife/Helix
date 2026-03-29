@@ -6,21 +6,25 @@ export function ChatPanel({
   activeCandidate,
   chat,
   explanationByCandidate,
-  onSubmitFollowup,
+  agentToolTrail,
+  candidateComparison,
+  onSubmitAgent,
   isSubmitting
 }: {
   activeCandidate: CandidateState | null;
   chat: PipelineState["chat"];
   explanationByCandidate: PipelineState["explanationByCandidate"];
-  onSubmitFollowup: (message: string) => Promise<void>;
+  agentToolTrail: PipelineState["agentToolTrail"];
+  candidateComparison: PipelineState["candidateComparison"];
+  onSubmitAgent: (message: string) => Promise<void>;
   isSubmitting: boolean;
 }) {
   const [message, setMessage] = useState("Make expression more tissue-specific in hippocampal neurons.");
   const quickActions = [
+    "Compare all candidates and tell me which one to prioritize.",
     "Improve tissue specificity while preserving functional score.",
-    "Generate 3 safer variants and explain each trade-off.",
-    "Propose CRISPR edits to reduce off-target activity.",
-    "Identify druggable motifs in this candidate."
+    "Make this safer by reducing off-target risk.",
+    "Change base position 42 to G and explain the impact."
   ];
   const explanation = useMemo(() => {
     if (!activeCandidate) return "Waiting for explanation stream...";
@@ -38,7 +42,7 @@ export function ChatPanel({
     event.preventDefault();
     const trimmed = message.trim();
     if (!trimmed) return;
-    await onSubmitFollowup(trimmed);
+    await onSubmitAgent(trimmed);
     setMessage("");
   }
 
@@ -54,7 +58,7 @@ export function ChatPanel({
       <p className="agent-context">{candidateSummary}</p>
       <div className="quick-actions">
         {quickActions.map((action) => (
-          <button key={action} type="button" className="quick-action-btn" onClick={() => void onSubmitFollowup(action)}>
+          <button key={action} type="button" className="quick-action-btn" onClick={() => void onSubmitAgent(action)}>
             {action}
           </button>
         ))}
@@ -73,6 +77,32 @@ export function ChatPanel({
           {isSubmitting ? "Sending..." : "Send"}
         </button>
       </form>
+      <div className="tool-trail">
+        <h4>Tool Execution</h4>
+        {agentToolTrail.length === 0 ? (
+          <p>No tool calls yet.</p>
+        ) : (
+          agentToolTrail.slice(0, 6).map((entry, index) => (
+            <div key={`${entry.at}-${entry.tool}-${index}`} className={`tool-row ${entry.status}`}>
+              <strong>{entry.tool}</strong>
+              <span>{entry.summary}</span>
+            </div>
+          ))
+        )}
+      </div>
+      {candidateComparison.length > 0 ? (
+        <div className="comparison-box">
+          <h4>Candidate Comparison</h4>
+          {candidateComparison.slice(0, 3).map((row) => (
+            <div key={`cmp-${row.candidate_id}`} className="cmp-row">
+              <span>#{row.candidate_id}</span>
+              <span>{row.combined.toFixed(3)}</span>
+              <span>tissue {row.tissue_specificity.toFixed(3)}</span>
+              <span>safety {(1 - row.off_target).toFixed(3)}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <div className="explanation-stream">{explanation}</div>
     </section>
   );

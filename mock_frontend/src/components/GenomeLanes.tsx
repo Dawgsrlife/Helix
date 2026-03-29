@@ -17,6 +17,12 @@ function baseClass(base: string): string {
   }
 }
 
+function heatFromScore(score: number | undefined): number {
+  if (score === undefined || Number.isNaN(score)) return 0;
+  const normalized = 1 / (1 + Math.exp(-4 * (score + 0.35)));
+  return Math.max(0, Math.min(1, normalized));
+}
+
 export function GenomeLanes({
   candidateOrder,
   candidates,
@@ -58,6 +64,8 @@ export function GenomeLanes({
               ) : (
                 sequence.slice(0, 200).split("").map((base, position) => {
                   const heat = candidate?.baseHeat[position];
+                  const likelihood = candidate?.perPositionScores[position];
+                  const likelihoodHeat = heatFromScore(likelihood);
                   const selected = isActive && selectedPosition === position;
                   return (
                     <button
@@ -65,12 +73,19 @@ export function GenomeLanes({
                       className={`base ${baseClass(base)} ${selected ? "selected" : ""} ${
                         heat ? (heat.deltaLikelihood >= 0 ? "heat-up" : "heat-down") : ""
                       }`}
+                      style={
+                        likelihoodHeat > 0
+                          ? {
+                              background: `linear-gradient(180deg, rgba(9, 212, 156, ${0.08 + likelihoodHeat * 0.38}), rgba(4, 11, 20, 0.45))`
+                            }
+                          : undefined
+                      }
                       onClick={(event) => {
                         event.stopPropagation();
                         onSelectCandidate(candidateId);
                         onSelectPosition(position);
                       }}
-                      title={`Position ${position}`}
+                      title={`Position ${position}${likelihood !== undefined ? ` | Evo2 score ${likelihood.toFixed(3)}` : ""}`}
                     >
                       {base}
                     </button>

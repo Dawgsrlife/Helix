@@ -70,7 +70,7 @@ def build_mock_pdb_from_dna(
     dna_sequence: str,
     *,
     candidate_id: int = 0,
-    min_residues: int = 28,
+    min_residues: int = 60,
 ) -> tuple[str, float]:
     """Return (pdb_text, confidence_0_to_1)."""
     protein = _to_protein_for_render(dna_sequence, min_residues=min_residues)

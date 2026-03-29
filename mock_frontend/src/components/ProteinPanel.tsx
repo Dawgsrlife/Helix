@@ -97,7 +97,15 @@ export function ProteinPanel({ candidate }: { candidate: CandidateState | null }
         viewer.setStyle(
           {},
           {
-            cartoon: { color: "spectrum", opacity: 0.95 },
+            cartoon: {
+              colorscheme: {
+                prop: "b",
+                gradient: "rwb",
+                min: 50,
+                max: 100
+              },
+              opacity: 0.95
+            },
             stick: { radius: 0.12, colorscheme: "whiteCarbon" }
           }
         );

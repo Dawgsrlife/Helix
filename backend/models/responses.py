@@ -42,6 +42,27 @@ class FollowupAcceptedResponse(BaseModel):
     steps_rerunning: list[str]
 
 
+class AgentToolCallResponse(BaseModel):
+    tool: str
+    status: str
+    summary: str
+
+
+class AgentCandidateUpdateResponse(BaseModel):
+    candidate_id: int
+    sequence: str
+    scores: CandidateScoresResponse
+    mutation: dict[str, object] | None = None
+    per_position_scores: list[dict[str, float | int]] | None = None
+
+
+class AgentChatResponse(BaseModel):
+    assistant_message: str
+    tool_calls: list[AgentToolCallResponse]
+    candidate_update: AgentCandidateUpdateResponse | None = None
+    comparison: list[dict[str, object]] | None = None
+
+
 class StructureResponse(BaseModel):
     pdb_data: str
     model: str = "mock"
