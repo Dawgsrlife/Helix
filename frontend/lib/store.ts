@@ -87,6 +87,11 @@ interface HelixState {
   theme: "dark" | "light";
   toggleTheme: () => void;
 
+  // Auth (mock)
+  user: { id: string; name: string; email: string } | null;
+  signIn: () => void;
+  signOut: () => void;
+
   // Actions
   setViewMode: (mode: ViewMode) => void;
   setSequence: (seq: string) => void;
@@ -146,6 +151,7 @@ const initialState = {
   completedStages: [] as string[],
   theme: "dark" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[] } | null,
+  user: null as { id: string; name: string; email: string } | null,
 };
 
 export const useHelixStore = create<HelixState>((set, get) => ({
@@ -244,6 +250,8 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   addCompletedStage: (stage) => set((s) => ({
     completedStages: s.completedStages.includes(stage) ? s.completedStages : [...s.completedStages, stage],
   })),
+  signIn: () => set({ user: { id: "user_1", name: "Demo User", email: "demo@helix.bio" } }),
+  signOut: () => set({ user: null }),
   saveVersion: () => set((s) => ({
     savedSnapshot: { sequence: s.rawSequence, editHistory: [...s.editHistory] },
   })),

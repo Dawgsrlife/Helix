@@ -1,7 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect } from "react";
+import { Suspense, useCallback, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import {
@@ -41,6 +42,14 @@ const VIEW_LABELS = {
 } as const;
 
 export default function AnalyzePage() {
+  return (
+    <Suspense fallback={<div className="h-screen" style={{ background: "var(--surface-base)" }} />}>
+      <AnalyzePageInner />
+    </Suspense>
+  );
+}
+
+function AnalyzePageInner() {
   const viewMode = useHelixStore((s) => s.viewMode);
   const rawSequence = useHelixStore((s) => s.rawSequence);
   const bases = useHelixStore((s) => s.bases);
@@ -60,6 +69,9 @@ export default function AnalyzePage() {
   const addEditEntry = useHelixStore((s) => s.addEditEntry);
   const saveVersion = useHelixStore((s) => s.saveVersion);
   const revertVersion = useHelixStore((s) => s.revertVersion);
+  const user = useHelixStore((s) => s.user);
+  const signIn = useHelixStore((s) => s.signIn);
+  const signOut = useHelixStore((s) => s.signOut);
   const candidates = useHelixStore((s) => s.candidates);
   const activeCandidateId = useHelixStore((s) => s.activeCandidateId);
   const chatOpen = useHelixStore((s) => s.chatOpen);
@@ -67,9 +79,33 @@ export default function AnalyzePage() {
   const theme = useHelixStore((s) => s.theme);
   const toggleTheme = useHelixStore((s) => s.toggleTheme);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Sync viewMode with URL search params
+  useEffect(() => {
+    const urlView = searchParams.get("view");
+    if (urlView && urlView !== viewMode && ["input", "pipeline", "analyze", "leaderboard", "explorer", "ide", "compare"].includes(urlView)) {
+      setViewMode(urlView as typeof viewMode);
+    }
+  }, [searchParams]);
+
+  // Push viewMode changes to URL
+  useEffect(() => {
+    const current = searchParams.get("view");
+    if (viewMode !== "input" && viewMode !== current) {
+      router.replace(`/analyze?view=${viewMode}`, { scroll: false });
+    } else if (viewMode === "input" && current) {
+      router.replace("/analyze", { scroll: false });
+    }
+  }, [viewMode]);
+
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { startDesign } = useDesignPipeline();
   const { simulate } = useMutationSim();
+
+  // Auto sign-in for demo
+  useEffect(() => { if (!user) signIn(); }, []);
 
   useEffect(() => {
     if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
@@ -122,8 +158,29 @@ export default function AnalyzePage() {
           })}
         </nav>
 
+        {/* User */}
+        <div className="px-4 py-3">
+          {user ? (
+            <div className="flex items-center gap-2.5 px-3 py-2">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold"
+                style={{ background: "var(--surface-elevated)", color: "var(--text-secondary)" }}>
+                {user.name.charAt(0)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-[12px] font-medium block truncate" style={{ color: "var(--text-primary)" }}>{user.name}</span>
+                <span className="text-[10px] block truncate" style={{ color: "var(--text-faint)" }}>{user.email}</span>
+              </div>
+            </div>
+          ) : (
+            <button onClick={signIn}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]">
+              <span className="label-caps" style={{ fontSize: "9px", color: "var(--accent)" }}>Sign in</span>
+            </button>
+          )}
+        </div>
+
         {/* Footer: theme toggle + exit + status */}
-        <div className="px-4 py-5 space-y-2">
+        <div className="px-4 py-3 space-y-2">
           <button onClick={toggleTheme}
             className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]"
             title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
