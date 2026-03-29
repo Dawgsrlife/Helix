@@ -44,6 +44,11 @@ interface Candidate {
   status: string;
 }
 
+interface RetrievalStatus {
+  source: string;
+  status: "pending" | "running" | "complete" | "failed";
+}
+
 interface HelixState {
   viewMode: ViewMode;
   pipelineStatus: PipelineStatus;
@@ -70,6 +75,14 @@ interface HelixState {
   candidates: Candidate[];
   activeCandidateId: number | null;
 
+  // Streaming pipeline state
+  sessionId: string | null;
+  generatingSequence: string;
+  explanation: string;
+  retrievalStatuses: RetrievalStatus[];
+  generationTokenCount: number;
+  completedStages: string[];
+
   // Actions
   setViewMode: (mode: ViewMode) => void;
   setSequence: (seq: string) => void;
@@ -88,6 +101,12 @@ interface HelixState {
   toggleChat: () => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
+  setSessionId: (id: string | null) => void;
+  appendGeneratingToken: (token: string) => void;
+  appendExplanation: (text: string) => void;
+  setRetrievalStatuses: (statuses: RetrievalStatus[]) => void;
+  updateRetrievalStatus: (source: string, status: RetrievalStatus["status"]) => void;
+  addCompletedStage: (stage: string) => void;
   reset: () => void;
 }
 
@@ -112,6 +131,12 @@ const initialState = {
   chatOpen: false,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
+  sessionId: null as string | null,
+  generatingSequence: "",
+  explanation: "",
+  retrievalStatuses: [] as RetrievalStatus[],
+  generationTokenCount: 0,
+  completedStages: [] as string[],
 };
 
 export const useHelixStore = create<HelixState>((set, get) => ({
@@ -187,5 +212,20 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   toggleChat: () => set({ chatOpen: !get().chatOpen }),
   setCandidates: (candidates) => set({ candidates }),
   setActiveCandidateId: (id) => set({ activeCandidateId: id }),
+  setSessionId: (id) => set({ sessionId: id }),
+  appendGeneratingToken: (token) => set((s) => ({
+    generatingSequence: s.generatingSequence + token,
+    generationTokenCount: s.generationTokenCount + 1,
+  })),
+  appendExplanation: (text) => set((s) => ({ explanation: s.explanation + text })),
+  setRetrievalStatuses: (statuses) => set({ retrievalStatuses: statuses }),
+  updateRetrievalStatus: (source, status) => set((s) => ({
+    retrievalStatuses: s.retrievalStatuses.map((r) =>
+      r.source === source ? { ...r, status } : r
+    ),
+  })),
+  addCompletedStage: (stage) => set((s) => ({
+    completedStages: s.completedStages.includes(stage) ? s.completedStages : [...s.completedStages, stage],
+  })),
   reset: () => set(initialState),
 }));

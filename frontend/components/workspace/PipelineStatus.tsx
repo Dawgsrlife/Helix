@@ -6,54 +6,89 @@ import { useHelixStore } from "@/lib/store";
 import { Check, Loader2 } from "lucide-react";
 
 const STAGES = [
-  { id: "intent", label: "Parsing design goal", duration: 600 },
-  { id: "ncbi", label: "Retrieving NCBI context", duration: 800 },
-  { id: "pubmed", label: "Searching PubMed literature", duration: 700 },
-  { id: "clinvar", label: "Cross-referencing ClinVar", duration: 500 },
-  { id: "generation", label: "Generating candidates", duration: 1500 },
-  { id: "scoring", label: "Scoring candidates", duration: 1000 },
-  { id: "structure", label: "Predicting structure", duration: 1200 },
-  { id: "explanation", label: "Generating explanation", duration: 800 },
+  { id: "intent", label: "Parsing design goal" },
+  { id: "retrieval", label: "Retrieving context" },
+  { id: "generation", label: "Generating candidates" },
+  { id: "scoring", label: "Scoring candidates" },
+  { id: "structure", label: "Predicting structure" },
+  { id: "explanation", label: "Generating explanation" },
 ];
+
+const SIMULATION_DURATIONS: Record<string, number> = {
+  intent: 600,
+  retrieval: 1800,
+  generation: 1500,
+  scoring: 1000,
+  structure: 1200,
+  explanation: 800,
+};
 
 export default function PipelineStatus() {
   const pipelineStatus = useHelixStore((s) => s.pipelineStatus);
-  const [completedStages, setCompletedStages] = useState<string[]>([]);
-  const [activeStage, setActiveStage] = useState(0);
+  const storeCompleted = useHelixStore((s) => s.completedStages);
+  const pipelineStage = useHelixStore((s) => s.pipelineStage);
+  const sessionId = useHelixStore((s) => s.sessionId);
+  const generationTokenCount = useHelixStore((s) => s.generationTokenCount);
+  const retrievalStatuses = useHelixStore((s) => s.retrievalStatuses);
+  const explanation = useHelixStore((s) => s.explanation);
 
-  // Simulate pipeline progression
+  // Local simulation state (fallback when no WebSocket)
+  const [simCompleted, setSimCompleted] = useState<string[]>([]);
+  const [simActive, setSimActive] = useState(0);
+
+  const isStreaming = sessionId !== null;
+  const completedStages = isStreaming ? storeCompleted : simCompleted;
+
+  // Simulation fallback (runs when no session — i.e., /api/analyze path)
   useEffect(() => {
-    if (pipelineStatus !== "analyzing") return;
-    setCompletedStages([]);
-    setActiveStage(0);
+    if (pipelineStatus !== "analyzing" || isStreaming) return;
+    setSimCompleted([]);
+    setSimActive(0);
 
     let timeout: NodeJS.Timeout;
     let current = 0;
 
     const advance = () => {
       if (current >= STAGES.length) return;
-      setActiveStage(current);
+      setSimActive(current);
       timeout = setTimeout(() => {
-        setCompletedStages((prev) => [...prev, STAGES[current].id]);
+        setSimCompleted((prev) => [...prev, STAGES[current].id]);
         current++;
         advance();
-      }, STAGES[current].duration);
+      }, SIMULATION_DURATIONS[STAGES[current].id] ?? 800);
     };
 
     advance();
     return () => clearTimeout(timeout);
-  }, [pipelineStatus]);
+  }, [pipelineStatus, isStreaming]);
 
   if (pipelineStatus !== "analyzing") return null;
 
   const progress = ((completedStages.length) / STAGES.length) * 100;
 
+  // Determine active stage index
+  const activeStageIdx = isStreaming
+    ? STAGES.findIndex((s) => s.id === pipelineStage)
+    : simActive;
+
+  // Build retrieval sub-status display
+  const retrievalDetail = retrievalStatuses.length > 0
+    ? retrievalStatuses.map((r) => {
+        const icon = r.status === "complete" ? "\u2713" : r.status === "failed" ? "\u2717" : "\u2026";
+        return `${r.source.toUpperCase()} ${icon}`;
+      }).join("  ")
+    : null;
+
   return (
     <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "var(--surface-base)" }}>
       <div className="max-w-lg w-full">
-        <h2 className="text-xl font-semibold tracking-tight mb-2">Running analysis</h2>
+        <h2 className="text-xl font-semibold tracking-tight mb-2">
+          {isStreaming ? "Running design pipeline" : "Running analysis"}
+        </h2>
         <p className="text-[13px] mb-8" style={{ color: "var(--text-muted)" }}>
-          Evo 2 is processing your sequence through the full pipeline.
+          {isStreaming
+            ? "Evo 2 is generating and scoring candidates in real time."
+            : "Evo 2 is processing your sequence through the full pipeline."}
         </p>
 
         {/* Progress bar */}
@@ -66,24 +101,43 @@ export default function PipelineStatus() {
         <div className="space-y-1">
           {STAGES.map((stage, i) => {
             const isComplete = completedStages.includes(stage.id);
-            const isActive = i === activeStage && !isComplete;
+            const isActive = i === activeStageIdx && !isComplete;
+
+            // Build detail text for active stages
+            let detail = "";
+            if (isActive && isStreaming) {
+              if (stage.id === "generation") detail = `${generationTokenCount} tokens`;
+              if (stage.id === "explanation" && explanation) detail = `${explanation.length} chars`;
+            }
+
             return (
-              <div key={stage.id} className="flex items-center gap-3 py-2 px-3 rounded-lg transition-colors"
-                style={{ background: isActive ? "rgba(91,181,162,0.05)" : "transparent" }}>
-                <div className="w-5 h-5 flex items-center justify-center">
-                  {isComplete ? (
-                    <Check size={14} style={{ color: "var(--accent)" }} />
-                  ) : isActive ? (
-                    <Loader2 size={14} className="animate-spin" style={{ color: "var(--accent)" }} />
-                  ) : (
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--surface-overlay)" }} />
+              <div key={stage.id}>
+                <div className="flex items-center gap-3 py-2 px-3 rounded-lg transition-colors"
+                  style={{ background: isActive ? "rgba(91,181,162,0.05)" : "transparent" }}>
+                  <div className="w-5 h-5 flex items-center justify-center">
+                    {isComplete ? (
+                      <Check size={14} style={{ color: "var(--accent)" }} />
+                    ) : isActive ? (
+                      <Loader2 size={14} className="animate-spin" style={{ color: "var(--accent)" }} />
+                    ) : (
+                      <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--surface-overlay)" }} />
+                    )}
+                  </div>
+                  <span className="text-[13px] flex-1" style={{
+                    color: isComplete ? "var(--accent)" : isActive ? "var(--text-primary)" : "var(--text-faint)",
+                  }}>
+                    {stage.label}
+                  </span>
+                  {detail && (
+                    <span className="text-[11px] font-mono" style={{ color: "var(--text-faint)" }}>{detail}</span>
                   )}
                 </div>
-                <span className="text-[13px]" style={{
-                  color: isComplete ? "var(--accent)" : isActive ? "var(--text-primary)" : "var(--text-faint)",
-                }}>
-                  {stage.label}
-                </span>
+                {/* Retrieval sub-status */}
+                {stage.id === "retrieval" && isActive && retrievalDetail && (
+                  <div className="ml-11 text-[11px] font-mono py-1" style={{ color: "var(--text-faint)" }}>
+                    {retrievalDetail}
+                  </div>
+                )}
               </div>
             );
           })}

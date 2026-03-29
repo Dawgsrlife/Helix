@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useHelixStore } from "@/lib/store";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
+import { useDesignPipeline } from "@/hooks/useDesignPipeline";
 import { useMutationSim } from "@/hooks/useMutationSim";
 import HelixLogo from "@/components/brand/HelixLogo";
 import SequenceInput from "@/components/sequence/SequenceInput";
@@ -62,6 +63,7 @@ export default function AnalyzePage() {
   const toggleChat = useHelixStore((s) => s.toggleChat);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
+  const { startDesign } = useDesignPipeline();
   const { simulate } = useMutationSim();
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export default function AnalyzePage() {
   }, [analysisResult, activePdb, setActivePdb]);
 
   const handleSequenceSubmit = useCallback((seq: string) => { analyze(seq); }, [analyze]);
+  const handleDesignSubmit = useCallback((goal: string) => { startDesign(goal); }, [startDesign]);
   const handleBaseClick = useCallback((pos: number) => { setSelectedPosition(pos); }, [setSelectedPosition]);
   const handleMutationSubmit = useCallback((pos: number, alt: string) => {
     if (rawSequence) {
@@ -152,7 +155,7 @@ export default function AnalyzePage() {
           {viewMode === "input" && (
             <motion.div key="input" className="flex-1 flex overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <SequenceInput onSubmit={handleSequenceSubmit} isLoading={isLoading} error={error} />
+              <SequenceInput onSubmit={handleSequenceSubmit} onDesign={handleDesignSubmit} isLoading={isLoading} error={error} />
             </motion.div>
           )}
 
