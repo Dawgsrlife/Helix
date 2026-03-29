@@ -11,6 +11,8 @@ from models.domain import DesignSpec
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from services.evo2 import Evo2Service
+from services.structure import predict_structure
+from config import settings, StructureMode
 from ws.events import (
     CandidateScoredData,
     CandidateScoredEvent,
@@ -71,11 +73,22 @@ async def run_generation_pipeline(
         ).to_json(),
     )
 
-    pdb_data = _mock_pdb(candidate_id)
+    pdb_data = None
+    confidence = 0.0
+    if settings.structure_mode == StructureMode.ESMFOLD:
+        result = await predict_structure(generated)
+        if result is not None:
+            pdb_data = result.pdb_data
+            confidence = result.confidence
+
+    if pdb_data is None:
+        pdb_data = _mock_pdb(candidate_id)
+        confidence = 0.73
+
     await manager.send_event(
         session_id,
         StructureReadyEvent(
-            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=0.73)
+            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
         ).to_json(),
     )
 
