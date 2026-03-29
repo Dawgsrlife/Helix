@@ -43,6 +43,29 @@ async def test_generation_pipeline_emits_key_events() -> None:
 
 
 @pytest.mark.asyncio
+async def test_generation_pipeline_uses_custom_seed() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-custom-seed")
+
+    custom_seed = "ATGCGT"
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-custom-seed",
+        goal="Design promoter",
+        n_tokens=2,
+        seed_sequence=custom_seed,
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    generated_sequence = complete["data"]["candidates"][0]["sequence"]
+    assert generated_sequence.startswith(custom_seed)
+    assert len(generated_sequence) == len(custom_seed) + 2
+
+
+@pytest.mark.asyncio
 async def test_followup_pipeline_returns_steps_and_emits_complete() -> None:
     manager = WebSocketManager()
     ws = _FakeWebSocket()
@@ -58,3 +81,25 @@ async def test_followup_pipeline_returns_steps_and_emits_complete() -> None:
 
     assert steps == ["intent_parse", "evo2_generation", "evo2_scoring"]
     assert ws.sent[-1]["event"] == "pipeline_complete"
+
+
+@pytest.mark.asyncio
+async def test_followup_pipeline_uses_provided_base_sequence() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-follow-base")
+
+    base_sequence = "ATGCCGATGCCGATGCCG"
+    await run_followup_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-follow-base",
+        message="make this more tissue-specific",
+        candidate_id=0,
+        base_sequence=base_sequence,
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    candidate_sequence = complete["data"]["candidates"][0]["sequence"]
+    assert len(candidate_sequence) == len(base_sequence)

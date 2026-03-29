@@ -1,5 +1,7 @@
 """Tests for CLI service resolution and non-interactive commands."""
 
+import pytest
+
 from cli import evo2_playground as pg
 from config import Evo2Mode, Settings
 from services.evo2 import Evo2MockService
@@ -42,3 +44,35 @@ def test_cmd_forward_handles_short_logits(monkeypatch):
     import asyncio
 
     asyncio.run(pg.cmd_forward("ATCGGATCGATCTACTACGATCGATCGATC"))
+
+
+def test_run_with_nim_fallback_switches_to_mock(monkeypatch):
+    class _Resp:
+        status_code = 429
+
+    class _Err(Exception):
+        def __init__(self):
+            self.response = _Resp()
+
+    async def _boom(_seq: str):
+        raise _Err()
+
+    monkeypatch.setattr(pg, "service_source", "nim_api")
+    monkeypatch.setattr(pg, "service", object())
+
+    calls = {"n": 0}
+
+    async def _run():
+        async def _fn(_seq: str):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return await _boom(_seq)
+            return "ok"
+        return await pg._run_with_nim_fallback("test", _fn, "ATG")
+
+    import asyncio
+    result = asyncio.run(_run())
+
+    assert result == "ok"
+    assert isinstance(pg.service, Evo2MockService)
+    assert pg.service_source == "mock-fallback-runtime"

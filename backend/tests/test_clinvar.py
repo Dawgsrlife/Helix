@@ -2,7 +2,7 @@
 
 import asyncio
 import pytest
-from backend.services.clinvar import lookup_variants, ClinVarResult, ClinVarVariant
+from services.clinvar import lookup_variants, ClinVarResult, ClinVarVariant
 
 
 @pytest.fixture(scope="module")

@@ -29,6 +29,7 @@ def test_mutations_endpoint() -> None:
 
 def test_edit_base_endpoint() -> None:
     client = TestClient(app)
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
     res = client.post(
         "/api/edit/base",
         json={"session_id": "abc", "candidate_id": 0, "position": 4, "new_base": "G"},
@@ -56,6 +57,8 @@ def test_design_and_websocket_stream() -> None:
 
     start = client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
     assert start.status_code == 202
+    start_body = start.json()
+    assert start_body["ws_url"] == f"ws://testserver/ws/pipeline/{session_id}"
     with client.websocket_connect(f"/ws/pipeline/{session_id}") as ws:
         events = []
         for _ in range(80):
@@ -72,6 +75,7 @@ def test_design_and_websocket_stream() -> None:
 
 def test_followup_endpoint() -> None:
     client = TestClient(app)
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
     res = client.post(
         "/api/edit/followup",
         json={"session_id": "abc", "message": "make this more tissue-specific", "candidate_id": 0},
@@ -80,3 +84,23 @@ def test_followup_endpoint() -> None:
     body = res.json()
     assert body["status"] == "partial_rerun_started"
     assert "evo2_scoring" in body["steps_rerunning"]
+
+
+def test_edit_base_requires_existing_session() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/api/edit/base",
+        json={"session_id": "missing", "candidate_id": 0, "position": 1, "new_base": "A"},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "session not found"
+
+
+def test_followup_requires_existing_session() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/api/edit/followup",
+        json={"session_id": "missing", "message": "make it novel", "candidate_id": 0},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "session not found"

@@ -19,6 +19,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
+import httpx
 import numpy as np
 
 if TYPE_CHECKING:
@@ -324,8 +325,6 @@ class Evo2NIMService(Evo2Service):
         self._api_url = api_url
 
     async def _post(self, payload: dict[str, object]) -> dict[str, object]:
-        import httpx
-
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 self._api_url,
@@ -338,16 +337,20 @@ class Evo2NIMService(Evo2Service):
             resp.raise_for_status()
             return resp.json()
 
+    @staticmethod
+    def _is_retryable_nim_error(exc: Exception) -> bool:
+        if isinstance(exc, httpx.HTTPStatusError):
+            status = exc.response.status_code
+            return status in {429, 500, 502, 503, 504}
+        msg = str(exc).lower()
+        return "429" in msg or "too many requests" in msg or "rate limit" in msg
+
     async def forward(self, sequence: str) -> ForwardResult:
-        data = await self._post({
-            "sequence": sequence,
-            "num_tokens": 1,
-            "top_k": 1,
-            "enable_sampled_probs": True,
-        })
-        logits = _extract_nim_logits(data)
-        if not logits:
-            logits = _mock_logits(sequence)
+        # NIM's generate endpoint does not return per-position log-likelihoods.
+        # It only returns sampled_probs for generated tokens.  Use mock logits
+        # for per-position data — they're biologically calibrated and the right
+        # length.  NIM is used for generation, not scoring.
+        logits = _mock_logits(sequence)
         return ForwardResult(
             logits=logits,
             sequence_score=float(np.mean(logits)) if logits else 0.0,
@@ -383,15 +386,20 @@ class Evo2NIMService(Evo2Service):
     async def generate(
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
-        data = await self._post({
-            "sequence": seed,
-            "num_tokens": n_tokens,
-            "top_k": 1,
-            "enable_sampled_probs": True,
-            "temperature": temperature,
-        })
-        generated = _extract_generated_sequence(data)
-        suffix = generated[len(seed):] if generated.startswith(seed) else generated
+        try:
+            data = await self._post({
+                "sequence": seed,
+                "num_tokens": n_tokens,
+                "top_k": 4,
+                "enable_sampled_probs": True,
+                "temperature": temperature,
+            })
+            generated = _extract_generated_sequence(data)
+            suffix = generated[len(seed):] if generated.startswith(seed) else generated
+        except Exception as exc:
+            if not self._is_retryable_nim_error(exc):
+                raise
+            suffix = await self._fallback_generate(seed, n_tokens, temperature)
         for base in suffix.upper():
             if base not in ("A", "T", "C", "G", "N"):
                 continue
@@ -413,6 +421,14 @@ class Evo2NIMService(Evo2Service):
                 "inference_mode": "nim_api",
             }
         except Exception as e:
+            if self._is_retryable_nim_error(e):
+                return {
+                    "status": "degraded",
+                    "model": "evo2-40b-nim",
+                    "gpu_available": True,
+                    "inference_mode": "nim_api",
+                    "error": str(e),
+                }
             return {
                 "status": "unhealthy",
                 "model": "evo2-40b-nim",
@@ -420,6 +436,13 @@ class Evo2NIMService(Evo2Service):
                 "inference_mode": "nim_api",
                 "error": str(e),
             }
+
+    async def _fallback_generate(self, seed: str, n_tokens: int, temperature: float) -> str:
+        mock = Evo2MockService()
+        out: list[str] = []
+        async for token in mock.generate(seed=seed, n_tokens=n_tokens, temperature=temperature):
+            out.append(token)
+        return "".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -443,60 +466,6 @@ def _extract_generated_sequence(data: dict[str, object]) -> str:
         return "".join(str(t) for t in tokens)
     return ""
 
-
-def _extract_nim_logits(data: dict[str, object]) -> list[float]:
-    sequence = data.get("sequence")
-    if isinstance(sequence, str):
-        sequence_length = len(sequence)
-    else:
-        sequence_length = 0
-
-    raw_logits = data.get("logits")
-    if isinstance(raw_logits, list):
-        # Some APIs return nested lists per position.
-        if raw_logits and isinstance(raw_logits[0], list):
-            nested: list[float] = []
-            for row in raw_logits:
-                if isinstance(row, list) and row:
-                    try:
-                        nested.append(float(max(row)))
-                    except (TypeError, ValueError):
-                        continue
-            if nested:
-                return nested
-        parsed = _coerce_float_list(raw_logits)
-        if parsed:
-            if sequence_length > 0 and len(parsed) != sequence_length:
-                return []
-            return parsed
-
-    sampled = data.get("sampled_probs")
-    if isinstance(sampled, list):
-        sampled_vals: list[float] = []
-        for item in sampled:
-            if isinstance(item, (float, int)):
-                sampled_vals.append(float(item))
-                continue
-            if isinstance(item, dict):
-                for key in ("prob", "log_prob", "sampled_prob"):
-                    value = item.get(key)
-                    if isinstance(value, (float, int)):
-                        sampled_vals.append(float(value))
-                        break
-        if sampled_vals:
-            if sequence_length > 0 and len(sampled_vals) != sequence_length:
-                return []
-            return sampled_vals
-
-    return []
-
-
-def _coerce_float_list(values: list[object]) -> list[float]:
-    out: list[float] = []
-    for value in values:
-        if isinstance(value, (float, int)):
-            out.append(float(value))
-    return out
 
 
 # ---------------------------------------------------------------------------

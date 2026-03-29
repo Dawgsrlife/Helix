@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
-from models.domain import Candidate, DesignSpec
+from models.domain import DesignSpec
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from services.evo2 import Evo2Service
@@ -28,6 +30,7 @@ from ws.events import (
 from ws.manager import WebSocketManager
 
 DEFAULT_SEED = "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAAT"
+CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
 
 
 async def run_generation_pipeline(
@@ -37,13 +40,15 @@ async def run_generation_pipeline(
     session_id: str,
     goal: str,
     n_tokens: int = 36,
+    seed_sequence: str = DEFAULT_SEED,
+    on_candidate_ready: CandidateUpdateCallback | None = None,
 ) -> None:
     spec = await _emit_intent(manager, session_id, goal)
     await _emit_retrieval(manager, session_id, spec)
 
     candidate_id = 0
-    generated = DEFAULT_SEED
-    async for token in service.generate(DEFAULT_SEED, n_tokens=n_tokens):
+    generated = seed_sequence
+    async for token in service.generate(seed_sequence, n_tokens=n_tokens):
         position = len(generated)
         generated += token
         event = GenerationTokenEvent(
@@ -84,6 +89,11 @@ async def run_generation_pipeline(
         )
         await asyncio.sleep(0.03)
 
+    if on_candidate_ready is not None:
+        callback_result = on_candidate_ready(candidate_id, generated)
+        if inspect.isawaitable(callback_result):
+            await callback_result
+
     await manager.send_event(
         session_id,
         PipelineCompleteEvent(
@@ -108,11 +118,13 @@ async def run_followup_pipeline(
     session_id: str,
     message: str,
     candidate_id: int = 0,
+    base_sequence: str = DEFAULT_SEED,
+    on_candidate_ready: CandidateUpdateCallback | None = None,
 ) -> list[str]:
     spec = await _emit_intent(manager, session_id, message)
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
 
-    base = DEFAULT_SEED
+    base = base_sequence
     if "novel" in message.lower():
         base = _simple_mutate(base, 12, "G")
     if "tissue" in message.lower() and len(base) > 20:
@@ -136,6 +148,11 @@ async def run_followup_pipeline(
             data=ExplanationChunkData(text="Applied follow-up constraints and recomputed candidate scores.")
         ).to_json(),
     )
+
+    if on_candidate_ready is not None:
+        callback_result = on_candidate_ready(candidate_id, base)
+        if inspect.isawaitable(callback_result):
+            await callback_result
 
     await manager.send_event(
         session_id,
@@ -201,4 +218,3 @@ def _mock_pdb(candidate_id: int) -> str:
 
 def create_session_id() -> str:
     return str(uuid4())
-

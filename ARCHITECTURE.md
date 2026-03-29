@@ -213,7 +213,7 @@ flowchart TD
 
 ### WebSocket Events
 
-Connection: `ws://localhost:8000/ws/pipeline/{session_id}`
+Connection: `ws://<backend-host>/ws/pipeline/{session_id}`
 
 ```
 intent_parsed        → { spec: { target_gene, design_type, ... } }

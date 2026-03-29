@@ -176,7 +176,7 @@ The frontend maps raw API responses to domain types at the boundary. Your Pydant
 ### WebSocket Events
 
 ```
-ws://localhost:8000/ws/pipeline/{session_id}
+ws://<backend-host>/ws/pipeline/{session_id}
 ```
 
 Events emitted during pipeline execution:
@@ -219,7 +219,7 @@ GET  /api/health          # Health check
 {
   "session_id": "abc123",
   "status": "pipeline_started",
-  "ws_url": "ws://localhost:8000/ws/pipeline/abc123"
+  "ws_url": "ws://<backend-host>/ws/pipeline/abc123"
 }
 ```
 
@@ -459,7 +459,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def design(body: dict):
     session_id = body.get("session_id", str(uuid.uuid4()))
     # In production this would trigger the Celery pipeline
-    return {"session_id": session_id, "status": "pipeline_started", "ws_url": f"ws://localhost:8000/ws/pipeline/{session_id}"}
+    return {"session_id": session_id, "status": "pipeline_started", "ws_url": f"ws://<backend-host>/ws/pipeline/{session_id}"}
 
 @app.websocket("/ws/pipeline/{session_id}")
 async def pipeline_ws(websocket: WebSocket, session_id: str):

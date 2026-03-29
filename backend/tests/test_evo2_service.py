@@ -236,34 +236,20 @@ class TestNIMService:
         assert "".join(out) == "CCG"
         assert captured_payload["sequence"] == "ATG"
         assert captured_payload["num_tokens"] == 3
-        assert captured_payload["top_k"] == 1
+        assert captured_payload["top_k"] == 4
         assert captured_payload["enable_sampled_probs"] is True
 
     @pytest.mark.asyncio
-    async def test_forward_uses_logits_when_present(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    async def test_forward_returns_mock_logits(self) -> None:
+        """NIM generate endpoint can't provide per-position logits.
+        forward() uses calibrated mock logits instead."""
         service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
-
-        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
-            return {"logits": [-0.1, -0.2, -0.3]}
-
-        monkeypatch.setattr(service, "_post", fake_post)
-        result = await service.forward("ATG")
-
-        assert result.logits == [-0.1, -0.2, -0.3]
-        assert result.sequence_score < 0
-
-    @pytest.mark.asyncio
-    async def test_forward_falls_back_when_logits_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
-
-        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
-            return {"message": "ok"}
-
-        monkeypatch.setattr(service, "_post", fake_post)
         result = await service.forward("ATGGATT")
 
         assert len(result.logits) == 7
         assert isinstance(result.sequence_score, float)
+        # Mock logits are negative log-likelihoods
+        assert result.sequence_score < 0
 
     @pytest.mark.asyncio
     async def test_health_checks_generate_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -278,4 +264,45 @@ class TestNIMService:
         health = await service.health()
 
         assert health["status"] == "healthy"
+        assert health["inference_mode"] == "nim_api"
+
+    @pytest.mark.asyncio
+    async def test_forward_deterministic_for_same_sequence(self) -> None:
+        """Same sequence always produces same mock logits."""
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        r1 = await service.forward("ATGGATT")
+        r2 = await service.forward("ATGGATT")
+        assert r1.logits == r2.logits
+
+    @pytest.mark.asyncio
+    async def test_generate_recovers_from_429(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import httpx
+
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        req = httpx.Request("POST", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        resp = httpx.Response(429, request=req)
+
+        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
+            raise httpx.HTTPStatusError("rate limited", request=req, response=resp)
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        tokens = []
+        async for tok in service.generate("ATG", n_tokens=4):
+            tokens.append(tok)
+        assert len(tokens) == 4
+
+    @pytest.mark.asyncio
+    async def test_health_marks_degraded_on_429(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import httpx
+
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        req = httpx.Request("POST", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        resp = httpx.Response(429, request=req)
+
+        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
+            raise httpx.HTTPStatusError("rate limited", request=req, response=resp)
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        health = await service.health()
+        assert health["status"] == "degraded"
         assert health["inference_mode"] == "nim_api"

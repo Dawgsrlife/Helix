@@ -28,7 +28,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import TypeVar
 
 # Ensure backend root is on sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -52,6 +54,7 @@ from services.translation import (
 console = Console()
 service: Evo2Service = Evo2MockService()
 service_source = "mock"
+T = TypeVar("T")
 
 # Color scale for log-likelihoods (green = high, red = low)
 _LL_COLORS = [
@@ -109,6 +112,35 @@ def resolve_service() -> Evo2Service:
             "Falling back to mock service."
         )
         return Evo2MockService()
+
+
+def _is_nim_retryable_error(exc: Exception) -> bool:
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if status_code in {429, 500, 502, 503, 504}:
+        return True
+    msg = str(exc).lower()
+    return "429" in msg or "rate limit" in msg or "too many requests" in msg
+
+
+async def _run_with_nim_fallback(
+    action: str,
+    fn: Callable[..., Awaitable[T]],
+    *args: object,
+) -> T:
+    global service, service_source
+    try:
+        return await fn(*args)
+    except Exception as exc:
+        if service_source != "nim_api" or not _is_nim_retryable_error(exc):
+            raise
+        console.print(
+            f"[yellow]{action} hit NVIDIA rate limits/unavailable ({exc}). "
+            "Falling back to mock backend for continuity.[/]"
+        )
+        service = Evo2MockService()
+        service_source = "mock-fallback-runtime"
+        return await fn(*args)
 
 
 # ---------------------------------------------------------------------------
@@ -374,7 +406,7 @@ async def main(argv: list[str] | None = None) -> None:
         return
 
     if args.demo:
-        await cmd_demo(args.sequence.upper())
+        await _run_with_nim_fallback("demo", cmd_demo, args.sequence.upper())
         return
 
     console.print(Panel(
@@ -412,33 +444,33 @@ async def main(argv: list[str] | None = None) -> None:
                 await cmd_health()
             elif cmd == "forward":
                 seq = parts[1] if len(parts) > 1 else sample
-                await cmd_forward(seq)
+                await _run_with_nim_fallback("forward", cmd_forward, seq)
             elif cmd == "score":
                 seq = parts[1] if len(parts) > 1 else sample
-                await cmd_score(seq)
+                await _run_with_nim_fallback("score", cmd_score, seq)
             elif cmd == "mutate":
                 seq = parts[1] if len(parts) > 1 else sample
                 pos = int(parts[2]) if len(parts) > 2 else 5
                 base = parts[3] if len(parts) > 3 else "G"
-                await cmd_mutate(seq, pos, base)
+                await _run_with_nim_fallback("mutate", cmd_mutate, seq, pos, base)
             elif cmd == "generate":
                 seed = parts[1] if len(parts) > 1 else "ATG"
                 n = int(parts[2]) if len(parts) > 2 else 30
-                await cmd_generate(seed, n)
+                await _run_with_nim_fallback("generate", cmd_generate, seed, n)
             elif cmd == "multiscore":
                 seq = parts[1] if len(parts) > 1 else sample
-                await cmd_multiscore(seq)
+                await _run_with_nim_fallback("multiscore", cmd_multiscore, seq)
             elif cmd == "compare":
                 if len(parts) < 3:
                     console.print("  Usage: compare <seq1> <seq2>")
                     continue
-                await cmd_compare(parts[1], parts[2])
+                await _run_with_nim_fallback("compare", cmd_compare, parts[1], parts[2])
             elif cmd == "translate":
                 seq = parts[1] if len(parts) > 1 else sample
                 await cmd_translate(seq)
             elif cmd == "demo":
                 seq = parts[1] if len(parts) > 1 else sample
-                await cmd_demo(seq)
+                await _run_with_nim_fallback("demo", cmd_demo, seq)
             elif cmd == "sample":
                 console.print(f"  {sample}")
             else:
