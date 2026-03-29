@@ -24,10 +24,16 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Helix",
+  title: { default: "Helix", template: "%s — Helix" },
   description:
     "The genomic IDE. Design, annotate, and analyze DNA sequences with Evo 2 and AlphaFold.",
   icons: { icon: "/favicon.svg" },
+  metadataBase: new URL("https://helix.bio"),
+  openGraph: {
+    title: "Helix — Genomic Design IDE",
+    description: "Co-design genomes with an IDE that thinks out loud. Powered by Evo 2 and AlphaFold.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
