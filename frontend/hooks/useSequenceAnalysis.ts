@@ -1,40 +1,57 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import type { AnalysisResult } from "@/types";
+import { useCallback } from "react";
 import { analyzeSequence } from "@/lib/api";
+import { useHelixStore } from "@/lib/store";
 
-interface SequenceAnalysisState {
-  result: AnalysisResult | null;
-  isLoading: boolean;
-  error: string | null;
-}
+const MIN_PIPELINE_DURATION = 6200; // ms — let the animation play out
 
 export function useSequenceAnalysis() {
-  const [state, setState] = useState<SequenceAnalysisState>({
-    result: null,
-    isLoading: false,
-    error: null,
-  });
+  const pipelineStatus = useHelixStore((s) => s.pipelineStatus);
+  const error = useHelixStore((s) => s.error);
+  const analysisResult = useHelixStore((s) => s.analysisResult);
+  const setAnalysisResult = useHelixStore((s) => s.setAnalysisResult);
+  const setPipelineStatus = useHelixStore((s) => s.setPipelineStatus);
+  const setViewMode = useHelixStore((s) => s.setViewMode);
+  const setError = useHelixStore((s) => s.setError);
 
-  const analyze = useCallback(async (sequence: string) => {
-    setState({ result: null, isLoading: true, error: null });
+  const analyze = useCallback(
+    async (sequence: string) => {
+      setViewMode("pipeline");
+      setPipelineStatus("analyzing");
 
-    try {
-      const result = await analyzeSequence(sequence);
-      setState({ result, isLoading: false, error: null });
-      return result;
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Analysis failed";
-      setState({ result: null, isLoading: false, error: message });
-      return null;
-    }
-  }, []);
+      const startTime = Date.now();
+
+      try {
+        // Hits local Next.js API routes (mock) or real backend via NEXT_PUBLIC_API_URL
+        const result = await analyzeSequence(sequence);
+
+        // Let the pipeline animation play for a satisfying duration
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_PIPELINE_DURATION) {
+          await new Promise((r) => setTimeout(r, MIN_PIPELINE_DURATION - elapsed));
+        }
+
+        setAnalysisResult(result);
+        return result;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Analysis failed";
+        setError(message);
+        return null;
+      }
+    },
+    [setAnalysisResult, setPipelineStatus, setViewMode, setError]
+  );
 
   const reset = useCallback(() => {
-    setState({ result: null, isLoading: false, error: null });
+    useHelixStore.getState().reset();
   }, []);
 
-  return { ...state, analyze, reset };
+  return {
+    result: analysisResult,
+    isLoading: pipelineStatus === "analyzing",
+    error,
+    analyze,
+    reset,
+  };
 }

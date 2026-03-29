@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { useRef, useEffect, useMemo } from "react";
 import type { LikelihoodScore } from "@/types";
 
 interface LikelihoodGraphProps {
@@ -14,67 +14,107 @@ export default function LikelihoodGraph({
   highlightedPosition,
   onPositionHover,
 }: LikelihoodGraphProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const maxAbsScore = useMemo(
+    () => Math.max(...scores.map((s) => Math.abs(s.score)), 1),
+    [scores]
+  );
+
+  // Canvas-based rendering for performance with thousands of positions
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !container || scores.length === 0) return;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvas.style.width = `${rect.width}px`;
+    canvas.style.height = `${rect.height}px`;
+    ctx.scale(dpr, dpr);
+
+    const w = rect.width;
+    const h = rect.height;
+    const barWidth = Math.max(w / scores.length, 1);
+
+    ctx.clearRect(0, 0, w, h);
+
+    for (let i = 0; i < scores.length; i++) {
+      const score = scores[i];
+      const barHeight = (Math.abs(score.score) / maxAbsScore) * (h - 4);
+      const x = (i / scores.length) * w;
+      const y = h - barHeight;
+
+      const isHighlighted = score.position === highlightedPosition;
+
+      if (isHighlighted) {
+        ctx.fillStyle = "#e5e1e4";
+      } else {
+        ctx.fillStyle = "rgba(91, 181, 162, 0.50)";
+      }
+
+      ctx.fillRect(x, y, Math.max(barWidth - 0.5, 0.5), barHeight);
+    }
+
+    // Highlight line
+    if (highlightedPosition !== undefined && highlightedPosition < scores.length) {
+      const x = (highlightedPosition / scores.length) * w;
+      ctx.strokeStyle = "rgba(229, 225, 228, 0.3)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+    }
+  }, [scores, highlightedPosition, maxAbsScore]);
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!containerRef.current || scores.length === 0) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const idx = Math.floor((x / rect.width) * scores.length);
+    if (idx >= 0 && idx < scores.length) {
+      onPositionHover(scores[idx].position);
+    }
+  };
+
   if (scores.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center text-[var(--text-muted)] text-sm">
-        No likelihood scores available
+      <div
+        className="h-full flex items-center justify-center"
+        style={{ color: "var(--text-faint)", fontSize: "12px" }}
+      >
+        No likelihood data
       </div>
     );
   }
 
-  const maxScore = Math.max(...scores.map((s) => Math.abs(s.score)));
-  const normalizedMax = maxScore || 1;
-
-  // Downsample for performance if needed
-  const maxBars = 500;
-  const step = Math.max(1, Math.floor(scores.length / maxBars));
-  const displayScores =
-    step > 1
-      ? scores.filter((_, i) => i % step === 0)
-      : scores;
-
   return (
     <div className="h-full flex flex-col">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">
-          Evo 2 Log-Likelihood
+      <div className="flex justify-between items-center mb-1.5">
+        <span
+          className="select-none uppercase tracking-wider"
+          style={{ fontSize: "10px", color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.05em" }}
+        >
+          Log-likelihood
         </span>
-        <span className="text-xs text-[var(--text-muted)] font-mono">
-          {scores.length} positions
+        <span style={{ fontSize: "11px", color: "var(--text-faint)", fontFamily: "var(--font-mono, monospace)" }}>
+          {scores.length} pos
         </span>
       </div>
-
-      <div className="flex-1 flex items-end gap-px overflow-hidden">
-        {displayScores.map((score, i) => {
-          const height = (Math.abs(score.score) / normalizedMax) * 100;
-          const isHighlighted = score.position === highlightedPosition;
-          const isPositive = score.score >= 0;
-
-          return (
-            <motion.div
-              key={score.position}
-              className="flex-1 min-w-[1px] cursor-pointer relative group"
-              style={{ height: "100%" }}
-              onMouseEnter={() => onPositionHover(score.position)}
-              initial={{ scaleY: 0 }}
-              animate={{ scaleY: 1 }}
-              transition={{ delay: i * 0.001, duration: 0.3 }}
-            >
-              <div
-                className="absolute bottom-0 left-0 right-0 transition-colors rounded-t-sm"
-                style={{
-                  height: `${Math.max(height, 2)}%`,
-                  backgroundColor: isHighlighted
-                    ? "var(--accent-cyan)"
-                    : isPositive
-                      ? "var(--accent-emerald)"
-                      : "var(--accent-rose)",
-                  opacity: isHighlighted ? 1 : 0.7,
-                }}
-              />
-            </motion.div>
-          );
-        })}
+      <div
+        ref={containerRef}
+        className="flex-1 cursor-crosshair"
+        onMouseMove={handleMouseMove}
+        style={{ backgroundColor: "var(--surface-void)", borderRadius: "3px", minHeight: "80px" }}
+      >
+        <canvas ref={canvasRef} className="w-full h-full" />
       </div>
     </div>
   );

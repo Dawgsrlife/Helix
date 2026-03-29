@@ -38,6 +38,7 @@ Thumbs.db
 
 # Claude
 .claude/
+claude.md
 
 # Project materials (course content, not for distribution)
 materials/
