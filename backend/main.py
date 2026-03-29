@@ -34,6 +34,7 @@ from pipeline.orchestrator import (
     run_generation_pipeline,
 )
 from services.evo2 import create_evo2_service
+from services.session_store import CandidateNotFoundError, SessionNotFoundError, SessionStore
 from services.structure import predict_structure
 from services.translation import find_orfs
 from ws.manager import WebSocketManager
@@ -49,8 +50,7 @@ app.add_middleware(
 
 ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
-pending_design_goals: dict[str, str] = {}
-session_candidates: dict[str, dict[int, str]] = {}
+session_store = SessionStore(default_seed=DEFAULT_SEED)
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)
@@ -77,7 +77,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
-    _set_candidate_sequence(session_id, 0, DEFAULT_SEED)
+    session_store.initialize_session(session_id)
     if ws_manager.has_session(session_id):
         asyncio.create_task(
             run_generation_pipeline(
@@ -86,13 +86,13 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
                 session_id=session_id,
                 goal=request.goal,
                 seed_sequence=DEFAULT_SEED,
-                on_candidate_ready=lambda candidate_id, sequence: _set_candidate_sequence(
+                on_candidate_ready=lambda candidate_id, sequence: session_store.set_candidate_sequence(
                     session_id, candidate_id, sequence
                 ),
             )
         )
     else:
-        pending_design_goals[session_id] = request.goal
+        session_store.set_pending_goal(session_id, request.goal)
     return DesignAcceptedResponse(
         session_id=session_id,
         ws_url=_build_ws_url(http_request, session_id),
@@ -101,7 +101,13 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
 
 @app.post("/api/edit/base", response_model=BaseEditResponse)
 async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
-    sequence = _require_candidate_sequence(request.session_id, request.candidate_id)
+    try:
+        sequence = session_store.require_candidate_sequence(request.session_id, request.candidate_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except CandidateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
+
     if request.position < 0 or request.position >= len(sequence):
         raise HTTPException(status_code=422, detail="position out of range")
 
@@ -113,7 +119,7 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
     )
     mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
     mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
-    _set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
+    session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
 
     return BaseEditResponse(
         position=request.position,
@@ -135,7 +141,13 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
 async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedResponse:
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
     candidate_id = request.candidate_id or 0
-    base_sequence = _require_candidate_sequence(request.session_id, candidate_id)
+    try:
+        base_sequence = session_store.require_candidate_sequence(request.session_id, candidate_id)
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except CandidateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"candidate {candidate_id} not found") from exc
+
     asyncio.create_task(
         run_followup_pipeline(
             manager=ws_manager,
@@ -144,7 +156,7 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
             message=request.message,
             candidate_id=candidate_id,
             base_sequence=base_sequence,
-            on_candidate_ready=lambda updated_candidate_id, sequence: _set_candidate_sequence(
+            on_candidate_ready=lambda updated_candidate_id, sequence: session_store.set_candidate_sequence(
                 request.session_id, updated_candidate_id, sequence
             ),
         )
@@ -196,15 +208,15 @@ async def health() -> HealthResponse:
 @app.websocket("/ws/pipeline/{session_id}")
 async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
     await ws_manager.connect(websocket, session_id)
-    pending_goal = pending_design_goals.pop(session_id, None)
+    pending_goal = session_store.pop_pending_goal(session_id)
     if pending_goal is not None:
         await run_generation_pipeline(
             manager=ws_manager,
             service=evo2_service,
             session_id=session_id,
             goal=pending_goal,
-            seed_sequence=_seed_for_session(session_id),
-            on_candidate_ready=lambda candidate_id, sequence: _set_candidate_sequence(
+            seed_sequence=session_store.seed_for_session(session_id),
+            on_candidate_ready=lambda candidate_id, sequence: session_store.set_candidate_sequence(
                 session_id, candidate_id, sequence
             ),
         )
@@ -213,26 +225,6 @@ async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(session_id)
-
-
-def _seed_for_session(session_id: str) -> str:
-    return session_candidates.get(session_id, {}).get(0, DEFAULT_SEED)
-
-
-def _set_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
-    candidates = session_candidates.setdefault(session_id, {})
-    candidates[candidate_id] = sequence
-
-
-def _require_candidate_sequence(session_id: str, candidate_id: int) -> str:
-    candidates = session_candidates.get(session_id)
-    if candidates is None:
-        raise HTTPException(status_code=404, detail="session not found")
-    sequence = candidates.get(candidate_id)
-    if sequence is None:
-        raise HTTPException(status_code=404, detail=f"candidate {candidate_id} not found")
-    return sequence
-
 
 def _build_ws_url(http_request: Request, session_id: str) -> str:
     ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"

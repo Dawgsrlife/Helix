@@ -103,3 +103,55 @@ async def test_followup_pipeline_uses_provided_base_sequence() -> None:
     assert complete["event"] == "pipeline_complete"
     candidate_sequence = complete["data"]["candidates"][0]["sequence"]
     assert len(candidate_sequence) == len(base_sequence)
+
+
+@pytest.mark.asyncio
+async def test_generation_pipeline_invokes_candidate_callback() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-cb")
+
+    seen: dict[str, object] = {}
+
+    async def capture(candidate_id: int, sequence: str) -> None:
+        seen["candidate_id"] = candidate_id
+        seen["sequence"] = sequence
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-cb",
+        goal="Design promoter",
+        n_tokens=3,
+        on_candidate_ready=capture,
+    )
+
+    assert seen["candidate_id"] == 0
+    assert isinstance(seen["sequence"], str)
+    assert len(str(seen["sequence"])) > 0
+
+
+@pytest.mark.asyncio
+async def test_followup_pipeline_invokes_candidate_callback() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-follow-cb")
+
+    seen: dict[str, object] = {}
+
+    def capture(candidate_id: int, sequence: str) -> None:
+        seen["candidate_id"] = candidate_id
+        seen["sequence"] = sequence
+
+    await run_followup_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-follow-cb",
+        message="make this more tissue-specific",
+        candidate_id=2,
+        base_sequence="ATGCCGATGCCGATGCCG",
+        on_candidate_ready=capture,
+    )
+
+    assert seen["candidate_id"] == 2
+    assert isinstance(seen["sequence"], str)

@@ -73,6 +73,15 @@ def test_design_and_websocket_stream() -> None:
         assert "pipeline_complete" in events
 
 
+def test_design_ws_url_uses_wss_for_https() -> None:
+    client = TestClient(app, base_url="https://helix.example.com")
+    session_id = "secure-session"
+    res = client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+    assert res.status_code == 202
+    body = res.json()
+    assert body["ws_url"] == f"wss://helix.example.com/ws/pipeline/{session_id}"
+
+
 def test_followup_endpoint() -> None:
     client = TestClient(app)
     client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
@@ -96,6 +105,17 @@ def test_edit_base_requires_existing_session() -> None:
     assert res.json()["detail"] == "session not found"
 
 
+def test_edit_base_requires_existing_candidate() -> None:
+    client = TestClient(app)
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
+    res = client.post(
+        "/api/edit/base",
+        json={"session_id": "abc", "candidate_id": 123, "position": 1, "new_base": "A"},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "candidate 123 not found"
+
+
 def test_followup_requires_existing_session() -> None:
     client = TestClient(app)
     res = client.post(
@@ -104,3 +124,34 @@ def test_followup_requires_existing_session() -> None:
     )
     assert res.status_code == 404
     assert res.json()["detail"] == "session not found"
+
+
+def test_followup_requires_existing_candidate() -> None:
+    client = TestClient(app)
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "abc"})
+    res = client.post(
+        "/api/edit/followup",
+        json={"session_id": "abc", "message": "make it novel", "candidate_id": 99},
+    )
+    assert res.status_code == 404
+    assert res.json()["detail"] == "candidate 99 not found"
+
+
+def test_edit_base_persists_mutation_across_calls() -> None:
+    client = TestClient(app)
+    session_id = "persist-edits"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    first = client.post(
+        "/api/edit/base",
+        json={"session_id": session_id, "candidate_id": 0, "position": 0, "new_base": "T"},
+    )
+    assert first.status_code == 200
+    assert first.json()["reference_base"] == "A"
+
+    second = client.post(
+        "/api/edit/base",
+        json={"session_id": session_id, "candidate_id": 0, "position": 0, "new_base": "G"},
+    )
+    assert second.status_code == 200
+    assert second.json()["reference_base"] == "T"
