@@ -103,7 +103,7 @@ export default function Home() {
         </div>
 
         {/* Text layer (z-30, fades on scroll) */}
-        <div className="hero-text-layer relative z-30 text-center max-w-4xl mb-12">
+        <div className="hero-text-layer relative z-30 text-center max-w-4xl mb-8">
           <p className="h-tag opacity-0 text-[13px] font-medium tracking-widest uppercase mb-8"
             style={{ color: "var(--accent)" }}>
             Evo 2 / 40B parameters / 9T base pairs
@@ -134,9 +134,9 @@ export default function Home() {
         </div>
 
         {/* Product image (z-10, scales up on scroll) */}
-        <div className="hero-img-wrap opacity-0 relative z-10 w-full max-w-4xl mx-auto" style={{ transformOrigin: "center top" }}>
-          <Image src="/assets/hero-editor.png" alt="Helix Sequence Editor" width={1920} height={1080} priority
-            className="w-full h-auto rounded-2xl"
+        <div className="hero-img-wrap opacity-0 relative z-10 w-full max-w-4xl mx-auto -mb-8" style={{ transformOrigin: "center top" }}>
+          <Image src="/assets/hero-editor.jpg" alt="Helix Sequence Editor" width={1920} height={1080} priority
+            className="w-full h-auto rounded-2xl object-cover max-h-[520px]"
             style={{ boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06) inset" }} />
         </div>
       </section>
