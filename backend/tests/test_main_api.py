@@ -53,10 +53,69 @@ def test_analyze_endpoint_shape() -> None:
     assert isinstance(body["proteins"], list)
 
 
-def test_design_and_websocket_stream() -> None:
+def test_design_and_websocket_stream(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TestClient(app)
     session_id = "ws-test-session"
 
+    async def fake_run_generation_pipeline(*, manager, service, session_id: str, goal: str, **_kwargs) -> None:
+        await manager.send_event(
+            session_id,
+            {
+                "event": "pipeline_manifest",
+                "data": {
+                    "session_id": session_id,
+                    "requested_candidates": 1,
+                    "candidate_ids": [0],
+                    "run_profile": "demo",
+                },
+            },
+        )
+        await manager.send_event(
+            session_id,
+            {"event": "stage_status", "data": {"stage": "intent", "status": "active", "progress": 0.1}},
+        )
+        await manager.send_event(
+            session_id,
+            {"event": "candidate_status", "data": {"candidate_id": 0, "status": "running"}},
+        )
+        await manager.send_event(
+            session_id,
+            {"event": "intent_parsed", "data": {"spec": {"target_gene": "BDNF"}}},
+        )
+        await manager.send_event(
+            session_id,
+            {"event": "generation_token", "data": {"candidate_id": 0, "token": "A", "position": 3}},
+        )
+        await manager.send_event(
+            session_id,
+            {
+                "event": "candidate_scored",
+                "data": {
+                    "candidate_id": 0,
+                    "scores": {
+                        "functional": 0.8,
+                        "tissue_specificity": 0.6,
+                        "off_target": 0.1,
+                        "novelty": 0.4,
+                        "combined": 0.68,
+                    },
+                },
+            },
+        )
+        await manager.send_event(
+            session_id,
+            {
+                "event": "pipeline_complete",
+                "data": {
+                    "requested_candidates": 1,
+                    "completed_candidates": 1,
+                    "failed_candidates": 0,
+                    "candidates": [{"id": 0, "status": "structured", "sequence": "ATG"}],
+                },
+            },
+        )
+
+    monkeypatch.setattr(main, "run_generation_pipeline", fake_run_generation_pipeline)
     start = client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
     assert start.status_code == 202
     start_body = start.json()
@@ -69,6 +128,9 @@ def test_design_and_websocket_stream() -> None:
             if msg["event"] == "pipeline_complete":
                 break
 
+        assert events[0] == "pipeline_manifest"
+        assert "stage_status" in events
+        assert "candidate_status" in events
         assert "intent_parsed" in events
         assert "generation_token" in events
         assert "candidate_scored" in events
@@ -95,6 +157,16 @@ def test_followup_endpoint() -> None:
     body = res.json()
     assert body["status"] == "partial_rerun_started"
     assert "evo2_scoring" in body["steps_rerunning"]
+
+
+def test_design_accepts_run_profile() -> None:
+    client = TestClient(app)
+    res = client.post(
+        "/api/design",
+        json={"goal": "Design BDNF enhancer", "session_id": "run-profile", "run_profile": "live"},
+    )
+    assert res.status_code == 202
+    assert res.json()["session_id"] == "run-profile"
 
 
 def test_edit_base_requires_existing_session() -> None:

@@ -95,23 +95,22 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
+    num_candidates = 1 if request.num_candidates is None else max(1, min(request.num_candidates, 8))
     await session_store.initialize_session(session_id)
-    await session_store.set_pending_goal(session_id, request.goal)
-    if ws_manager.has_session(session_id):
-        pending_goal = await session_store.pop_pending_goal(session_id)
-        if pending_goal is not None:
-            asyncio.create_task(
-                run_generation_pipeline(
-                    manager=ws_manager,
-                    service=evo2_service,
-                    session_id=session_id,
-                    goal=pending_goal,
-                    seed_sequence=DEFAULT_SEED,
-                    on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
-                        session_id, candidate_id, sequence
-                    ),
-                )
-            )
+    asyncio.create_task(
+        run_generation_pipeline(
+            manager=ws_manager,
+            service=evo2_service,
+            session_id=session_id,
+            goal=request.goal,
+            n_candidates=num_candidates,
+            run_profile=request.run_profile,
+            seed_sequence=DEFAULT_SEED,
+            on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
+                session_id, candidate_id, sequence
+            ),
+        )
+    )
     return DesignAcceptedResponse(
         session_id=session_id,
         ws_url=_build_ws_url(http_request, session_id),
@@ -232,22 +231,6 @@ async def health() -> HealthResponse:
 @app.websocket("/ws/pipeline/{session_id}")
 async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
     await ws_manager.connect(websocket, session_id)
-    pending_goal = await session_store.pop_pending_goal(session_id)
-    if pending_goal is not None:
-        async with session_store.candidate_guard(session_id, 0):
-            seed_sequence = await session_store.seed_for_session(session_id)
-        asyncio.create_task(
-            run_generation_pipeline(
-                manager=ws_manager,
-                service=evo2_service,
-                session_id=session_id,
-                goal=pending_goal,
-                seed_sequence=seed_sequence,
-                on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
-                    session_id, candidate_id, sequence
-                ),
-            )
-        )
     try:
         while True:
             await websocket.receive_text()

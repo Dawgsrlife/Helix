@@ -1,6 +1,8 @@
 """Tests for websocket event payload shapes."""
 
 from ws.events import (
+    CandidateStatusData,
+    CandidateStatusEvent,
     CandidateScoredData,
     CandidateScoredEvent,
     ExplanationChunkData,
@@ -9,10 +11,14 @@ from ws.events import (
     GenerationTokenEvent,
     IntentParsedData,
     IntentParsedEvent,
+    PipelineManifestData,
+    PipelineManifestEvent,
     PipelineCompleteData,
     PipelineCompleteEvent,
     RetrievalProgressData,
     RetrievalProgressEvent,
+    StageStatusData,
+    StageStatusEvent,
     StructureReadyData,
     StructureReadyEvent,
 )
@@ -31,6 +37,28 @@ def test_retrieval_event_json_shape() -> None:
     assert payload["event"] == "retrieval_progress"
     assert payload["data"]["source"] == "ncbi"
     assert payload["data"]["status"] == "complete"
+
+
+def test_pipeline_manifest_event_json_shape() -> None:
+    payload = PipelineManifestEvent(
+        data=PipelineManifestData(
+            session_id="s1",
+            requested_candidates=5,
+            candidate_ids=[0, 1, 2, 3, 4],
+            run_profile="demo",
+        )
+    ).to_json()
+    assert payload["event"] == "pipeline_manifest"
+    assert payload["data"]["requested_candidates"] == 5
+
+
+def test_stage_status_event_json_shape() -> None:
+    payload = StageStatusEvent(
+        data=StageStatusData(stage="generation", status="active", progress=0.4)
+    ).to_json()
+    assert payload["event"] == "stage_status"
+    assert payload["data"]["stage"] == "generation"
+    assert payload["data"]["progress"] == 0.4
 
 
 def test_generation_event_json_shape() -> None:
@@ -62,14 +90,28 @@ def test_structure_event_json_shape() -> None:
     assert payload["data"]["pdb_data"] == "ATOM ..."
 
 
+def test_candidate_status_event_json_shape() -> None:
+    payload = CandidateStatusEvent(
+        data=CandidateStatusData(candidate_id=2, status="failed", reason="generation_timeout")
+    ).to_json()
+    assert payload["event"] == "candidate_status"
+    assert payload["data"]["status"] == "failed"
+
+
 def test_explanation_event_json_shape() -> None:
-    payload = ExplanationChunkEvent(data=ExplanationChunkData(text="hello")).to_json()
-    assert payload == {"event": "explanation_chunk", "data": {"text": "hello"}}
+    payload = ExplanationChunkEvent(data=ExplanationChunkData(candidate_id=1, text="hello")).to_json()
+    assert payload == {"event": "explanation_chunk", "data": {"candidate_id": 1, "text": "hello"}}
 
 
 def test_pipeline_complete_event_json_shape() -> None:
     payload = PipelineCompleteEvent(
-        data=PipelineCompleteData(candidates=[{"id": 0, "sequence": "ATCG"}])
+        data=PipelineCompleteData(
+            requested_candidates=2,
+            completed_candidates=1,
+            failed_candidates=1,
+            candidates=[{"id": 0, "sequence": "ATCG"}],
+        )
     ).to_json()
     assert payload["event"] == "pipeline_complete"
+    assert payload["data"]["requested_candidates"] == 2
     assert payload["data"]["candidates"][0]["id"] == 0

@@ -19,6 +19,35 @@ class IntentParsedEvent(BaseModel):
         return self.model_dump(mode="json")
 
 
+class PipelineManifestData(BaseModel):
+    session_id: str
+    requested_candidates: int
+    candidate_ids: list[int]
+    run_profile: Literal["demo", "live"]
+
+
+class PipelineManifestEvent(BaseModel):
+    event: Literal["pipeline_manifest"] = "pipeline_manifest"
+    data: PipelineManifestData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
+class StageStatusData(BaseModel):
+    stage: Literal["intent", "retrieval", "generation", "scoring", "structure", "explanation", "complete"]
+    status: Literal["pending", "active", "done", "failed"] = "pending"
+    progress: float = 0.0
+
+
+class StageStatusEvent(BaseModel):
+    event: Literal["stage_status"] = "stage_status"
+    data: StageStatusData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class RetrievalProgressData(BaseModel):
     source: Literal["ncbi", "pubmed", "clinvar"]
     status: Literal["pending", "running", "complete", "failed"] = "complete"
@@ -60,6 +89,20 @@ class CandidateScoredEvent(BaseModel):
         return self.model_dump(mode="json")
 
 
+class CandidateStatusData(BaseModel):
+    candidate_id: int
+    status: Literal["queued", "running", "scored", "structured", "failed"]
+    reason: str | None = None
+
+
+class CandidateStatusEvent(BaseModel):
+    event: Literal["candidate_status"] = "candidate_status"
+    data: CandidateStatusData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class StructureReadyData(BaseModel):
     candidate_id: int
     pdb_data: str
@@ -75,6 +118,7 @@ class StructureReadyEvent(BaseModel):
 
 
 class ExplanationChunkData(BaseModel):
+    candidate_id: int
     text: str
 
 
@@ -87,6 +131,9 @@ class ExplanationChunkEvent(BaseModel):
 
 
 class PipelineCompleteData(BaseModel):
+    requested_candidates: int
+    completed_candidates: int
+    failed_candidates: int
     candidates: list[dict[str, Any]]
 
 
@@ -96,4 +143,3 @@ class PipelineCompleteEvent(BaseModel):
 
     def to_json(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
-

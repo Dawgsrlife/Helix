@@ -2,7 +2,9 @@
 
 import pytest
 
+import pipeline.orchestrator as orchestrator
 from pipeline.orchestrator import run_followup_pipeline, run_generation_pipeline
+from config import StructureMode
 from services.evo2 import Evo2MockService
 from ws.manager import WebSocketManager
 
@@ -33,8 +35,11 @@ async def test_generation_pipeline_emits_key_events() -> None:
     )
 
     events = [e["event"] for e in ws.sent]
+    assert events[0] == "pipeline_manifest"
     assert "intent_parsed" in events
+    assert "stage_status" in events
     assert "retrieval_progress" in events
+    assert "candidate_status" in events
     assert "generation_token" in events
     assert "candidate_scored" in events
     assert "structure_ready" in events
@@ -60,9 +65,33 @@ async def test_generation_pipeline_uses_custom_seed() -> None:
 
     complete = ws.sent[-1]
     assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["requested_candidates"] == 1
     generated_sequence = complete["data"]["candidates"][0]["sequence"]
     assert generated_sequence.startswith(custom_seed)
     assert len(generated_sequence) == len(custom_seed) + 2
+
+
+@pytest.mark.asyncio
+async def test_generation_pipeline_requested_candidates_are_all_present() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-multi")
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-multi",
+        goal="Design promoter",
+        n_tokens=2,
+        n_candidates=5,
+        run_profile="demo",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["requested_candidates"] == 5
+    ids = [candidate["id"] for candidate in complete["data"]["candidates"]]
+    assert ids == [0, 1, 2, 3, 4]
 
 
 @pytest.mark.asyncio
@@ -129,6 +158,92 @@ async def test_generation_pipeline_invokes_candidate_callback() -> None:
     assert seen["candidate_id"] == 0
     assert isinstance(seen["sequence"], str)
     assert len(str(seen["sequence"])) > 0
+
+
+@pytest.mark.asyncio
+async def test_stage_status_never_regresses() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-stages")
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-stages",
+        goal="Design promoter",
+        n_tokens=3,
+    )
+
+    rank = {"pending": 0, "active": 1, "done": 2, "failed": 2}
+    seen: dict[str, int] = {}
+    for event in ws.sent:
+        if event["event"] != "stage_status":
+            continue
+        stage = event["data"]["stage"]
+        status = event["data"]["status"]
+        value = rank[status]
+        previous = seen.get(stage, -1)
+        assert value >= previous
+        seen[stage] = value
+
+
+@pytest.mark.asyncio
+async def test_demo_profile_uses_structure_fallback_when_structure_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-demo-fallback")
+
+    async def _no_structure(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
+    monkeypatch.setattr(orchestrator, "predict_structure", _no_structure)
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-demo-fallback",
+        goal="Design promoter",
+        n_tokens=2,
+        run_profile="demo",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["failed_candidates"] == 0
+    assert complete["data"]["candidates"][0]["status"] == "structured"
+    assert complete["data"]["candidates"][0]["pdb_data"]
+
+
+@pytest.mark.asyncio
+async def test_live_profile_marks_failed_when_structure_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-live-fail")
+
+    async def _no_structure(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(orchestrator.settings, "structure_mode", StructureMode.ESMFOLD)
+    monkeypatch.setattr(orchestrator, "predict_structure", _no_structure)
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-live-fail",
+        goal="Design promoter",
+        n_tokens=2,
+        run_profile="live",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["failed_candidates"] == 1
+    assert complete["data"]["candidates"][0]["status"] == "failed"
 
 
 @pytest.mark.asyncio

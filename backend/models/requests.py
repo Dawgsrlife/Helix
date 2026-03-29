@@ -1,5 +1,7 @@
 """Pydantic request models for all API endpoints."""
 
+from typing import Literal
+
 from pydantic import BaseModel, field_validator
 
 
@@ -26,6 +28,8 @@ def _validate_base(base: str) -> str:
 class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
+    num_candidates: int | None = None
+    run_profile: Literal["demo", "live"] = "demo"
 
 
 class AnalyzeRequest(BaseModel):

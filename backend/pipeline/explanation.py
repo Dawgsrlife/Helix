@@ -68,6 +68,7 @@ async def generate_explanation(
     sequence: str,
     scores: dict,
     spec: DesignSpec,
+    candidate_id: int,
     manager: WebSocketManager,
     session_id: str,
 ) -> None:
@@ -77,7 +78,7 @@ async def generate_explanation(
     """
     if not settings.gemini_api_key:
         logger.warning("No GEMINI_API_KEY — using fallback explanation")
-        await _emit_fallback(manager, session_id)
+        await _emit_fallback(manager, session_id, candidate_id)
         return
 
     try:
@@ -101,19 +102,19 @@ async def generate_explanation(
                 await manager.send_event(
                     session_id,
                     ExplanationChunkEvent(
-                        data=ExplanationChunkData(text=chunk.text)
+                        data=ExplanationChunkData(candidate_id=candidate_id, text=chunk.text)
                     ).to_json(),
                 )
 
     except Exception:
         logger.warning("Explanation generation failed, using fallback", exc_info=True)
-        await _emit_fallback(manager, session_id)
+        await _emit_fallback(manager, session_id, candidate_id)
 
 
-async def _emit_fallback(manager: WebSocketManager, session_id: str) -> None:
+async def _emit_fallback(manager: WebSocketManager, session_id: str, candidate_id: int) -> None:
     """Emit hardcoded explanation chunks as fallback."""
     for chunk in _FALLBACK_CHUNKS:
         await manager.send_event(
             session_id,
-            ExplanationChunkEvent(data=ExplanationChunkData(text=chunk)).to_json(),
+            ExplanationChunkEvent(data=ExplanationChunkData(candidate_id=candidate_id, text=chunk)).to_json(),
         )

@@ -1,5 +1,7 @@
 """Tests for websocket connection manager behavior."""
 
+import asyncio
+
 from ws.manager import WebSocketManager
 
 
@@ -40,6 +42,7 @@ async def test_pending_events_flushed_on_connect() -> None:
     assert manager.pending_count("s2") == 1
 
     ws = await _connect(manager, "s2")
+    await asyncio.sleep(0)
     assert ws.sent[0]["event"] == "queued"
     assert manager.pending_count("s2") == 0
 

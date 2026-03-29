@@ -1,14 +1,15 @@
-# Mock Frontend (Isolated)
+# Helix Mock Frontend (Vite + React)
 
-This is a standalone mock frontend for Helix's live backend pipeline.
+This is the isolated demo shell. It is intentionally separate from the real frontend in `/Users/vishnu/Documents/Helix/frontend`.
 
-It is intentionally isolated under `mock_frontend/` and does **not** modify the real `frontend/` app.
+## What this mock does
 
-## What it implements
-
-- `POST /api/design` design submission
-- WebSocket stream consumption from `ws://localhost:8000/ws/pipeline/{session_id}`
-- Event reducer for all backend event types:
+- Silent autoplay by default (judge-friendly, no narration required)
+- Live pipeline consumption over WebSocket
+- Event-driven reducer/store for:
+  - `pipeline_manifest`
+  - `stage_status`
+  - `candidate_status`
   - `intent_parsed`
   - `retrieval_progress`
   - `generation_token`
@@ -16,29 +17,27 @@ It is intentionally isolated under `mock_frontend/` and does **not** modify the 
   - `structure_ready`
   - `explanation_chunk`
   - `pipeline_complete`
-- Live genome base streaming from `generation_token` (one base at a time)
-- Real-time candidate leaderboard updates on `candidate_scored`
-- Click-to-edit base pair flow via `POST /api/edit/base`
-- Follow-up chat flow via `POST /api/edit/followup` on existing session/socket
+- React Flow stage map
+- Multi-lane DNA stream with inline base editing
+- Candidate race leaderboard
+- 3Dmol protein viewer for `.pdb` payloads
+- Scientific details drawer (hidden by default)
 
 ## Run
 
-1. Start backend on port 8000.
-2. Serve this folder as static files:
+```bash
+cd /Users/vishnu/Documents/Helix/mock_frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+## Test
 
 ```bash
 cd /Users/vishnu/Documents/Helix/mock_frontend
-python3 -m http.server 4173
+npm test
 ```
 
-3. Open:
-
-- [http://localhost:4173](http://localhost:4173)
-
-## Demo loop
-
-1. Click **Run Live Pipeline**.
-2. Watch genome bases stream into the browser.
-3. Click a base and apply `A/T/C/G` edit.
-4. Confirm inline delta + updated candidate scores.
-5. Send follow-up message and watch partial rerun events stream on the same socket.
+Reducer tests live in `src/store/pipelineReducer.test.ts`.
