@@ -4,11 +4,14 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { Dna, FlaskConical, BarChart3, Search, Home } from "lucide-react";
-import HelixLogo from "@/components/brand/HelixLogo";
+import {
+  Dna, FlaskConical, BarChart3, Search, Home,
+  ChevronRight, Pencil, ArrowRight, Clock, Shield, Sparkles, Target,
+} from "lucide-react";
 import { useHelixStore } from "@/lib/store";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
 import { useMutationSim } from "@/hooks/useMutationSim";
+import HelixLogo from "@/components/brand/HelixLogo";
 import SequenceInput from "@/components/sequence/SequenceInput";
 import SequenceViewer from "@/components/sequence/SequenceViewer";
 import AnnotationTrack from "@/components/annotation/AnnotationTrack";
@@ -18,19 +21,19 @@ import MutationPanel from "@/components/mutation/MutationPanel";
 import MutationDiff from "@/components/mutation/MutationDiff";
 import StructureControls from "@/components/structure/StructureControls";
 
-const ProteinViewer = dynamic(
-  () => import("@/components/structure/ProteinViewer"),
-  { ssr: false }
-);
+const ProteinViewer = dynamic(() => import("@/components/structure/ProteinViewer"), { ssr: false });
 
 const SIDEBAR_ITEMS = [
-  { icon: Dna, label: "Sequencing", active: true },
-  { icon: Search, label: "Proteomics", active: false },
-  { icon: FlaskConical, label: "Synthesis", active: false },
-  { icon: BarChart3, label: "Analysis", active: false },
+  { icon: Dna, label: "Sequencing", id: "seq" },
+  { icon: Search, label: "Proteomics", id: "prot" },
+  { icon: FlaskConical, label: "Synthesis", id: "synth" },
+  { icon: BarChart3, label: "Analysis", id: "analysis" },
 ];
 
+const VIEW_LABELS = { input: "New Analysis", analyze: "Candidates", explorer: "Sequence Explorer", ide: "Design Studio" } as const;
+
 export default function AnalyzePage() {
+  const viewMode = useHelixStore((s) => s.viewMode);
   const rawSequence = useHelixStore((s) => s.rawSequence);
   const bases = useHelixStore((s) => s.bases);
   const regions = useHelixStore((s) => s.regions);
@@ -41,234 +44,259 @@ export default function AnalyzePage() {
   const highlightResidues = useHelixStore((s) => s.highlightResidues);
   const mutationEffect = useHelixStore((s) => s.mutationEffect);
   const mutationLoading = useHelixStore((s) => s.mutationLoading);
+  const editHistory = useHelixStore((s) => s.editHistory);
+  const setViewMode = useHelixStore((s) => s.setViewMode);
   const setSelectedPosition = useHelixStore((s) => s.setSelectedPosition);
   const setActivePdb = useHelixStore((s) => s.setActivePdb);
   const setHighlightResidues = useHelixStore((s) => s.setHighlightResidues);
+  const addEditHistoryEntry = useHelixStore((s) => s.addEditHistoryEntry);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { simulate } = useMutationSim();
 
-  // Auto-load protein structure when analysis completes
   useEffect(() => {
     if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
       setActivePdb(analysisResult.predictedProteins[0].pdbData);
     }
   }, [analysisResult, activePdb, setActivePdb]);
 
-  const handleSequenceSubmit = useCallback(
-    (sequence: string) => { analyze(sequence); },
-    [analyze]
-  );
-
-  const handleBaseClick = useCallback(
-    (position: number) => { setSelectedPosition(position); },
-    [setSelectedPosition]
-  );
-
-  const handleMutationSubmit = useCallback(
-    (position: number, alternate: string) => {
-      if (rawSequence) simulate(rawSequence, position, alternate);
-    },
-    [rawSequence, simulate]
-  );
-
-  const showResults = analysisResult !== null;
+  const handleSequenceSubmit = useCallback((seq: string) => { analyze(seq); }, [analyze]);
+  const handleBaseClick = useCallback((pos: number) => { setSelectedPosition(pos); }, [setSelectedPosition]);
+  const handleMutationSubmit = useCallback((pos: number, alt: string) => {
+    if (rawSequence) {
+      simulate(rawSequence, pos, alt);
+      addEditHistoryEntry({ position: pos, from: rawSequence[pos], to: alt, delta: 0 });
+    }
+  }, [rawSequence, simulate, addEditHistoryEntry]);
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ background: "#0e0e10", color: "#fffbfe" }}>
+    <div className="h-screen flex overflow-hidden" style={{ background: "#0F0F0F", color: "#F0EFED" }}>
+
       {/* Sidebar */}
-      <aside
-        className="w-14 shrink-0 flex flex-col items-center py-4 gap-1"
-        style={{ background: "#0a0a0c", borderRight: "0.5px solid rgba(255,255,255,0.06)" }}
-      >
-        <Link
-          href="/"
-          className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 cursor-pointer transition-colors hover:bg-white/5"
-          title="Home"
-        >
+      <aside className="w-14 shrink-0 flex flex-col items-center py-4 gap-1"
+        style={{ background: "#0a0a0c", borderRight: "1px solid rgba(255,255,255,0.04)" }}>
+        <Link href="/" className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 hover:bg-white/5 transition-colors" title="Home">
           <Home size={18} style={{ color: "#5bb5a2" }} />
         </Link>
-
-        {SIDEBAR_ITEMS.map(({ icon: Icon, label, active }) => (
-          <button
-            key={label}
-            title={label}
-            className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
-            style={{
-              background: active ? "rgba(147, 237, 217, 0.1)" : "transparent",
-              color: active ? "#5bb5a2" : "#48474a",
-            }}
-            onMouseEnter={(e) => {
-              if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
-            }}
-            onMouseLeave={(e) => {
-              if (!active) e.currentTarget.style.background = "transparent";
-            }}
-          >
+        {SIDEBAR_ITEMS.map(({ icon: Icon, label, id }) => (
+          <button key={id} title={label}
+            className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
+            style={{ color: id === "seq" ? "#5bb5a2" : "#555" }}>
             <Icon size={18} />
           </button>
         ))}
       </aside>
 
-      {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
-        <header
-          className="h-12 shrink-0 flex items-center justify-between px-5"
-          style={{ background: "#0e0e10", borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
-        >
-          <div className="flex items-center gap-3">
+        <header className="h-12 shrink-0 flex items-center justify-between px-5"
+          style={{ background: "#0F0F0F", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="flex items-center gap-2">
             <HelixLogo size="sm" className="text-[#5bb5a2]" />
-            {showResults && (
+            {viewMode !== "input" && (
               <>
-                <span style={{ color: "#48474a" }}>/</span>
-                <span className="text-xs font-mono" style={{ color: "#adaaad" }}>
-                  Sequence Explorer
-                </span>
+                <ChevronRight size={14} style={{ color: "#555" }} />
+                <span className="text-[13px]" style={{ color: "#D1D0CC" }}>{VIEW_LABELS[viewMode]}</span>
               </>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono" style={{ color: "#48474a" }}>Evo 2 40B</span>
-            <div
-              className="w-[6px] h-[6px] rounded-full"
-              style={{ background: "#5bb5a2", animation: "pulse-soft 2s ease-in-out infinite" }}
-            />
+          <div className="flex items-center gap-3">
+            {viewMode !== "input" && (
+              <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                {(["analyze", "explorer", "ide"] as const).map((m) => (
+                  <button key={m} onClick={() => setViewMode(m)}
+                    className="px-3 py-1 text-[11px] font-medium uppercase tracking-wider transition-colors"
+                    style={{ background: viewMode === m ? "rgba(91,181,162,0.1)" : "transparent", color: viewMode === m ? "#5bb5a2" : "#666" }}>
+                    {m === "analyze" ? "Overview" : m === "explorer" ? "Explorer" : "IDE"}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] font-mono" style={{ color: "#555" }}>Evo 2</span>
+              <div className="w-1.5 h-1.5 rounded-full bg-[#5bb5a2] animate-pulse" />
+            </div>
           </div>
         </header>
 
-        {/* Content area */}
         <AnimatePresence mode="wait">
-          {!showResults ? (
-            <motion.div
-              key="input"
-              className="flex-1 flex items-center justify-center overflow-auto py-12 px-6"
-              style={{ background: "#0e0e10" }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <SequenceInput
-                onSubmit={handleSequenceSubmit}
-                isLoading={isLoading}
-                error={error}
-              />
+          {/* ═══ INPUT ═══ */}
+          {viewMode === "input" && (
+            <motion.div key="input" className="flex-1 flex items-center justify-center overflow-auto py-12 px-6"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <SequenceInput onSubmit={handleSequenceSubmit} isLoading={isLoading} error={error} />
             </motion.div>
-          ) : (
-            <motion.div
-              key="workspace"
-              className="flex-1 flex flex-col overflow-hidden"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
-              {/* Annotation track */}
-              <div className="px-5 py-2 shrink-0" style={{ background: "#131316" }}>
-                <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
-                <AnnotationLegend regions={regions} />
-              </div>
+          )}
 
-              {/* Main workspace: sequence + sidebar */}
-              <div className="flex-1 flex overflow-hidden min-h-0">
-                {/* Left: Sequence + Likelihood */}
-                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                  <div className="flex-1 overflow-auto px-5 py-4" style={{ background: "#0e0e10" }}>
-                    <SequenceViewer
-                      bases={bases}
-                      regions={regions}
-                      highlightedPosition={selectedPosition ?? undefined}
-                      onBaseClick={handleBaseClick}
-                    />
-                  </div>
-                  <div className="h-40 shrink-0 px-5 py-3" style={{ background: "#131316" }}>
-                    <LikelihoodGraph
-                      scores={scores}
-                      highlightedPosition={selectedPosition ?? undefined}
-                      onPositionHover={setSelectedPosition}
-                    />
+          {/* ═══ ANALYZE: understand ═══ */}
+          {viewMode === "analyze" && analysisResult && (
+            <motion.div key="analyze" className="flex-1 overflow-auto px-8 py-8"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <div className="max-w-5xl mx-auto">
+                <h2 className="text-2xl font-semibold tracking-tight mb-2">Analysis Complete</h2>
+                <p className="text-[15px] mb-8" style={{ color: "#888" }}>
+                  {rawSequence.length} bp analyzed. {regions.length} regions identified. {analysisResult.predictedProteins.length} protein structure{analysisResult.predictedProteins.length !== 1 ? "s" : ""} predicted.
+                </p>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+                  {[
+                    { icon: Target, label: "Regions", value: String(regions.length), color: "#5bb5a2" },
+                    { icon: Sparkles, label: "Mean score", value: (scores.reduce((a, s) => a + Math.abs(s.score), 0) / Math.max(scores.length, 1)).toFixed(2), color: "#6b9fd4" },
+                    { icon: Shield, label: "Proteins", value: String(analysisResult.predictedProteins.length), color: "#c9a855" },
+                    { icon: Clock, label: "Length", value: `${rawSequence.length} bp`, color: "#d47a7a" },
+                  ].map(({ icon: Icon, label, value, color }) => (
+                    <div key={label} className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <Icon size={18} style={{ color, marginBottom: 8 }} />
+                      <div className="text-2xl font-semibold tracking-tight mb-1">{value}</div>
+                      <div className="text-[13px]" style={{ color: "#888" }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mb-8">
+                  <h3 className="text-base font-semibold mb-3">Annotation track</h3>
+                  <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                  <AnnotationLegend regions={regions} />
+                </div>
+
+                <div className="mb-10">
+                  <h3 className="text-base font-semibold mb-3">Regions</h3>
+                  <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    {regions.slice(0, 8).map((r, i) => (
+                      <button key={i} onClick={() => { setSelectedPosition(r.start); setViewMode("explorer"); }}
+                        className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.02]"
+                        style={{ borderBottom: i < Math.min(regions.length, 8) - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
+                        <span className="text-xs font-mono w-6" style={{ color: "#555" }}>#{i + 1}</span>
+                        <span className="text-sm font-medium flex-1">{r.label ?? r.type}</span>
+                        <span className="text-xs font-mono" style={{ color: "#888" }}>{r.start}-{r.end}</span>
+                        <span className="text-xs font-mono" style={{ color: "#555" }}>{r.end - r.start} bp</span>
+                        <ChevronRight size={14} style={{ color: "#555" }} />
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                {/* Right sidebar panel */}
-                <div
-                  className="w-[340px] shrink-0 flex flex-col overflow-y-auto"
-                  style={{ background: "#19191c", borderLeft: "0.5px solid rgba(255,255,255,0.06)" }}
-                >
-                  {/* Mutation panel */}
-                  <div className="p-5">
-                    <MutationPanel
-                      sequence={rawSequence}
-                      onMutationSubmit={handleMutationSubmit}
-                      mutationEffect={mutationEffect ?? undefined}
-                      isLoading={mutationLoading}
-                    />
-                    {mutationEffect && (
-                      <div className="mt-4">
-                        <MutationDiff effect={mutationEffect} />
-                      </div>
-                    )}
+                <button onClick={() => setViewMode("explorer")}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
+                  style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+                  Inspect in Sequence Explorer <ArrowRight size={16} />
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ═══ EXPLORER: inspect ═══ */}
+          {viewMode === "explorer" && analysisResult && (
+            <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <div className="px-5 py-2 shrink-0" style={{ background: "#131311" }}>
+                <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                <AnnotationLegend regions={regions} />
+              </div>
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                  <div className="flex-1 overflow-auto px-5 py-4">
+                    <SequenceViewer bases={bases} regions={regions}
+                      highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
                   </div>
-
-                  {/* Divider */}
-                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.06)" }} />
-
-                  {/* Structure viewer */}
+                  <div className="h-40 shrink-0 px-5 py-3" style={{ background: "#131311" }}>
+                    <LikelihoodGraph scores={scores}
+                      highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
+                  </div>
+                </div>
+                <div className="w-[340px] shrink-0 flex flex-col overflow-y-auto"
+                  style={{ background: "#1A1917", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div className="p-5">
+                    <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
+                      mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
+                    {mutationEffect && <div className="mt-4"><MutationDiff effect={mutationEffect} /></div>}
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
                   <div className="p-5 flex-1 flex flex-col min-h-0">
-                    <div className="flex items-center justify-between mb-3">
-                      <span
-                        className="text-[11px] font-medium uppercase tracking-[0.08em]"
-                        style={{ color: "#6b6b6b" }}
-                      >
-                        Structure
-                      </span>
-                      {analysisResult.predictedProteins.length > 0 && (
-                        <span className="text-[11px] font-mono" style={{ color: "#48474a" }}>
-                          {analysisResult.predictedProteins.length} region
-                          {analysisResult.predictedProteins.length !== 1 ? "s" : ""}
-                        </span>
+                    <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
+                    <div className="flex-1 rounded-lg overflow-hidden min-h-[180px]" style={{ background: "#0F0F0F" }}>
+                      {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
+                        <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure data</div>
                       )}
                     </div>
+                    <StructureControls onReset={() => setHighlightResidues([])}
+                      onHighlight={() => selectedPosition !== null ? setHighlightResidues([selectedPosition]) : undefined} />
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  <div className="p-5">
+                    <button onClick={() => setViewMode("ide")}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.01]"
+                      style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+                      <Pencil size={14} /> Open in Design Studio
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
-                    {analysisResult.predictedProteins.length > 0 && (
-                      <div className="flex gap-1.5 mb-3 flex-wrap">
-                        {analysisResult.predictedProteins.map((protein, i) => (
-                          <button
-                            key={i}
-                            onClick={() => protein.pdbData && setActivePdb(protein.pdbData)}
-                            className="px-2.5 py-1 text-[11px] rounded font-mono cursor-pointer transition-all"
-                            style={{
-                              background: activePdb === protein.pdbData ? "#262529" : "#1f1f22",
-                              color: activePdb === protein.pdbData ? "#5bb5a2" : "#6b6b6b",
-                            }}
-                          >
-                            {protein.regionStart}-{protein.regionEnd}
-                          </button>
+          {/* ═══ IDE: manipulate ═══ */}
+          {viewMode === "ide" && analysisResult && (
+            <motion.div key="ide" className="flex-1 flex flex-col overflow-hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <div className="h-10 shrink-0 flex items-center justify-between px-5"
+                style={{ background: "#131311", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <span className="text-xs font-mono" style={{ color: "#888" }}>
+                  {rawSequence.length} bp | {regions.length} regions | {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "#5bb5a2" }}>LIVE</span>
+              </div>
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                  <div className="px-5 py-1.5 shrink-0" style={{ background: "#131311" }}>
+                    <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                  </div>
+                  <div className="flex-1 overflow-auto px-5 py-3">
+                    <SequenceViewer bases={bases} regions={regions}
+                      highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
+                  </div>
+                  <div className="h-36 shrink-0 px-5 py-2" style={{ background: "#131311" }}>
+                    <LikelihoodGraph scores={scores}
+                      highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
+                  </div>
+                </div>
+                <div className="w-[360px] shrink-0 flex flex-col overflow-y-auto"
+                  style={{ background: "#1A1917", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  <div className="p-5">
+                    <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
+                      mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
+                    {mutationEffect && <div className="mt-4"><MutationDiff effect={mutationEffect} /></div>}
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  <div className="p-5 flex-1 flex flex-col min-h-0">
+                    <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
+                    <div className="flex-1 rounded-lg overflow-hidden min-h-[160px]" style={{ background: "#0F0F0F" }}>
+                      {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
+                        <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure</div>
+                      )}
+                    </div>
+                    <StructureControls onReset={() => setHighlightResidues([])}
+                      onHighlight={() => selectedPosition !== null ? setHighlightResidues([selectedPosition]) : undefined} />
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>
+                      Edit history ({editHistory.length})
+                    </span>
+                    {editHistory.length === 0 ? (
+                      <p className="text-xs mt-2" style={{ color: "#555" }}>No edits yet. Click a base, select a target, and run simulation.</p>
+                    ) : (
+                      <div className="mt-2 space-y-1">
+                        {editHistory.slice(-5).reverse().map((e, i) => (
+                          <div key={i} className="flex items-center gap-2 text-xs font-mono py-1" style={{ color: "#D1D0CC" }}>
+                            <span style={{ color: "#555" }}>pos {e.position}</span>
+                            <span style={{ color: "#d47a7a" }}>{e.from}</span>
+                            <span style={{ color: "#555" }}>&rarr;</span>
+                            <span style={{ color: "#5bb5a2" }}>{e.to}</span>
+                          </div>
                         ))}
                       </div>
                     )}
-
-                    <div
-                      className="flex-1 rounded overflow-hidden min-h-[200px]"
-                      style={{ background: "#0e0e10" }}
-                    >
-                      {activePdb ? (
-                        <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} />
-                      ) : (
-                        <div className="flex items-center justify-center h-full" style={{ color: "#48474a", fontSize: "12px" }}>
-                          No protein data available
-                        </div>
-                      )}
-                    </div>
-
-                    <StructureControls
-                      onReset={() => setHighlightResidues([])}
-                      onHighlight={() =>
-                        selectedPosition !== null
-                          ? setHighlightResidues([selectedPosition])
-                          : undefined
-                      }
-                    />
                   </div>
                 </div>
               </div>
