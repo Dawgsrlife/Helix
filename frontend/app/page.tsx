@@ -45,21 +45,12 @@ export default function Home() {
       .fromTo(".edit-img", { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.5 })
       .fromTo(".edit-text > *", { opacity: 0, y: 20 }, { opacity: 1, y: 0, stagger: 0.12, duration: 0.3 }, "-=0.2");
 
-    // ── SCORING: sequential reveal with ring draw + card fly-in ──
+    // ── SCORING: label + image reveal ──
     const scoreTl = gsap.timeline({
-      scrollTrigger: { trigger: ".scene-score", start: "top top", end: "+=1600", pin: true, scrub: 0.8 },
+      scrollTrigger: { trigger: ".scene-score", start: "top top", end: "+=1200", pin: true, scrub: 0.8 },
     });
-    // 1. Label fades in
-    scoreTl.fromTo(".score-label", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.15 });
-    // 2. Ring draws + number appears
-    scoreTl.fromTo(".score-hero", { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.2 }, "+=0.05");
-    scoreTl.fromTo(".score-ring-fill", { strokeDashoffset: 2 * Math.PI * 62 }, { strokeDashoffset: 2 * Math.PI * 62 * (1 - 0.942), duration: 0.35, ease: "power2.out" }, "<");
-    // 3. Cards stagger in from below with subtle rotation
-    scoreTl.fromTo(".score-card",
-      { opacity: 0, y: 60, rotateX: 8, scale: 0.95 },
-      { opacity: 1, y: 0, rotateX: 0, scale: 1, stagger: 0.08, duration: 0.2, ease: "power3.out" },
-      "-=0.1"
-    );
+    scoreTl.fromTo(".score-label", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.2 });
+    scoreTl.fromTo(".score-hero", { opacity: 0, y: 40, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.4, ease: "power2.out" }, "+=0.05");
 
     // ── STRUCTURE (HALVED) ──
     gsap.timeline({
@@ -189,9 +180,8 @@ export default function Home() {
       {/* ═══ SCENE 3: SCORING CONSOLE ═══ */}
       <section className="scene-score min-h-screen flex items-center justify-center px-6 md:px-16"
         style={{ background: "var(--surface-base)" }}>
-        <div className="max-w-3xl mx-auto w-full">
-          {/* Section header */}
-          <div className="score-label text-center mb-16">
+        <div className="max-w-5xl mx-auto w-full">
+          <div className="score-label text-center mb-12">
             <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: "var(--accent)" }}>
               Multi-dimensional scoring
             </p>
@@ -199,71 +189,15 @@ export default function Home() {
               Every candidate evaluated across four orthogonal dimensions.
             </p>
           </div>
-
-          {/* Composite score hero */}
-          <div className="score-hero flex flex-col items-center mb-16">
-            <div className="relative flex items-center justify-center w-[160px] h-[160px] mb-5">
-              {/* Ambient glow */}
-              <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(circle, rgba(91,181,162,0.08) 0%, transparent 70%)", transform: "scale(2)" }} />
-              {/* Track ring */}
-              <svg width="160" height="160" viewBox="0 0 160 160" className="absolute">
-                <circle cx="80" cy="80" r="62" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="3" />
-                <circle className="score-ring-fill" cx="80" cy="80" r="62" fill="none" stroke="var(--accent)" strokeWidth="3.5"
-                  strokeDasharray={`${2 * Math.PI * 62}`}
-                  strokeDashoffset={`${2 * Math.PI * 62}`}
-                  strokeLinecap="round" transform="rotate(-90 80 80)" opacity="0.7" />
-              </svg>
-              <span className="text-[3.2rem] font-bold font-mono tracking-tighter" style={{ color: "var(--text-primary)" }}>94.2</span>
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>BDNF_reg_v4</span>
-              <span className="text-[11px] font-mono px-2.5 py-1 rounded-md" style={{ background: "rgba(91,181,162,0.08)", color: "var(--accent)" }}>
-                #001
-              </span>
-            </div>
-          </div>
-
-          {/* 4D score cards — perspective container for 3D fly-in */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5" style={{ perspective: "800px" }}>
-            {[
-              { name: "Functional", desc: "Sequence plausibility", val: 94, display: "94", unit: "%", delta: "+2.1", color: "var(--accent)", conf: "High" },
-              { name: "Tissue", desc: "Expression specificity", val: 82, display: "82", unit: "%", delta: "+0.8", color: "var(--base-c)", conf: "Moderate" },
-              { name: "Off-target", desc: "Unwanted activity risk", val: 4, display: "0.04", unit: "%", delta: "-0.01", color: "var(--base-t)", conf: "Low risk" },
-              { name: "Novelty", desc: "Sequence originality", val: 67, display: "67", unit: "%", delta: "+5.2", color: "var(--base-g)", conf: "Acceptable" },
-            ].map((r) => (
-              <div key={r.name} className="score-card rounded-2xl p-6 transition-all duration-300 hover:translate-y-[-2px]"
-                style={{
-                  background: "var(--surface-raised)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                  boxShadow: "0 4px 24px rgba(0,0,0,0.2)",
-                  transformStyle: "preserve-3d",
-                }}>
-                {/* Header: dot + name + value */}
-                <div className="flex items-start justify-between mb-5">
-                  <div>
-                    <div className="flex items-center gap-2.5 mb-1">
-                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color, boxShadow: `0 0 8px ${r.color === "var(--accent)" ? "rgba(91,181,162,0.4)" : "rgba(255,255,255,0.1)"}` }} />
-                      <span className="text-[15px] font-semibold" style={{ color: "var(--text-primary)" }}>{r.name}</span>
-                    </div>
-                    <span className="text-xs ml-5" style={{ color: "var(--text-faint)" }}>{r.desc}</span>
-                  </div>
-                  <div className="flex items-baseline gap-0.5">
-                    <span className="text-3xl font-bold font-mono tracking-tight" style={{ color: r.color }}>{r.display}</span>
-                    <span className="text-sm font-mono" style={{ color: r.color, opacity: 0.6 }}>{r.unit}</span>
-                  </div>
-                </div>
-                {/* Bar */}
-                <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <div className="h-full rounded-full" style={{ width: `${r.val}%`, background: r.color, opacity: 0.65 }} />
-                </div>
-                {/* Footer */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-medium" style={{ color: r.delta.startsWith("-") ? "var(--base-t)" : "var(--accent)" }}>{r.delta}</span>
-                  <span className="text-[11px] font-medium px-2.5 py-1 rounded-md"
-                    style={{ background: "rgba(255,255,255,0.03)", color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.04)" }}>{r.conf}</span>
-                </div>
-              </div>
-            ))}
+          <div className="score-hero">
+            <Image
+              src="/assets/scoring-preview.png"
+              alt="Helix multi-dimensional scoring: functional, tissue, off-target, novelty"
+              width={1920}
+              height={1080}
+              className="w-full h-auto rounded-2xl"
+              style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06) inset" }}
+            />
           </div>
         </div>
       </section>
