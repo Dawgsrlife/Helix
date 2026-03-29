@@ -10,7 +10,7 @@ export default function CandidateLeaderboard() {
   const setViewMode = useHelixStore((s) => s.setViewMode);
 
   return (
-    <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "#0F0F0F" }}>
+    <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "#141416" }}>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -19,13 +19,13 @@ export default function CandidateLeaderboard() {
           </div>
           <button onClick={() => setViewMode("explorer")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
-            style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+            style={{ background: "#5bb5a2", color: "#141416" }}>
             Inspect top candidate <ArrowRight size={14} />
           </button>
         </div>
 
         {/* Ranking table */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
           <div className="flex items-center gap-3 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
             style={{ color: "#666", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
             <span className="w-10">Rank</span>

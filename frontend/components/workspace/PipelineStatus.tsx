@@ -49,7 +49,7 @@ export default function PipelineStatus() {
   const progress = ((completedStages.length) / STAGES.length) * 100;
 
   return (
-    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "#0F0F0F" }}>
+    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "#141416" }}>
       <div className="max-w-lg w-full">
         <h2 className="text-xl font-semibold tracking-tight mb-2">Running analysis</h2>
         <p className="text-[13px] mb-8" style={{ color: "#888" }}>

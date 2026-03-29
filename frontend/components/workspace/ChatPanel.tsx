@@ -37,7 +37,7 @@ export default function ChatPanel() {
 
   return (
     <div className="w-[340px] shrink-0 flex flex-col h-full"
-      style={{ background: "#1A1917", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+      style={{ background: "#222225", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
@@ -90,7 +90,7 @@ export default function ChatPanel() {
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask about this analysis..."
             className="flex-1 text-[13px] px-3 py-2 rounded-lg outline-none"
-            style={{ background: "#131311", color: "#F0EFED", border: "1px solid rgba(255,255,255,0.06)" }} />
+            style={{ background: "#1c1c1f", color: "#F0EFED", border: "1px solid rgba(255,255,255,0.06)" }} />
           <button onClick={handleSend}
             className="p-2 rounded-lg transition-colors hover:bg-white/5"
             style={{ color: input.trim() ? "#5bb5a2" : "#555" }}>

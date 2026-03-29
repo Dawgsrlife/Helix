@@ -39,19 +39,12 @@ export default function Home() {
       .fromTo(".edit-img", { opacity: 0, x: -50 }, { opacity: 1, x: 0, duration: 0.5 })
       .fromTo(".edit-text > *", { opacity: 0, y: 20 }, { opacity: 1, y: 0, stagger: 0.12, duration: 0.3 }, "-=0.2");
 
-    // ── SCORING CONSOLE (HALVED) ──
+    // ── SCORING CONSOLE (fast reveal, no per-row sweep) ──
     gsap.timeline({
-      scrollTrigger: { trigger: ".scene-score", start: "top top", end: "+=1400", pin: true, scrub: 0.8 },
+      scrollTrigger: { trigger: ".scene-score", start: "top top", end: "+=700", pin: true, scrub: 0.6 },
     })
-      .fromTo(".score-label", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.2 })
-      .fromTo(".score-console", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.4 })
-      .to(".score-row-0", { backgroundColor: "rgba(91,181,162,0.1)", duration: 0.2 })
-      .to(".score-row-0", { backgroundColor: "transparent", duration: 0.15 })
-      .to(".score-row-1", { backgroundColor: "rgba(107,159,212,0.1)", duration: 0.2 })
-      .to(".score-row-1", { backgroundColor: "transparent", duration: 0.15 })
-      .to(".score-row-2", { backgroundColor: "rgba(212,122,122,0.1)", duration: 0.2 })
-      .to(".score-row-2", { backgroundColor: "transparent", duration: 0.15 })
-      .to(".score-row-3", { backgroundColor: "rgba(201,168,85,0.1)", duration: 0.2 });
+      .fromTo(".score-label", { opacity: 0, y: 12 }, { opacity: 1, y: 0, duration: 0.2 })
+      .fromTo(".score-console", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.4 });
 
     // ── STRUCTURE (HALVED) ──
     gsap.timeline({
@@ -76,7 +69,7 @@ export default function Home() {
 
   return (
     <div ref={main} className="overflow-x-hidden font-sans"
-      style={{ background: "#0F0F0F", color: "#F0EFED" }}>
+      style={{ background: "#141416", color: "#F0EFED" }}>
 
       {/* Grain texture overlay */}
       <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03]"
@@ -87,7 +80,7 @@ export default function Home() {
         style={{ background: "rgba(15,15,15,0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
         <HelixLogo size="sm" />
         <Link href="/analyze" className="text-[13px] font-medium px-5 py-2 rounded-full transition-colors"
-          style={{ background: "#F0EFED", color: "#0F0F0F" }}>
+          style={{ background: "#F0EFED", color: "#141416" }}>
           Open IDE
         </Link>
       </nav>
@@ -129,7 +122,7 @@ export default function Home() {
           </p>
           <div className="h-actions flex gap-3 justify-center">
             <Link href="/analyze" className="opacity-0 inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-medium hover:scale-[1.02] transition-transform"
-              style={{ background: "#F0EFED", color: "#0F0F0F" }}>
+              style={{ background: "#F0EFED", color: "#141416" }}>
               Get started <ArrowRight size={16} />
             </Link>
             <a href="https://github.com/Dawgsrlife/Helix" target="_blank" rel="noopener noreferrer"
@@ -150,7 +143,7 @@ export default function Home() {
 
       {/* ═══ SCENE 2: EDITABLE BIOLOGY ═══ */}
       <section className="scene-edit min-h-screen flex items-center px-6 md:px-16"
-        style={{ background: "#121210" }}>
+        style={{ background: "#1c1c1f" }}>
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           <div className="edit-img opacity-0">
             <Image src="/assets/edit-closeup.png" alt="Base pair editing" width={1280} height={720}
@@ -179,13 +172,13 @@ export default function Home() {
 
       {/* ═══ SCENE 3: SCORING CONSOLE ═══ */}
       <section className="scene-score min-h-screen flex items-center justify-center px-6 md:px-16"
-        style={{ background: "#0F0F0F" }}>
+        style={{ background: "#141416" }}>
         <div className="max-w-4xl mx-auto w-full">
           <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-6 text-center" style={{ color: "#5bb5a2" }}>
             Multi-dimensional scoring
           </p>
           <div className="score-console opacity-0 rounded-2xl overflow-hidden"
-            style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
+            style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
               <div className="flex items-center gap-3">
                 <span className="text-[15px] font-semibold">BDNF_reg_v4</span>
@@ -216,7 +209,7 @@ export default function Home() {
 
       {/* ═══ SCENE 4: STRUCTURE ═══ */}
       <section className="scene-struct min-h-screen flex items-center px-6 md:px-16"
-        style={{ background: "#121210" }}>
+        style={{ background: "#1c1c1f" }}>
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           <div className="struct-text flex flex-col gap-5 order-2 lg:order-1">
             <p className="opacity-0 text-sm font-medium tracking-widest uppercase" style={{ color: "#5bb5a2" }}>Structure prediction</p>
@@ -238,7 +231,7 @@ export default function Home() {
 
       {/* ═══ SCENE 5: IMPACT ═══ */}
       <section className="scene-impact min-h-screen flex items-center justify-center px-6"
-        style={{ background: "#0F0F0F" }}>
+        style={{ background: "#141416" }}>
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold tracking-tight leading-[1.06]">
             <span className="impact-line block opacity-0">From weeks of work</span>
@@ -248,13 +241,13 @@ export default function Home() {
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section className="scene-cta py-32 px-6" style={{ background: "#121210" }}>
+      <section className="scene-cta py-32 px-6" style={{ background: "#1c1c1f" }}>
         <div className="cta-inner opacity-0 max-w-2xl mx-auto text-center">
           <h2 className="text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight leading-[1.15] mb-8">
             The interface layer genomic design has been missing.
           </h2>
           <Link href="/analyze" className="inline-flex items-center gap-2 px-9 py-3.5 rounded-full text-[15px] font-semibold transition-all hover:scale-[1.02]"
-            style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+            style={{ background: "#5bb5a2", color: "#141416" }}>
             Open Helix IDE <ArrowRight size={18} />
           </Link>
         </div>

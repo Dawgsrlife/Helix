@@ -17,7 +17,7 @@ export default function CompareView() {
 
   if (!candA || !candB) {
     return (
-      <div className="flex-1 flex items-center justify-center" style={{ background: "#0F0F0F" }}>
+      <div className="flex-1 flex items-center justify-center" style={{ background: "#141416" }}>
         <p className="text-sm" style={{ color: "#888" }}>Need at least 2 candidates to compare.</p>
       </div>
     );
@@ -32,7 +32,7 @@ export default function CompareView() {
   })).filter(d => d.baseA !== d.baseB);
 
   return (
-    <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "#0F0F0F" }}>
+    <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "#141416" }}>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -43,13 +43,13 @@ export default function CompareView() {
           </div>
           <button onClick={() => setViewMode("ide")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
-            style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+            style={{ background: "#5bb5a2", color: "#141416" }}>
             Edit in IDE <ArrowRight size={14} />
           </button>
         </div>
 
         {/* Score comparison */}
-        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
           <div className="flex items-center px-5 py-3 text-[11px] font-medium uppercase tracking-wider"
             style={{ color: "#666", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
             <span className="w-40">Metric</span>
@@ -106,7 +106,7 @@ export default function CompareView() {
         {diffPositions.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold mb-3" style={{ color: "#F0EFED" }}>Sequence differences</h3>
-            <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="rounded-xl overflow-hidden" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
               <div className="flex items-center px-5 py-2 text-[11px] font-medium uppercase tracking-wider"
                 style={{ color: "#666", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <span className="w-24">Position</span>

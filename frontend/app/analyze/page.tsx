@@ -79,7 +79,7 @@ export default function AnalyzePage() {
   }, [rawSequence, simulate, addEditEntry]);
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ background: "#0F0F0F", color: "#F0EFED" }}>
+    <div className="h-screen flex overflow-hidden" style={{ background: "#141416", color: "#F0EFED" }}>
 
       {/* Sidebar */}
       <aside className="w-14 shrink-0 flex flex-col items-center py-4 gap-1"
@@ -99,7 +99,7 @@ export default function AnalyzePage() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top bar */}
         <header className="h-12 shrink-0 flex items-center justify-between px-5"
-          style={{ background: "#0F0F0F", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+          style={{ background: "#141416", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
           <div className="flex items-center gap-2">
             <HelixLogo size="sm" className="text-[#5bb5a2]" />
             {viewMode !== "input" && (
@@ -162,7 +162,7 @@ export default function AnalyzePage() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
               {/* Summary strip */}
-              <div className="px-8 py-5" style={{ background: "#131311", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+              <div className="px-8 py-5" style={{ background: "#1c1c1f", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
@@ -172,7 +172,7 @@ export default function AnalyzePage() {
                   </div>
                   <button onClick={() => setViewMode("explorer")}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
-                    style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+                    style={{ background: "#5bb5a2", color: "#141416" }}>
                     Open Explorer <ArrowRight size={15} />
                   </button>
                 </div>
@@ -193,7 +193,7 @@ export default function AnalyzePage() {
                       <h3 className="text-sm font-semibold" style={{ color: "#F0EFED" }}>Identified regions</h3>
                       <span className="text-xs font-mono" style={{ color: "#888" }}>{regions.length} total</span>
                     </div>
-                    <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="rounded-xl overflow-hidden" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
                       {/* Table header */}
                       <div className="flex items-center gap-4 px-5 py-2 text-[11px] font-medium uppercase tracking-wider"
                         style={{ color: "#666", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
@@ -233,7 +233,7 @@ export default function AnalyzePage() {
                   <div className="space-y-4">
                     {/* Top candidate */}
                     {topRegion && (
-                      <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(91,181,162,0.15)" }}>
+                      <div className="p-5 rounded-xl" style={{ background: "#222225", border: "1px solid rgba(91,181,162,0.15)" }}>
                         <div className="flex items-center gap-2 mb-3">
                           <Target size={14} style={{ color: "#5bb5a2" }} />
                           <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#5bb5a2" }}>Top region</span>
@@ -249,7 +249,7 @@ export default function AnalyzePage() {
                     )}
 
                     {/* Quick stats */}
-                    <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="p-5 rounded-xl" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>Summary</span>
                       <div className="mt-3 space-y-3">
                         {[
@@ -267,7 +267,7 @@ export default function AnalyzePage() {
                     </div>
 
                     {/* Model note */}
-                    <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="p-5 rounded-xl" style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.04)" }}>
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>Model</span>
                       <p className="text-xs mt-2 leading-relaxed" style={{ color: "#D1D0CC" }}>
                         Scored by Evo 2 (40B parameters, 9T base pairs). Per-position log-likelihood indicates functional constraint. Lower absolute scores suggest higher evolutionary conservation.
@@ -302,7 +302,7 @@ export default function AnalyzePage() {
           {viewMode === "explorer" && analysisResult && (
             <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="px-5 py-2 shrink-0" style={{ background: "#131311" }}>
+              <div className="px-5 py-2 shrink-0" style={{ background: "#1c1c1f" }}>
                 <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                 <AnnotationLegend regions={regions} />
               </div>
@@ -312,13 +312,13 @@ export default function AnalyzePage() {
                     <SequenceViewer bases={bases} regions={regions}
                       highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
                   </div>
-                  <div className="h-40 shrink-0 px-5 py-3" style={{ background: "#131311" }}>
+                  <div className="h-40 shrink-0 px-5 py-3" style={{ background: "#1c1c1f" }}>
                     <LikelihoodGraph scores={scores}
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
                 <div className="w-[340px] shrink-0 flex flex-col overflow-y-auto"
-                  style={{ background: "#1A1917", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ background: "#222225", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
                   <div className="p-5">
                     <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
                       mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
@@ -327,7 +327,7 @@ export default function AnalyzePage() {
                   <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
                   <div className="p-5 flex-1 flex flex-col min-h-0">
                     <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
-                    <div className="flex-1 rounded-lg overflow-hidden min-h-[180px]" style={{ background: "#0F0F0F" }}>
+                    <div className="flex-1 rounded-lg overflow-hidden min-h-[180px]" style={{ background: "#141416" }}>
                       {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
                         <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure data</div>
                       )}
@@ -339,7 +339,7 @@ export default function AnalyzePage() {
                   <div className="p-5">
                     <button onClick={() => setViewMode("ide")}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.01]"
-                      style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+                      style={{ background: "#5bb5a2", color: "#141416" }}>
                       <Pencil size={14} /> Open in Design Studio
                     </button>
                   </div>
@@ -353,7 +353,7 @@ export default function AnalyzePage() {
             <motion.div key="ide" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               <div className="h-10 shrink-0 flex items-center justify-between px-5"
-                style={{ background: "#131311", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                style={{ background: "#1c1c1f", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <span className="text-xs font-mono" style={{ color: "#888" }}>
                   {rawSequence.length} bp | {regions.length} regions | {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
                 </span>
@@ -361,20 +361,20 @@ export default function AnalyzePage() {
               </div>
               <div className="flex-1 flex overflow-hidden min-h-0">
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                  <div className="px-5 py-1.5 shrink-0" style={{ background: "#131311" }}>
+                  <div className="px-5 py-1.5 shrink-0" style={{ background: "#1c1c1f" }}>
                     <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                   </div>
                   <div className="flex-1 overflow-auto px-5 py-3">
                     <SequenceViewer bases={bases} regions={regions}
                       highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
                   </div>
-                  <div className="h-36 shrink-0 px-5 py-2" style={{ background: "#131311" }}>
+                  <div className="h-36 shrink-0 px-5 py-2" style={{ background: "#1c1c1f" }}>
                     <LikelihoodGraph scores={scores}
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
                 <div className="w-[360px] shrink-0 flex flex-col overflow-y-auto"
-                  style={{ background: "#1A1917", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ background: "#222225", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
                   <div className="p-5">
                     <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
                       mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
@@ -383,7 +383,7 @@ export default function AnalyzePage() {
                   <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
                   <div className="p-5 flex-1 flex flex-col min-h-0">
                     <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
-                    <div className="flex-1 rounded-lg overflow-hidden min-h-[160px]" style={{ background: "#0F0F0F" }}>
+                    <div className="flex-1 rounded-lg overflow-hidden min-h-[160px]" style={{ background: "#141416" }}>
                       {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
                         <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure</div>
                       )}
