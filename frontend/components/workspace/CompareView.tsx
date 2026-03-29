@@ -56,7 +56,9 @@ export default function CompareView() {
           <div>
             <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate Comparison</h2>
             <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-              {diffs.length} position{diffs.length !== 1 ? "s" : ""} differ between candidates
+              {diffs.length} position{diffs.length !== 1 ? "s" : ""} differ between candidates.
+              Each letter (A, T, C, G) is a DNA base — highlighted positions show where the two candidates diverge.
+              Positive score deltas mean the change improves that metric.
             </p>
           </div>
           <button onClick={() => setViewMode("ide")}
@@ -174,7 +176,8 @@ export default function CompareView() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* Score deltas */}
           <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)" }}>
-            <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--text-muted)" }}>Score comparison</span>
+            <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--text-muted)" }}>Score comparison</span>
+            <p className="text-[11px] mb-4" style={{ color: "var(--text-faint)" }}>How likely the sequence works (functional), targets the right tissue, avoids side effects (off-target), and is original (novelty).</p>
             <div className="space-y-3">
               {[
                 { label: "Functional", a: candA.scores.functional, b: candB.scores.functional, color: "var(--accent)" },

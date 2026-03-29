@@ -88,6 +88,71 @@
 }
 
 /* ========================================
+   LIGHT MODE (app pages only, landing stays dark)
+   ======================================== */
+
+.light {
+  --surface-void: oklch(0.96 0 0);
+  --surface-base: oklch(0.98 0 0);
+  --surface-raised: oklch(1 0 0);
+  --surface-elevated: oklch(0.97 0.002 280);
+  --surface-overlay: oklch(0.94 0.002 280);
+  --surface-highest: oklch(0.92 0.002 280);
+
+  --text-primary: oklch(0.13 0 0);
+  --text-secondary: oklch(0.35 0 0);
+  --text-muted: oklch(0.50 0 0);
+  --text-faint: oklch(0.68 0 0);
+
+  --accent: oklch(0.52 0.14 175);
+  --accent-bright: oklch(0.42 0.14 175);
+  --accent-dim: oklch(0.62 0.10 175);
+  --accent-glow: 0 0 8px oklch(0.52 0.14 175 / 0.2);
+
+  --ghost-border: oklch(0 0 0 / 0.08);
+
+  --background: oklch(0.96 0 0);
+  --foreground: oklch(0.13 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0 0);
+  --primary: oklch(0.52 0.14 175);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.96 0 0);
+  --secondary-foreground: oklch(0.13 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.50 0 0);
+  --border: oklch(0 0 0 / 0.08);
+  --input: oklch(0.96 0 0);
+  --ring: oklch(0.52 0.14 175);
+
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.13 0 0);
+  --sidebar-primary: oklch(0.52 0.14 175);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.96 0 0);
+  --sidebar-accent-foreground: oklch(0.13 0 0);
+  --sidebar-border: oklch(0 0 0 / 0.06);
+  --sidebar-ring: oklch(0.52 0.14 175);
+}
+
+/* Light mode adjustments for specific utilities */
+.light .nav-active {
+  background: linear-gradient(to right, oklch(0.52 0.14 175 / 0.08), transparent);
+  border-left-color: var(--accent);
+}
+
+.light .status-pulse {
+  background: var(--accent);
+  box-shadow: 0 0 8px oklch(0.52 0.14 175 / 0.3);
+}
+
+.light .grain::after {
+  opacity: 0.015;
+}
+
+/* ========================================
    BASE STYLES
    ======================================== */
 

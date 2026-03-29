@@ -3,8 +3,9 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
 import {
-  Dna, FlaskConical, BarChart3, Search, Home,
+  Dna, FlaskConical, BarChart3, Search, Home, Sun, Moon, LogOut,
   ChevronRight, Pencil, ArrowRight, Clock, Shield, Sparkles, Target,
 } from "lucide-react";
 import { useHelixStore } from "@/lib/store";
@@ -57,10 +58,14 @@ export default function AnalyzePage() {
   const setActivePdb = useHelixStore((s) => s.setActivePdb);
   const setHighlightResidues = useHelixStore((s) => s.setHighlightResidues);
   const addEditEntry = useHelixStore((s) => s.addEditEntry);
+  const saveVersion = useHelixStore((s) => s.saveVersion);
+  const revertVersion = useHelixStore((s) => s.revertVersion);
   const candidates = useHelixStore((s) => s.candidates);
   const activeCandidateId = useHelixStore((s) => s.activeCandidateId);
   const chatOpen = useHelixStore((s) => s.chatOpen);
   const toggleChat = useHelixStore((s) => s.toggleChat);
+  const theme = useHelixStore((s) => s.theme);
+  const toggleTheme = useHelixStore((s) => s.toggleTheme);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { startDesign } = useDesignPipeline();
@@ -117,9 +122,20 @@ export default function AnalyzePage() {
           })}
         </nav>
 
-        {/* Status footer */}
-        <div className="px-6 py-5">
-          <div className="flex items-center gap-2.5">
+        {/* Footer: theme toggle + exit + status */}
+        <div className="px-4 py-5 space-y-2">
+          <button onClick={toggleTheme}
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}>
+            {theme === "dark" ? <Sun size={14} style={{ color: "var(--text-muted)" }} /> : <Moon size={14} style={{ color: "var(--text-muted)" }} />}
+            <span className="label-caps" style={{ fontSize: "9px" }}>{theme === "dark" ? "Light mode" : "Dark mode"}</span>
+          </button>
+          <Link href="/"
+            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-md transition-all hover:bg-white/[0.04]">
+            <LogOut size={14} style={{ color: "var(--text-muted)" }} />
+            <span className="label-caps" style={{ fontSize: "9px" }}>Exit to landing</span>
+          </Link>
+          <div className="flex items-center gap-2.5 px-3 pt-2">
             <div className="status-pulse" />
             <span className="label-caps" style={{ fontSize: "9px" }}>Evo 2 · Ready</span>
           </div>
@@ -329,7 +345,21 @@ export default function AnalyzePage() {
           {viewMode === "explorer" && analysisResult && (
             <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              {/* Explorer has annotation track prominently */}
+              {/* Action bar: what this view is + proceed CTA */}
+              <div className="shrink-0 flex items-center justify-between px-6 py-3" style={{ background: "var(--surface-raised)" }}>
+                <div className="flex items-center gap-3">
+                  <Search size={14} style={{ color: "var(--accent)" }} />
+                  <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
+                    Click any base to inspect. This is a read-only view — edit in Design Studio.
+                  </span>
+                </div>
+                <button onClick={() => setViewMode("ide")}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-[12px] font-medium font-label tracking-wider uppercase transition-all hover:scale-[1.02]"
+                  style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                  <Pencil size={13} /> Open Studio <ArrowRight size={13} />
+                </button>
+              </div>
+              {/* Annotation track */}
               <div className="px-5 py-3 shrink-0" style={{ background: "var(--surface-raised)" }}>
                 <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                 <AnnotationLegend regions={regions} />
@@ -410,14 +440,6 @@ export default function AnalyzePage() {
                     </div>
                   </div>
                   <div className="flex-1" />
-                  {/* CTA to IDE */}
-                  <div className="p-5">
-                    <button onClick={() => setViewMode("ide")}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.01]"
-                      style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
-                      <Pencil size={14} /> Open in Design Studio
-                    </button>
-                  </div>
                 </div>
                 {chatOpen && <ChatPanel />}
               </div>
@@ -438,11 +460,11 @@ export default function AnalyzePage() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                  <button onClick={saveVersion} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>
                     Save version
                   </button>
-                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                  <button onClick={revertVersion} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>
                     Revert
                   </button>
@@ -548,6 +570,19 @@ export default function AnalyzePage() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Floating Copilot button (visible when chat is closed and not on input/pipeline) */}
+      {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
+        <button onClick={toggleChat}
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all hover:scale-105"
+          style={{
+            background: "var(--accent)",
+            color: "var(--surface-base)",
+            boxShadow: "0 8px 32px oklch(0.72 0.12 175 / 0.3)",
+          }}>
+          <Sparkles size={16} /> Ask Copilot
+        </button>
+      )}
     </div>
   );
 }

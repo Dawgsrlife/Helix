@@ -83,6 +83,10 @@ interface HelixState {
   generationTokenCount: number;
   completedStages: string[];
 
+  // Theme
+  theme: "dark" | "light";
+  toggleTheme: () => void;
+
   // Actions
   setViewMode: (mode: ViewMode) => void;
   setSequence: (seq: string) => void;
@@ -107,6 +111,9 @@ interface HelixState {
   setRetrievalStatuses: (statuses: RetrievalStatus[]) => void;
   updateRetrievalStatus: (source: string, status: RetrievalStatus["status"]) => void;
   addCompletedStage: (stage: string) => void;
+  savedSnapshot: { sequence: string; editHistory: EditEntry[] } | null;
+  saveVersion: () => void;
+  revertVersion: () => void;
   reset: () => void;
 }
 
@@ -137,11 +144,21 @@ const initialState = {
   retrievalStatuses: [] as RetrievalStatus[],
   generationTokenCount: 0,
   completedStages: [] as string[],
+  theme: "dark" as "dark" | "light",
+  savedSnapshot: null as { sequence: string; editHistory: EditEntry[] } | null,
 };
 
 export const useHelixStore = create<HelixState>((set, get) => ({
   ...initialState,
 
+  toggleTheme: () => {
+    const next = get().theme === "dark" ? "light" : "dark";
+    set({ theme: next });
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.toggle("light", next === "light");
+      document.documentElement.classList.toggle("dark", next === "dark");
+    }
+  },
   setViewMode: (mode) => set({ viewMode: mode }),
   setSequence: (seq) => set({ rawSequence: seq }),
 
@@ -227,5 +244,14 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   addCompletedStage: (stage) => set((s) => ({
     completedStages: s.completedStages.includes(stage) ? s.completedStages : [...s.completedStages, stage],
   })),
+  saveVersion: () => set((s) => ({
+    savedSnapshot: { sequence: s.rawSequence, editHistory: [...s.editHistory] },
+  })),
+  revertVersion: () => {
+    const snap = get().savedSnapshot;
+    if (snap) {
+      set({ rawSequence: snap.sequence, editHistory: snap.editHistory });
+    }
+  },
   reset: () => set(initialState),
 }));
