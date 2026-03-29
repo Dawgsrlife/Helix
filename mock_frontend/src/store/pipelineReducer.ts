@@ -31,7 +31,6 @@ export type PipelineAction =
   | { type: "BASE_EDIT_ERROR"; message: string }
   | { type: "FOLLOWUP_PENDING"; message: string }
   | { type: "FOLLOWUP_ACCEPTED"; message: string; steps: string[] }
-  | { type: "SET_AUTOPLAY_STARTED"; value: boolean }
   | { type: "RESET" };
 
 function nowTag(): string {
@@ -47,6 +46,7 @@ function emptyCandidate(id: number): CandidateState {
     id,
     status: "queued",
     sequence: "",
+    streamOffset: null,
     scores: null,
     confidence: null,
     pdbData: "",
@@ -119,7 +119,7 @@ export function createInitialState(apiBase = "http://localhost:8000"): PipelineS
     wsUrl: "",
     wsStatus: "disconnected",
     runProfile: "demo",
-    requestedCandidates: 5,
+    requestedCandidates: 10,
     pipelineStatus: "idle",
     stages: {
       intent: makeStageState(),
@@ -142,12 +142,11 @@ export function createInitialState(apiBase = "http://localhost:8000"): PipelineS
     explanationByCandidate: {},
     eventLog: [],
     chat: [],
-    laymanSummary: "Silent autoplay will run in demo mode.",
+    laymanSummary: "Enter a design goal to generate ranked DNA candidates.",
     isSubmittingDesign: false,
     isSubmittingFollowup: false,
     selectedPosition: null,
-    editFeedback: "",
-    autoplayStarted: false
+    editFeedback: ""
   };
 }
 
@@ -164,6 +163,9 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
       for (const candidateId of payload.data.candidate_ids) {
         const candidate = ensureCandidate(state, candidateId);
         candidate.status = "queued";
+        const seeded = payload.data.candidate_seed_sequences?.[String(candidateId)] ?? "";
+        candidate.sequence = seeded;
+        candidate.streamOffset = null;
       }
       if (state.activeCandidateId === null && payload.data.candidate_ids.length > 0) {
         state.activeCandidateId = payload.data.candidate_ids[0];
@@ -212,12 +214,19 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
       const candidate = ensureCandidate(state, payload.data.candidate_id);
       const sequence = candidate.sequence;
       const { token, position } = payload.data;
-      if (position === sequence.length) {
+      if (candidate.streamOffset === null && sequence.length === 0 && position > 0) {
+        candidate.streamOffset = position;
+      }
+      const normalizedPosition =
+        candidate.streamOffset === null ? position : Math.max(0, position - candidate.streamOffset);
+      if (normalizedPosition === sequence.length) {
         candidate.sequence += token;
-      } else if (position < sequence.length) {
-        candidate.sequence = sequence.slice(0, position) + token + sequence.slice(position + 1);
+      } else if (normalizedPosition < sequence.length) {
+        candidate.sequence =
+          sequence.slice(0, normalizedPosition) + token + sequence.slice(normalizedPosition + 1);
       } else {
-        candidate.sequence = sequence + "N".repeat(position - sequence.length) + token;
+        // Fill unexpected gaps with "N" instead of dropping streamed tokens.
+        candidate.sequence = sequence + "N".repeat(normalizedPosition - sequence.length) + token;
       }
       candidate.status = candidate.status === "queued" ? "running" : candidate.status;
       break;
@@ -255,6 +264,7 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
         const candidate = ensureCandidate(state, candidatePayload.id);
         if (candidatePayload.status) candidate.status = candidatePayload.status;
         if (candidatePayload.sequence) candidate.sequence = candidatePayload.sequence;
+        candidate.streamOffset = null;
         if (candidatePayload.scores) candidate.scores = candidatePayload.scores;
         if (typeof candidatePayload.pdb_data === "string") candidate.pdbData = candidatePayload.pdb_data;
         if (typeof candidatePayload.confidence === "number") candidate.confidence = candidatePayload.confidence;
@@ -278,7 +288,7 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       next.requestedCandidates = action.requestedCandidates;
       next.pipelineStatus = "running";
       next.isSubmittingDesign = true;
-      next.chat.push({ role: "system", text: "Autoplay engaged. Running live pipeline.", at: nowTag() });
+      next.chat.push({ role: "system", text: "Design run started.", at: nowTag() });
       return next;
     }
 
@@ -319,7 +329,10 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       const next = structuredClone(state);
       const candidate = ensureCandidate(next, action.candidateId);
       const { response } = action;
-      const pos = response.position;
+      const pos =
+        candidate.streamOffset === null
+          ? response.position
+          : Math.max(0, response.position - candidate.streamOffset);
       candidate.sequence =
         candidate.sequence.slice(0, pos) + response.new_base + candidate.sequence.slice(pos + 1);
       candidate.scores = response.updated_scores;
@@ -335,6 +348,11 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
 
     case "BASE_EDIT_ERROR": {
       const next = structuredClone(state);
+      next.isSubmittingDesign = false;
+      next.isSubmittingFollowup = false;
+      if (next.pipelineStatus === "running" && !next.sessionId) {
+        next.pipelineStatus = "error";
+      }
       next.editFeedback = action.message;
       pushEvent(next, action.message);
       return next;
@@ -353,12 +371,6 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       next.isSubmittingFollowup = false;
       next.chat.push({ role: "system", text: `Follow-up accepted: ${action.steps.join(", ")}`, at: nowTag() });
       pushEvent(next, `follow-up accepted (${action.steps.join(", ")})`);
-      return next;
-    }
-
-    case "SET_AUTOPLAY_STARTED": {
-      const next = structuredClone(state);
-      next.autoplayStarted = action.value;
       return next;
     }
 

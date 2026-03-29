@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IntentParsedData(BaseModel):
@@ -24,6 +24,7 @@ class PipelineManifestData(BaseModel):
     requested_candidates: int
     candidate_ids: list[int]
     run_profile: Literal["demo", "live"]
+    candidate_seed_sequences: dict[int, str] = Field(default_factory=dict)
 
 
 class PipelineManifestEvent(BaseModel):

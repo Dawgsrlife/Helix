@@ -31,19 +31,42 @@ describe("pipelineReducer", () => {
         session_id: "s1",
         requested_candidates: 1,
         candidate_ids: [0],
-        run_profile: "demo"
+        run_profile: "demo",
+        candidate_seed_sequences: { "0": "ATG" }
       }
     });
     const tokenA = pipelineReducer(withManifest, {
       type: "PIPELINE_EVENT",
-      payload: { event: "generation_token", data: { candidate_id: 0, token: "A", position: 0 } }
+      payload: { event: "generation_token", data: { candidate_id: 0, token: "A", position: 3 } }
     });
     const tokenT = pipelineReducer(tokenA, {
       type: "PIPELINE_EVENT",
-      payload: { event: "generation_token", data: { candidate_id: 0, token: "T", position: 1 } }
+      payload: { event: "generation_token", data: { candidate_id: 0, token: "T", position: 4 } }
     });
 
-    expect(tokenT.candidates[0].sequence).toBe("AT");
+    expect(tokenT.candidates[0].sequence).toBe("ATGAT");
+  });
+
+  it("normalizes absolute token positions when manifest seed is missing", () => {
+    const withManifest = reduce(undefined, {
+      event: "pipeline_manifest",
+      data: {
+        session_id: "s1",
+        requested_candidates: 1,
+        candidate_ids: [0],
+        run_profile: "demo"
+      }
+    });
+    const first = pipelineReducer(withManifest, {
+      type: "PIPELINE_EVENT",
+      payload: { event: "generation_token", data: { candidate_id: 0, token: "A", position: 48 } }
+    });
+    const second = pipelineReducer(first, {
+      type: "PIPELINE_EVENT",
+      payload: { event: "generation_token", data: { candidate_id: 0, token: "T", position: 49 } }
+    });
+
+    expect(second.candidates[0].sequence).toBe("AT");
   });
 
   it("uses stage_status as source of truth for stage state", () => {

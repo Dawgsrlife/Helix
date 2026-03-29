@@ -14,7 +14,7 @@ from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
 from pipeline.retrieval import retrieve_context
-from services.evo2 import Evo2Service
+from services.evo2 import Evo2MockService, Evo2Service
 from services.structure import predict_structure
 from config import settings, StructureMode
 from ws.events import (
@@ -135,7 +135,7 @@ def _profile(run_profile: str) -> PipelineProfile:
     if run_profile == "live":
         return PipelineProfile(
             run_profile="live",
-            candidate_workers=2,
+            candidate_workers=3,
             retrieval_timeout=20.0,
             generation_timeout=25.0,
             scoring_timeout=20.0,
@@ -145,7 +145,7 @@ def _profile(run_profile: str) -> PipelineProfile:
         )
     return PipelineProfile(
         run_profile="demo",
-        candidate_workers=3,
+        candidate_workers=4,
         retrieval_timeout=4.0,
         generation_timeout=8.0,
         scoring_timeout=8.0,
@@ -167,11 +167,13 @@ async def run_generation_pipeline(
     seed_sequence: str = DEFAULT_SEED,
     on_candidate_ready: CandidateUpdateCallback | None = None,
 ) -> None:
-    candidate_count = max(1, min(int(n_candidates), 8))
+    candidate_count = max(1, min(int(n_candidates), 10))
     profile = _profile(run_profile)
+    fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     runtime: dict[int, CandidateRuntime] = {cid: CandidateRuntime(id=cid) for cid in range(candidate_count)}
     runtime_lock = asyncio.Lock()
+    candidate_seeds = {cid: _vary_seed(seed_sequence, cid) for cid in range(candidate_count)}
     first_explanation_task: asyncio.Task[None] | None = None
     first_explained_candidate_id: int | None = None
     finished_generation = 0
@@ -186,6 +188,7 @@ async def run_generation_pipeline(
                 requested_candidates=candidate_count,
                 candidate_ids=list(range(candidate_count)),
                 run_profile=profile.run_profile,
+                candidate_seed_sequences=candidate_seeds,
             )
         ).to_json(),
     )
@@ -255,7 +258,7 @@ async def run_generation_pipeline(
     async def _run_candidate(candidate_id: int) -> None:
         nonlocal finished_generation, finished_scoring, finished_structure
         async with semaphore:
-            varied_seed = _vary_seed(seed_sequence, candidate_id)
+            varied_seed = candidate_seeds[candidate_id]
             temperature = 0.9 + (0.1 * candidate_id)
             generated = varied_seed
             await manager.send_event(
@@ -277,27 +280,51 @@ async def run_generation_pipeline(
                             ).to_json(),
                         )
             except TimeoutError:
-                candidate = await _mark_failed(candidate_id, generated, "generation_timeout", "generation")
-                runtime[candidate_id] = candidate
-                async with runtime_lock:
-                    finished_generation += 1
-                    finished_scoring += 1
-                    finished_structure += 1
-                    await tracker.set("generation", "active", finished_generation / candidate_count)
-                    await tracker.set("scoring", "active", finished_scoring / candidate_count)
-                    await tracker.set("structure", "active", finished_structure / candidate_count)
-                return
+                if profile.run_profile == "demo":
+                    generated = await _fill_with_demo_tokens(
+                        manager=manager,
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        generated=generated,
+                        seed_length=len(varied_seed),
+                        n_tokens=n_tokens,
+                        temperature=temperature,
+                        fallback_service=fallback_service,
+                    )
+                else:
+                    candidate = await _mark_failed(candidate_id, generated, "generation_timeout", "generation")
+                    runtime[candidate_id] = candidate
+                    async with runtime_lock:
+                        finished_generation += 1
+                        finished_scoring += 1
+                        finished_structure += 1
+                        await tracker.set("generation", "active", finished_generation / candidate_count)
+                        await tracker.set("scoring", "active", finished_scoring / candidate_count)
+                        await tracker.set("structure", "active", finished_structure / candidate_count)
+                    return
             except Exception as exc:
-                candidate = await _mark_failed(candidate_id, generated, f"generation_error:{exc}", "generation")
-                runtime[candidate_id] = candidate
-                async with runtime_lock:
-                    finished_generation += 1
-                    finished_scoring += 1
-                    finished_structure += 1
-                    await tracker.set("generation", "active", finished_generation / candidate_count)
-                    await tracker.set("scoring", "active", finished_scoring / candidate_count)
-                    await tracker.set("structure", "active", finished_structure / candidate_count)
-                return
+                if profile.run_profile == "demo":
+                    generated = await _fill_with_demo_tokens(
+                        manager=manager,
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        generated=generated,
+                        seed_length=len(varied_seed),
+                        n_tokens=n_tokens,
+                        temperature=temperature,
+                        fallback_service=fallback_service,
+                    )
+                else:
+                    candidate = await _mark_failed(candidate_id, generated, f"generation_error:{exc}", "generation")
+                    runtime[candidate_id] = candidate
+                    async with runtime_lock:
+                        finished_generation += 1
+                        finished_scoring += 1
+                        finished_structure += 1
+                        await tracker.set("generation", "active", finished_generation / candidate_count)
+                        await tracker.set("scoring", "active", finished_scoring / candidate_count)
+                        await tracker.set("structure", "active", finished_structure / candidate_count)
+                    return
 
             if on_candidate_ready is not None:
                 callback_result = on_candidate_ready(candidate_id, generated)
@@ -330,23 +357,63 @@ async def run_generation_pipeline(
                     ).to_json(),
                 )
             except TimeoutError:
-                candidate = await _mark_failed(candidate_id, generated, "scoring_timeout", "scoring")
-                runtime[candidate_id] = candidate
-                async with runtime_lock:
-                    finished_scoring += 1
-                    finished_structure += 1
-                    await tracker.set("scoring", "active", finished_scoring / candidate_count)
-                    await tracker.set("structure", "active", finished_structure / candidate_count)
-                return
+                if profile.run_profile == "demo":
+                    scores, _ = await score_candidate(
+                        fallback_service,
+                        generated,
+                        target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
+                    )
+                    score_dict = scores.to_dict()
+                    await manager.send_event(
+                        session_id,
+                        CandidateScoredEvent(
+                            data=CandidateScoredData(candidate_id=candidate_id, scores=score_dict)
+                        ).to_json(),
+                    )
+                    await manager.send_event(
+                        session_id,
+                        CandidateStatusEvent(
+                            data=CandidateStatusData(candidate_id=candidate_id, status="scored")
+                        ).to_json(),
+                    )
+                else:
+                    candidate = await _mark_failed(candidate_id, generated, "scoring_timeout", "scoring")
+                    runtime[candidate_id] = candidate
+                    async with runtime_lock:
+                        finished_scoring += 1
+                        finished_structure += 1
+                        await tracker.set("scoring", "active", finished_scoring / candidate_count)
+                        await tracker.set("structure", "active", finished_structure / candidate_count)
+                    return
             except Exception as exc:
-                candidate = await _mark_failed(candidate_id, generated, f"scoring_error:{exc}", "scoring")
-                runtime[candidate_id] = candidate
-                async with runtime_lock:
-                    finished_scoring += 1
-                    finished_structure += 1
-                    await tracker.set("scoring", "active", finished_scoring / candidate_count)
-                    await tracker.set("structure", "active", finished_structure / candidate_count)
-                return
+                if profile.run_profile == "demo":
+                    scores, _ = await score_candidate(
+                        fallback_service,
+                        generated,
+                        target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
+                    )
+                    score_dict = scores.to_dict()
+                    await manager.send_event(
+                        session_id,
+                        CandidateScoredEvent(
+                            data=CandidateScoredData(candidate_id=candidate_id, scores=score_dict)
+                        ).to_json(),
+                    )
+                    await manager.send_event(
+                        session_id,
+                        CandidateStatusEvent(
+                            data=CandidateStatusData(candidate_id=candidate_id, status="scored")
+                        ).to_json(),
+                    )
+                else:
+                    candidate = await _mark_failed(candidate_id, generated, f"scoring_error:{exc}", "scoring")
+                    runtime[candidate_id] = candidate
+                    async with runtime_lock:
+                        finished_scoring += 1
+                        finished_structure += 1
+                        await tracker.set("scoring", "active", finished_scoring / candidate_count)
+                        await tracker.set("structure", "active", finished_structure / candidate_count)
+                    return
 
             async with runtime_lock:
                 finished_scoring += 1
@@ -609,6 +676,34 @@ async def _emit_retrieval(
             completed += 1
         if tracker is not None:
             await tracker.set("retrieval", "active", completed / len(sources))
+
+
+async def _fill_with_demo_tokens(
+    *,
+    manager: WebSocketManager,
+    session_id: str,
+    candidate_id: int,
+    generated: str,
+    seed_length: int,
+    n_tokens: int,
+    temperature: float,
+    fallback_service: Evo2MockService,
+) -> str:
+    emitted = max(0, len(generated) - seed_length)
+    remaining = max(0, n_tokens - emitted)
+    if remaining == 0:
+        return generated
+
+    async for token in fallback_service.generate(generated, n_tokens=remaining, temperature=temperature):
+        position = len(generated)
+        generated += token
+        await manager.send_event(
+            session_id,
+            GenerationTokenEvent(
+                data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
+            ).to_json(),
+        )
+    return generated
 
 
 def _simple_mutate(sequence: str, position: int, new_base: str) -> str:

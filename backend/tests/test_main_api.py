@@ -169,6 +169,26 @@ def test_design_accepts_run_profile() -> None:
     assert res.json()["session_id"] == "run-profile"
 
 
+def test_design_defaults_to_ten_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TestClient(app)
+    seen: dict[str, int] = {}
+
+    async def fake_run_generation_pipeline(*, n_candidates: int, **_kwargs) -> None:
+        seen["n_candidates"] = n_candidates
+
+    monkeypatch.setattr(main, "run_generation_pipeline", fake_run_generation_pipeline)
+    res = client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": "default-ten"})
+    assert res.status_code == 202
+    # Allow scheduled task to run in TestClient event loop.
+    import time
+
+    timeout_at = time.time() + 1.0
+    while "n_candidates" not in seen and time.time() < timeout_at:
+        time.sleep(0.01)
+
+    assert seen["n_candidates"] == 10
+
+
 def test_edit_base_requires_existing_session() -> None:
     client = TestClient(app)
     res = client.post(

@@ -95,7 +95,7 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
-    num_candidates = 1 if request.num_candidates is None else max(1, min(request.num_candidates, 8))
+    num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
     await session_store.initialize_session(session_id)
     asyncio.create_task(
         run_generation_pipeline(

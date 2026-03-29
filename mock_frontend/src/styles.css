@@ -50,6 +50,51 @@ textarea {
   gap: 14px;
 }
 
+.landing-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.landing-card {
+  width: min(980px, 95vw);
+  border: 1px solid rgba(144, 169, 204, 0.28);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(7, 14, 25, 0.97), rgba(10, 23, 40, 0.95));
+  padding: clamp(18px, 3vw, 32px);
+  display: grid;
+  gap: 14px;
+}
+
+.landing-card h1 {
+  font-size: clamp(44px, 8vw, 84px);
+  letter-spacing: -0.04em;
+}
+
+.landing-tagline {
+  color: var(--muted);
+  font-size: clamp(16px, 2vw, 20px);
+}
+
+.landing-card label {
+  color: var(--muted);
+  font-size: 13px;
+  display: grid;
+  gap: 6px;
+}
+
+.landing-controls {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 12px;
+}
+
+.landing-buttons {
+  display: flex;
+  gap: 10px;
+}
+
 .hero {
   display: flex;
   justify-content: space-between;
@@ -200,6 +245,12 @@ button.secondary {
   border-radius: 16px;
   overflow: hidden;
   background: rgba(5, 11, 20, 0.92);
+}
+
+.ide-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: 12px;
 }
 
 .grid-two {
@@ -397,6 +448,11 @@ button.secondary {
   overflow: hidden;
 }
 
+.protein-fallback {
+  color: #ffb3bf;
+  font-size: 12px;
+}
+
 .chat-panel {
   display: grid;
   gap: 10px;
@@ -486,7 +542,9 @@ button.secondary {
 
 @media (max-width: 1100px) {
   .command-bar,
-  .grid-two {
+  .grid-two,
+  .ide-hero-grid,
+  .landing-controls {
     grid-template-columns: 1fr;
   }
 

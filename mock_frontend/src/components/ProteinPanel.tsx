@@ -1,27 +1,23 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CandidateState } from "../types";
 
-type Viewer = {
-  clear: () => void;
-  addModel: (pdb: string, type: string) => void;
-  setStyle: (selection: object, style: object) => void;
-  zoomTo: () => void;
-  spin: (value: boolean) => void;
-  render: () => void;
+type MolModule = {
+  createViewer: (element: HTMLElement, config: { backgroundColor: string }) => {
+    clear: () => void;
+    addModel: (pdb: string, type: string) => void;
+    setStyle: (selection: Record<string, unknown>, style: Record<string, unknown>) => void;
+    zoomTo: () => void;
+    spin: (value: boolean) => void;
+    render: () => void;
+  };
 };
-
-declare global {
-  interface Window {
-    $3Dmol?: {
-      createViewer: (element: HTMLElement, config: { backgroundColor: string }) => Viewer;
-    };
-  }
-}
 
 export function ProteinPanel({ candidate }: { candidate: CandidateState | null }) {
   const ref = useRef<HTMLDivElement | null>(null);
-  const viewerRef = useRef<Viewer | null>(null);
+  const viewerRef = useRef<ReturnType<MolModule["createViewer"]> | null>(null);
+  const molModuleRef = useRef<MolModule | null>(null);
+  const [rendererStatus, setRendererStatus] = useState<"loading" | "ready" | "error">("loading");
 
   const info = useMemo(() => {
     if (!candidate) return "Waiting for candidate";
@@ -31,9 +27,30 @@ export function ProteinPanel({ candidate }: { candidate: CandidateState | null }
   }, [candidate]);
 
   useEffect(() => {
-    if (!candidate?.pdbData || !ref.current || !window.$3Dmol) return;
+    let cancelled = false;
+    async function bootRenderer(): Promise<void> {
+      try {
+        const mod = (await import("3dmol")) as unknown as MolModule;
+        if (cancelled) return;
+        molModuleRef.current = mod;
+        setRendererStatus("ready");
+      } catch (_error) {
+        if (cancelled) return;
+        setRendererStatus("error");
+      }
+    }
+    void bootRenderer();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!candidate?.pdbData || !ref.current || !molModuleRef.current) return;
     if (!viewerRef.current) {
-      viewerRef.current = window.$3Dmol.createViewer(ref.current, { backgroundColor: "#060b14" });
+      viewerRef.current = molModuleRef.current.createViewer(ref.current, {
+        backgroundColor: "#060b14"
+      });
     }
     viewerRef.current.clear();
     viewerRef.current.addModel(candidate.pdbData, "pdb");
@@ -46,6 +63,7 @@ export function ProteinPanel({ candidate }: { candidate: CandidateState | null }
   return (
     <div className="protein-wrap">
       <div className="protein-info">{info}</div>
+      {rendererStatus === "error" ? <div className="protein-fallback">3D renderer failed to load.</div> : null}
       <div ref={ref} className="protein-viewer" />
     </div>
   );

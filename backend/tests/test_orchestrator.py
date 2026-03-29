@@ -93,6 +93,11 @@ async def test_generation_pipeline_requested_candidates_are_all_present() -> Non
     ids = [candidate["id"] for candidate in complete["data"]["candidates"]]
     assert ids == [0, 1, 2, 3, 4]
 
+    manifest = ws.sent[0]
+    assert manifest["event"] == "pipeline_manifest"
+    seed_map = manifest["data"]["candidate_seed_sequences"]
+    assert sorted(int(candidate_id) for candidate_id in seed_map.keys()) == [0, 1, 2, 3, 4]
+
 
 @pytest.mark.asyncio
 async def test_followup_pipeline_returns_steps_and_emits_complete() -> None:
@@ -158,6 +163,27 @@ async def test_generation_pipeline_invokes_candidate_callback() -> None:
     assert seen["candidate_id"] == 0
     assert isinstance(seen["sequence"], str)
     assert len(str(seen["sequence"])) > 0
+
+
+@pytest.mark.asyncio
+async def test_generation_pipeline_caps_requested_candidates_at_ten() -> None:
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-max-ten")
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-max-ten",
+        goal="Design promoter",
+        n_tokens=1,
+        n_candidates=42,
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["requested_candidates"] == 10
+    assert len(complete["data"]["candidates"]) == 10
 
 
 @pytest.mark.asyncio

@@ -22,6 +22,7 @@ export interface CandidateState {
   id: number;
   status: CandidateStatus;
   sequence: string;
+  streamOffset: number | null;
   scores: CandidateScores | null;
   confidence: number | null;
   pdbData: string;
@@ -61,11 +62,19 @@ export interface PipelineState {
   isSubmittingFollowup: boolean;
   selectedPosition: number | null;
   editFeedback: string;
-  autoplayStarted: boolean;
 }
 
 export type PipelineEvent =
-  | { event: "pipeline_manifest"; data: { session_id: string; requested_candidates: number; candidate_ids: number[]; run_profile: "demo" | "live" } }
+  | {
+      event: "pipeline_manifest";
+      data: {
+        session_id: string;
+        requested_candidates: number;
+        candidate_ids: number[];
+        run_profile: "demo" | "live";
+        candidate_seed_sequences?: Record<string, string>;
+      };
+    }
   | { event: "stage_status"; data: { stage: StageKey; status: StageStatus; progress: number } }
   | { event: "intent_parsed"; data: { spec: Record<string, unknown> } }
   | { event: "retrieval_progress"; data: { source: "ncbi" | "pubmed" | "clinvar"; status: RetrievalState["status"]; result?: Record<string, unknown> } }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 
 import { postDesign, connectPipelineSocket, postBaseEdit, postFollowup } from "./lib/api";
 import { usePipelineStore } from "./store/usePipelineStore";
@@ -13,6 +13,7 @@ import { ScientificDrawer } from "./components/ScientificDrawer";
 
 const DEFAULT_GOAL =
   "Design a regulatory element that drives BDNF expression in hippocampal neurons for Alzheimer's therapy.";
+const DEFAULT_CANDIDATES = 10;
 
 function makeSessionId(): string {
   if (window.crypto?.randomUUID) {
@@ -26,8 +27,9 @@ export default function App() {
   const dispatch = usePipelineStore((s) => s.dispatch);
   const [apiBase, setApiBase] = useState(state.apiBase);
   const [goal, setGoal] = useState(DEFAULT_GOAL);
-  const [candidateCount, setCandidateCount] = useState(5);
+  const [candidateCount, setCandidateCount] = useState(DEFAULT_CANDIDATES);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [enteredIde, setEnteredIde] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
 
   const activeCandidate = useMemo(() => {
@@ -45,7 +47,7 @@ export default function App() {
   );
 
   async function submitDesign(runProfile: "demo" | "live" = "demo"): Promise<void> {
-    const requestedCandidates = Math.max(1, Math.min(8, candidateCount));
+    const requestedCandidates = Math.max(1, Math.min(10, candidateCount));
     dispatch({ type: "INIT_DESIGN_SUBMIT", apiBase, requestedCandidates });
     const sessionId = makeSessionId();
 
@@ -64,6 +66,7 @@ export default function App() {
         runProfile,
         goal
       });
+      setEnteredIde(true);
 
       if (socketRef.current) socketRef.current.close();
       socketRef.current = connectPipelineSocket({
@@ -80,12 +83,13 @@ export default function App() {
   async function handleBaseEdit(newBase: string): Promise<void> {
     if (!activeCandidate || state.selectedPosition === null || !state.sessionId) return;
     const started = performance.now();
+    const position = state.selectedPosition + (activeCandidate.streamOffset ?? 0);
     try {
       const response = await postBaseEdit({
         apiBase,
         sessionId: state.sessionId,
         candidateId: activeCandidate.id,
-        position: state.selectedPosition,
+        position,
         newBase
       });
       dispatch({
@@ -119,123 +123,174 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (state.autoplayStarted) return;
-    dispatch({ type: "SET_AUTOPLAY_STARTED", value: true });
-    const timer = window.setTimeout(() => {
-      void submitDesign("demo");
-    }, 750);
-    return () => window.clearTimeout(timer);
-  }, [dispatch, state.autoplayStarted]);
-
   useEffect(() => () => socketRef.current?.close(), []);
 
-  return (
-    <main className="app-shell">
-      <header className="hero">
-        <div>
-          <h1>Helix Demo Mode</h1>
-          <p>
-            Design DNA candidates live, rank them in real time, and iterate by directly editing nucleotides.
-          </p>
-        </div>
-        <div className="hero-controls">
+  function renderLanding(): JSX.Element {
+    return (
+      <main className="landing-shell">
+        <motion.section
+          className="landing-card"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45 }}
+        >
+          <h1>Helix</h1>
+          <p className="landing-tagline">From one sentence to ten ranked DNA designs with live structure preview.</p>
           <label>
-            API Base
-            <input
-              value={apiBase}
-              onChange={(event) => setApiBase(event.target.value)}
-            />
+            What should Helix design?
+            <textarea value={goal} onChange={(event) => setGoal(event.target.value)} />
           </label>
-          <div className={`ws-pill ${state.wsStatus}`}>WS: {state.wsStatus}</div>
-        </div>
-      </header>
+          <div className="landing-controls">
+            <label>
+              API Base
+              <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} />
+            </label>
+            <label>
+              Candidate Count
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={candidateCount}
+                onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
+              />
+            </label>
+          </div>
+          <div className="landing-buttons">
+            <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
+              {state.isSubmittingDesign ? "Launching..." : "Launch Helix IDE"}
+            </button>
+            <button className="secondary" onClick={() => void submitDesign("live")} disabled={state.isSubmittingDesign}>
+              Launch Live Mode
+            </button>
+          </div>
+        </motion.section>
+      </main>
+    );
+  }
 
-      <AutoplayRibbon pipelineStatus={state.pipelineStatus} summary={state.laymanSummary} />
+  function renderIde(): JSX.Element {
+    return (
+      <main className="app-shell">
+        <header className="hero">
+          <div>
+            <h1>Helix IDE</h1>
+            <p>Prompt to candidates to folded proteins, with direct nucleotide editing in one workspace.</p>
+          </div>
+          <div className="hero-controls">
+            <label>
+              API Base
+              <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} />
+            </label>
+            <div className={`ws-pill ${state.wsStatus}`}>WS: {state.wsStatus}</div>
+          </div>
+        </header>
 
-      <section className="command-bar">
-        <textarea value={goal} onChange={(event) => setGoal(event.target.value)} />
-        <div className="command-actions">
-          <label>
-            Candidate Count
-            <input
-              type="number"
-              min={1}
-              max={8}
-              value={candidateCount}
-              onChange={(event) => setCandidateCount(Number(event.target.value || 5))}
+        <AutoplayRibbon pipelineStatus={state.pipelineStatus} summary={state.laymanSummary} />
+
+        <section className="ide-hero-grid">
+          <div className="card">
+            <h2>Protein Focus</h2>
+            <ProteinPanel candidate={activeCandidate} />
+          </div>
+          <div className="card">
+            <h2>Live Pipeline</h2>
+            <StageFlow stages={state.stages} />
+          </div>
+        </section>
+
+        <section className="command-bar">
+          <textarea value={goal} onChange={(event) => setGoal(event.target.value)} />
+          <div className="command-actions">
+            <label>
+              Candidate Count
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={candidateCount}
+                onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
+              />
+            </label>
+            <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
+              {state.isSubmittingDesign ? "Starting..." : "Run Silent Demo"}
+            </button>
+            <button onClick={() => void submitDesign("live")} className="secondary" disabled={state.isSubmittingDesign}>
+              Run Live Mode
+            </button>
+          </div>
+        </section>
+
+        <section className="metrics">
+          <div>Session: {state.sessionId || "--"}</div>
+          <div>Requested: {state.requestedCandidates}</div>
+          <div>Ready: {completedCount}</div>
+          <div>Failed: {failedCount}</div>
+        </section>
+
+        <section className="grid-two">
+          <div className="card">
+            <h2>Genome Lanes</h2>
+            <GenomeLanes
+              candidateOrder={state.candidateOrder}
+              candidates={state.candidates}
+              activeCandidateId={state.activeCandidateId}
+              selectedPosition={state.selectedPosition}
+              onSelectCandidate={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
+              onSelectPosition={(position) => dispatch({ type: "SELECT_POSITION", position })}
             />
-          </label>
-          <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
-            {state.isSubmittingDesign ? "Starting..." : "Run Silent Demo"}
-          </button>
-          <button onClick={() => void submitDesign("live")} className="secondary" disabled={state.isSubmittingDesign}>
-            Run Live Mode
-          </button>
-        </div>
-      </section>
-
-      <section className="metrics">
-        <div>Session: {state.sessionId || "--"}</div>
-        <div>Requested: {state.requestedCandidates}</div>
-        <div>Ready: {completedCount}</div>
-        <div>Failed: {failedCount}</div>
-      </section>
-
-      <StageFlow stages={state.stages} />
-
-      <section className="grid-two">
-        <div className="card">
-          <h2>Genome Lanes</h2>
-          <GenomeLanes
-            candidateOrder={state.candidateOrder}
-            candidates={state.candidates}
-            activeCandidateId={state.activeCandidateId}
-            selectedPosition={state.selectedPosition}
-            onSelectCandidate={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
-            onSelectPosition={(position) => dispatch({ type: "SELECT_POSITION", position })}
-          />
-          <div className="edit-row">
-            <span>{state.editFeedback || "Select a base to mutate and observe <2s rescoring."}</span>
-            <div className="base-buttons">
-              {["A", "T", "C", "G"].map((base) => (
-                <button key={base} onClick={() => void handleBaseEdit(base)}>
-                  {base}
-                </button>
-              ))}
+            <div className="edit-row">
+              <span>{state.editFeedback || "Select a base to mutate and observe <2s rescoring."}</span>
+              <div className="base-buttons">
+                {["A", "T", "C", "G"].map((base) => (
+                  <button key={base} onClick={() => void handleBaseEdit(base)}>
+                    {base}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="card">
-          <h2>Candidate Race</h2>
-          <Leaderboard
-            candidates={state.candidates}
-            activeCandidateId={state.activeCandidateId}
-            onSelect={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
-          />
-        </div>
-      </section>
+          <div className="card">
+            <h2>Candidate Race</h2>
+            <Leaderboard
+              candidates={state.candidates}
+              activeCandidateId={state.activeCandidateId}
+              onSelect={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
+            />
+          </div>
+        </section>
 
-      <section className="grid-two">
-        <div className="card">
-          <h2>Protein View</h2>
-          <ProteinPanel candidate={activeCandidate} />
-        </div>
-        <div className="card">
-          <h2>Conversation</h2>
-          <ChatPanel
-            activeCandidate={activeCandidate}
-            chat={state.chat}
-            explanationByCandidate={state.explanationByCandidate}
-            onSubmitFollowup={handleFollowup}
-            isSubmitting={state.isSubmittingFollowup}
-          />
-        </div>
-      </section>
+        <section className="grid-two">
+          <div className="card">
+            <h2>Refine by Prompt</h2>
+            <ChatPanel
+              activeCandidate={activeCandidate}
+              chat={state.chat}
+              explanationByCandidate={state.explanationByCandidate}
+              onSubmitFollowup={handleFollowup}
+              isSubmitting={state.isSubmittingFollowup}
+            />
+          </div>
+          <div className="card">
+            <h2>Scientific Details</h2>
+            <ScientificDrawer open={drawerOpen} onToggle={() => setDrawerOpen((current) => !current)} state={state} />
+          </div>
+        </section>
+      </main>
+    );
+  }
 
-      <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-        <ScientificDrawer open={drawerOpen} onToggle={() => setDrawerOpen((current) => !current)} state={state} />
-      </motion.section>
-    </main>
+  return (
+    <AnimatePresence mode="wait">
+      {enteredIde ? (
+        <motion.div key="ide" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          {renderIde()}
+        </motion.div>
+      ) : (
+        <motion.div key="landing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          {renderLanding()}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
