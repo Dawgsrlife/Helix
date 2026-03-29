@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
-import path from "path";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(__dirname),
+    // Point turbopack to the frontend directory explicitly
+    // This prevents it from using C:\Users\33576\bun.lock as the root
+    root: process.cwd(),
   },
   experimental: {
     workerThreads: false,

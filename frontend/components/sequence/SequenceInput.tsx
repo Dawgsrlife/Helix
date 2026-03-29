@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { normalizeSequence, isValidSequence } from "@/lib/sequenceUtils";
 
 interface SequenceInputProps {
@@ -11,15 +11,15 @@ interface SequenceInputProps {
 
 const EXAMPLES: { name: string; seq: string }[] = [
   {
-    name: "E. coli lacZ",
-    seq: "ATGACCATGATTACGCCAAGCTATTTAGGTGACACTATAGAATACTCAAGCTATGCATCCAACGCGTTGGGAGCTCTCCCATATGGTCGACCTGCAGGCGGCCGCACTAGTGATTACCCTGTTATCCCTACAGCTCTTCTAGGTGCCCAGAGCTTCACCATACATCTCAATCTAAGTCAAATGGACCCTCACTCAACCCCTATCTCCCCCCTAATGCCTTAACTCAAATCTGGACTATTGGCCATTGCATTGCTGATTTGTGATAGCTTTTTTCCCAGGATGCCAGTCTTCTGAAGCAAACTTTTTCAAAATGTCCACTGCACAGGCCAGATGGTAAGTGAAGAAATCAACTCCAGCAGCAGCTACTATGGGATCCGGTTCTTGTCAAGTTCACAGATTTTAGATGCCAGTCGCCCACCAGCCAACCTTTAGCTACAATGGCATTGACAACTCACAACGTGGC",
-  },
-  {
-    name: "BRCA1 region",
+    name: "BRCA1_Human",
     seq: "ATGGATTTATCTGCTCTTCGCGTTGAAGAAGTACAAAATGTCATTAATGCTATGCAGAAAATCTTAGAGTGTCCCATCTGTCTGGAGTTGATCAAGGAACCTGTCTCCACAAAGTGTGACCACATATTTTGCAAATTTTGCATGCTGAAACTTCTCAACCAGAAGAAAGGGCCTTCACAGTGTCCTTTATGTAAGAATGA",
   },
   {
-    name: "T4 phage",
+    name: "E_coli_lacZ",
+    seq: "ATGACCATGATTACGCCAAGCTATTTAGGTGACACTATAGAATACTCAAGCTATGCATCCAACGCGTTGGGAGCTCTCCCATATGGTCGACCTGCAGGCGGCCGCACTAGTGATTACCCTGTTATCCCTACAGCTCTTCTAGGTGCCCAGAGCTTCACCATACATCTCAATCTAAGTCAAATGGACCCTCACTCAACCCCTATCTCCCCCCTAATGCCTTAACTCAAATCTGGACTATTGGCCATTGCATTGCTGATTTGTGATAGCTTTTTTCCCAGGATGCCAGTCTTCTGAAGCAAACTTTTTCAAAATGTCCACTGCACAGGCCAGATGGTAAGTGAAGAAATCAACTCCAGCAGCAGCTACTATGGGATCCGGTTCTTGTCAAGTTCACAGATTTTAGATGCCAGTCGCCCACCAGCCAACCTTTAGCTACAATGGCATTGACAACTCACAACGTGGC",
+  },
+  {
+    name: "T4_Phage",
     seq: "ATGGCTAACGTAATTAAAACCGACAAACCATCTATCGTATTCTTAGACAATGGTTCTTGTCAGTACAAATATGGTATCAAAGAGTATAACAAAGCGGTTTCTGATGCAACTTTAATTTCACCACATGTTAAAGAGTTGAGCAAAGAAACTTTCAAGGCTATCGTTAACGGTCAAGAATACAAATACAAAGATAGTGAAGCTATCATCGATGCTGTTAAGTTAGACGGAAGCATCCGTATTAAATTAAGTTCTGTTAACTTCGATACAGCGAACTATAAATACGATATC",
   },
 ];
@@ -32,202 +32,165 @@ export default function SequenceInput({
   const [input, setInput] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const handleSubmit = () => {
-    const normalized = normalizeSequence(input);
-    if (normalized.length === 0) {
-      setValidationError("Enter a DNA sequence");
+  const normalized = normalizeSequence(input);
+  const charCount = normalized.length;
+  const kbSize = (charCount / 1000).toFixed(2);
+
+  const handleSubmit = useCallback(() => {
+    if (charCount === 0) {
+      setValidationError("Please enter a DNA sequence");
       return;
     }
     if (!isValidSequence(normalized)) {
-      setValidationError("Invalid characters. Use only A, T, C, G, N.");
+      setValidationError("Sequence contains invalid characters. Use only A, T, C, G, N.");
       return;
     }
-    if (normalized.length < 10) {
+    if (charCount < 10) {
       setValidationError("Sequence must be at least 10 nucleotides");
       return;
     }
     setValidationError(null);
     onSubmit(normalized);
-  };
+  }, [charCount, normalized, onSubmit]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") handleSubmit();
+    },
+    [handleSubmit]
+  );
 
   const loadExample = (seq: string) => {
     setInput(seq);
     setValidationError(null);
   };
 
-  const bpCount = normalizeSequence(input).length;
-  const displayError = validationError ?? error;
-
   return (
-    <div
-      className="w-full flex flex-col items-center justify-center"
-      style={{ maxWidth: "560px" }}
-    >
-      {/* Label */}
-      <span
-        className="self-start uppercase tracking-wider"
-        style={{
-          fontSize: "11px",
-          color: "#5bb5a2",
-          fontWeight: 600,
-          letterSpacing: "0.05em",
-          marginBottom: "8px",
-        }}
-      >
-        New analysis
-      </span>
-
-      {/* Heading */}
-      <h1
-        className="self-start"
-        style={{
-          fontSize: "28px",
-          fontWeight: 500,
-          color: "#e5e1e4",
-          marginBottom: "8px",
-          fontFamily: "Inter, system-ui, sans-serif",
-        }}
-      >
-        Paste a sequence
-      </h1>
-
-      {/* Subtext */}
-      <p
-        className="self-start"
-        style={{
-          fontSize: "14px",
-          color: "#6b6b6b",
-          marginBottom: "24px",
-          lineHeight: "1.5",
-        }}
-      >
-        ATCG format. The model handles annotation, scoring, and structure prediction.
-      </p>
-
-      {/* Textarea */}
-      <textarea
-        value={input}
-        onChange={(e) => {
-          setInput(e.target.value);
-          setValidationError(null);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-            e.preventDefault();
-            handleSubmit();
-          }
-        }}
-        placeholder="ATCCGTAC..."
-        spellCheck={false}
-        className="w-full resize-none outline-none font-mono"
-        style={{
-          height: "160px",
-          padding: "16px",
-          backgroundColor: "#161618",
-          border: "1px solid #2a2a2c",
-          borderRadius: "6px",
-          color: "#e5e1e4",
-          fontSize: "13px",
-          lineHeight: "1.6",
-          transition: "border-color 0.15s ease",
-        }}
-        onFocus={(e) => {
-          e.currentTarget.style.borderColor = "#5bb5a2";
-        }}
-        onBlur={(e) => {
-          e.currentTarget.style.borderColor = "#2a2a2c";
-        }}
-      />
-
-      {/* Meta row: bp count + error */}
-      <div className="w-full flex justify-between items-center mt-2" style={{ minHeight: "20px" }}>
-        {displayError ? (
-          <span style={{ fontSize: "12px", color: "#d47a7a" }}>{displayError}</span>
-        ) : (
-          <span style={{ fontSize: "11px", color: "#4a4a4a", fontFamily: "var(--font-mono, monospace)" }}>
-            {bpCount > 0 ? `${bpCount} bp` : ""}
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-2 h-2 rounded-full" style={{ background: "#93edd9" }} />
+          <span
+            className="uppercase tracking-[0.3em]"
+            style={{
+              fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+              fontSize: "10px",
+              color: "#93edd9",
+            }}
+          >
+            New Analysis
           </span>
-        )}
-        <span style={{ fontSize: "11px", color: "#3a3a3c" }}>
-          {bpCount > 0 ? `GC ${(gcQuick(input) * 100).toFixed(0)}%` : ""}
-        </span>
+        </div>
+        <h1
+          className="italic text-4xl md:text-5xl mb-4"
+          style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif", color: "#fffbfe" }}
+        >
+          Paste a sequence
+        </h1>
+        <p className="text-sm leading-relaxed max-w-lg" style={{ color: "#adaaad" }}>
+          Input genomic data or protein strings for high-fidelity structural
+          synthesis and alignment.
+        </p>
       </div>
 
-      {/* Submit button */}
-      <button
-        onClick={handleSubmit}
-        disabled={isLoading || input.length === 0}
-        className="self-start mt-4 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
-        style={{
-          padding: "10px 24px",
-          backgroundColor: "#e5e1e4",
-          color: "#0c0c0e",
-          fontSize: "14px",
-          fontWeight: 500,
-          borderRadius: "6px",
-          border: "none",
-          transition: "opacity 0.15s ease",
-        }}
-        onMouseEnter={(e) => {
-          if (!isLoading) (e.currentTarget as HTMLElement).style.opacity = "0.85";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.opacity = "1";
-        }}
-      >
-        {isLoading ? "Analyzing..." : "Analyze"}
-      </button>
-
-      {/* Examples */}
-      <div className="w-full mt-12">
-        <div
-          className="flex items-center gap-4"
-          style={{ borderTop: "1px solid #1e1e20", paddingTop: "16px" }}
-        >
+      {/* Textarea */}
+      <div className="mb-4">
+        <textarea
+          value={input}
+          onChange={(e) => {
+            setInput(e.target.value);
+            setValidationError(null);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={">ID_HELI_X24\nATGCGACTAGCTAGCTAGCTAG..."}
+          spellCheck={false}
+          className="w-full h-48 p-5 text-sm resize-none outline-none transition-colors font-mono"
+          style={{
+            fontFamily: "var(--font-mono), monospace",
+            background: "#000000",
+            color: "#fffbfe",
+            border: "0.5px solid rgba(255,255,255,0.1)",
+          }}
+        />
+        <div className="flex justify-end gap-4 mt-2">
           <span
-            className="uppercase tracking-wider shrink-0"
-            style={{ fontSize: "10px", color: "#4a4a4a", fontWeight: 600, letterSpacing: "0.05em" }}
+            className="uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
           >
-            Try examples
+            {charCount} characters
           </span>
-          {EXAMPLES.map((ex) => (
+          <span
+            className="uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+          >
+            {kbSize}kB
+          </span>
+        </div>
+      </div>
+
+      {/* Error */}
+      {(validationError ?? error) && (
+        <p className="text-sm mb-4" style={{ color: "#ff716c" }}>
+          {validationError ?? error}
+        </p>
+      )}
+
+      {/* Examples + Submit */}
+      <div className="flex items-center justify-between mb-12">
+        <div className="flex items-center gap-4">
+          <span
+            className="uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+          >
+            Examples:
+          </span>
+          {EXAMPLES.map(({ name, seq }) => (
             <button
-              key={ex.name}
-              onClick={() => loadExample(ex.seq)}
-              className="cursor-pointer"
+              key={name}
+              onClick={() => loadExample(seq)}
+              className="transition-colors hover:text-[#93edd9]"
               style={{
-                fontSize: "13px",
-                color: "#6b6b6b",
-                background: "none",
-                border: "none",
-                padding: 0,
-                textDecoration: "none",
-                transition: "color 0.15s ease",
-              }}
-              onMouseEnter={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#8a8a8a";
-                (e.currentTarget as HTMLElement).style.textDecoration = "underline";
-              }}
-              onMouseLeave={(e) => {
-                (e.currentTarget as HTMLElement).style.color = "#6b6b6b";
-                (e.currentTarget as HTMLElement).style.textDecoration = "none";
+                fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+                fontSize: "12px",
+                color: "#93edd9",
+                textDecoration: "underline",
+                textUnderlineOffset: "3px",
               }}
             >
-              {ex.name}
+              {name}
             </button>
           ))}
+        </div>
+        <button
+          onClick={handleSubmit}
+          disabled={isLoading || charCount === 0}
+          className="px-8 py-3 uppercase tracking-[0.2em] text-xs transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90"
+          style={{
+            fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+            background: "#fffbfe",
+            color: "#0e0e10",
+          }}
+        >
+          {isLoading ? "Analyzing..." : "Analyze"}
+        </button>
+      </div>
+
+      {/* Status indicator */}
+      <div className="flex justify-end">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-[6px] h-[6px] rounded-full"
+            style={{ background: "#93edd9", animation: "pulse-soft 2s ease-in-out infinite" }}
+          />
+          <span
+            className="uppercase tracking-widest"
+            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+          >
+            Helix Node: Active
+          </span>
         </div>
       </div>
     </div>
   );
-}
-
-function gcQuick(raw: string): number {
-  const seq = raw.replace(/[^ATCGatcg]/g, "").toUpperCase();
-  if (seq.length === 0) return 0;
-  let gc = 0;
-  for (let i = 0; i < seq.length; i++) {
-    if (seq[i] === "G" || seq[i] === "C") gc++;
-  }
-  return gc / seq.length;
 }

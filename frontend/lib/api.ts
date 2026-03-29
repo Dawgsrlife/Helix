@@ -24,7 +24,9 @@
 
 import type { AnalysisResult, MutationEffect } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// When NEXT_PUBLIC_API_URL is not set, use local Next.js API routes (same origin).
+// To connect to the real backend on the GX10: set NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ---------------------------------------------------------------------------
 // Response mappers (API shape -> domain type)
