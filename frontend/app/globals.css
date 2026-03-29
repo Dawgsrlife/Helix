@@ -173,6 +173,15 @@ body {
   color: var(--text-primary);
 }
 
+.light ::selection {
+  background: oklch(0.52 0.14 175 / 0.20);
+  color: var(--text-primary);
+}
+
+/* Light mode scrollbar */
+.light ::-webkit-scrollbar-thumb { background: oklch(0 0 0 / 0.10); }
+.light ::-webkit-scrollbar-thumb:hover { background: oklch(0 0 0 / 0.18); }
+
 /* ========================================
    SCROLLBAR (thin, invisible-ish)
    ======================================== */

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MutationEffect, Nucleotide } from "@/types";
+import { useHelixStore } from "@/lib/store";
 
 interface MutationPanelProps {
   sequence: string;
@@ -38,6 +39,15 @@ export default function MutationPanel({
 }: MutationPanelProps) {
   const [position, setPosition] = useState("");
   const [alternate, setAlternate] = useState<Nucleotide | null>(null);
+  const selectedPosition = useHelixStore((s) => s.selectedPosition);
+
+  // Auto-fill position when user clicks a base in the sequence
+  useEffect(() => {
+    if (selectedPosition !== null) {
+      setPosition(String(selectedPosition));
+      setAlternate(null);
+    }
+  }, [selectedPosition]);
 
   const posNum = parseInt(position, 10);
   const isValidPosition =

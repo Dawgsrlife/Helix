@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useMemo } from "react";
-import gsap from "gsap";
+import { useMemo } from "react";
 import type { Base, SequenceRegion } from "@/types";
 import BaseToken from "./BaseToken";
 
@@ -21,32 +20,6 @@ export default function SequenceViewer({
   highlightedPosition,
   onBaseClick,
 }: SequenceViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hasAnimated = useRef(false);
-
-  // GSAP stagger reveal: bases fade in left-to-right on first load
-  useEffect(() => {
-    if (!containerRef.current || hasAnimated.current || bases.length === 0)
-      return;
-    hasAnimated.current = true;
-
-    const tokens = containerRef.current.querySelectorAll("[data-pos]");
-    const visible = Array.from(tokens).slice(0, BASES_PER_LINE * 4);
-
-    gsap.set(visible, { opacity: 0, y: 3 });
-    gsap.to(visible, {
-      opacity: 1,
-      y: 0,
-      duration: 0.25,
-      stagger: 0.0015,
-      ease: "power2.out",
-    });
-
-    return () => {
-      gsap.killTweensOf(visible);
-    };
-  }, [bases.length]);
-
   // Pre-compute lines for rendering
   const lines = useMemo(() => {
     const result: Base[][] = [];
@@ -66,7 +39,6 @@ export default function SequenceViewer({
 
   return (
     <div
-      ref={containerRef}
       className="font-mono overflow-auto"
       style={{ fontSize: "13px", lineHeight: "22px" }}
     >
@@ -82,7 +54,7 @@ export default function SequenceViewer({
               borderRadius: "2px",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27, 27, 29, 0.5)";
+              (e.currentTarget as HTMLElement).style.backgroundColor = "color-mix(in oklch, var(--surface-raised), transparent 50%)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";

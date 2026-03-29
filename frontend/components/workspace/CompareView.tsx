@@ -71,13 +71,13 @@ export default function CompareView() {
         {/* ── SPLIT-PANE SEQUENCE DIFF ── */}
         <div className="rounded-xl overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
           {/* Candidate headers */}
-          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
             <div className="px-5 py-3 flex items-center gap-3">
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "var(--accent)" }}>#1</span>
+              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded" style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>#1</span>
               <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candA.id.toString().padStart(3, "0")}</span>
               <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candA.overall.toFixed(1)}</span>
             </div>
-            <div className="flex items-center justify-center" style={{ borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="flex items-center justify-center" style={{ borderLeft: "1px solid var(--ghost-border)" }}>
               <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--text-muted)" }}>Diff</span>
             </div>
             <div className="px-5 py-3 flex items-center gap-3">
@@ -136,7 +136,7 @@ export default function CompareView() {
                       <span key={i} className="inline-block w-[1ch] text-center"
                         style={{
                           color: BC[displayBase] ?? "var(--text-muted)",
-                          background: isDiff ? "rgba(91,181,162,0.15)" : "transparent",
+                          background: isDiff ? "color-mix(in oklch, var(--accent), transparent 85%)" : "transparent",
                           borderRadius: isDiff ? "2px" : "0",
                         }}>
                         {displayBase}
@@ -149,7 +149,7 @@ export default function CompareView() {
           </div>
 
           {/* Annotation track comparison */}
-          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderTop: "1px solid var(--ghost-border)" }}>
             <div className="px-5 py-2">
               <div className="flex gap-px h-2 rounded overflow-hidden">
                 {regions.slice(0, 4).map((r, i) => (
@@ -159,7 +159,7 @@ export default function CompareView() {
                 ))}
               </div>
             </div>
-            <div style={{ borderLeft: "1px solid rgba(255,255,255,0.04)" }} />
+            <div style={{ borderLeft: "1px solid var(--ghost-border)" }} />
             <div className="px-5 py-2">
               <div className="flex gap-px h-2 rounded overflow-hidden">
                 {regions.slice(0, 4).map((r, i) => (
@@ -191,7 +191,7 @@ export default function CompareView() {
                     <span className="text-xs w-20 shrink-0" style={{ color: "var(--text-secondary)" }}>{m.label}</span>
                     <div className="flex-1 flex items-center gap-2">
                       <span className="text-xs font-mono w-10" style={{ color: m.color }}>{(m.a * 100).toFixed(0)}%</span>
-                      <div className="flex-1 h-1 rounded-full relative overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+                      <div className="flex-1 h-1 rounded-full relative overflow-hidden" style={{ background: "var(--ghost-border)" }}>
                         <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.a * 100}%`, background: m.color, opacity: 0.5 }} />
                         <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.b * 100}%`, background: m.color, opacity: 0.25, borderRight: `1px solid ${m.color}` }} />
                       </div>
@@ -210,7 +210,7 @@ export default function CompareView() {
               })}
             </div>
             {/* Overall */}
-            <div className="mt-4 pt-4 flex items-center justify-between" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="mt-4 pt-4 flex items-center justify-between" style={{ borderTop: "1px solid var(--ghost-border)" }}>
               <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Overall</span>
               <div className="flex items-center gap-4">
                 <span className="text-xl font-bold font-mono" style={{ color: "var(--accent)" }}>{candA.overall.toFixed(1)}</span>
@@ -236,7 +236,7 @@ export default function CompareView() {
                     <span className="text-sm font-mono font-semibold" style={{ color: BC[d.baseB] ?? "var(--text-muted)" }}>{d.baseB}</span>
                     {region && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                        background: region.type === "exon" || region.type === "orf" ? "rgba(91,181,162,0.08)" : "rgba(255,255,255,0.04)",
+                        background: region.type === "exon" || region.type === "orf" ? "rgba(91,181,162,0.08)" : "var(--ghost-border)",
                         color: region.type === "exon" || region.type === "orf" ? "var(--accent)" : "var(--text-muted)",
                       }}>{region.type}</span>
                     )}

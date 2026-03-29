@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { analyzeSequence } from "@/lib/api";
+import { analyzeSequence, submitDesign } from "@/lib/api";
 import { useHelixStore } from "@/lib/store";
 
 const MIN_PIPELINE_DURATION = 6200; // ms — let the animation play out
@@ -33,6 +33,15 @@ export function useSequenceAnalysis() {
         }
 
         setAnalysisResult(result);
+
+        // Create a backend session so Helio agent chat works
+        try {
+          const { sessionId } = await submitDesign(`Analyze sequence: ${sequence.slice(0, 50)}...`);
+          useHelixStore.getState().setSessionId(sessionId);
+        } catch {
+          // Session creation is optional — Helio falls back to local responses
+        }
+
         return result;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Analysis failed";
