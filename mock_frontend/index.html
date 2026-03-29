@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Helix Mock Frontend - Live Pipeline</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <h1>Helix Mock Frontend</h1>
+      <div class="topbar-controls">
+        <label>
+          API Base
+          <input id="apiBaseInput" value="http://localhost:8000" />
+        </label>
+        <div id="connectionBadge" class="badge disconnected">WS: disconnected</div>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Design Submission</h2>
+        <p class="muted">
+          Submit a design goal to <code>POST /api/design</code>, then stream pipeline events over WebSocket.
+        </p>
+        <label class="block-label">
+          Design Goal
+          <textarea id="goalInput" rows="3">Design a regulatory element that drives BDNF expression in hippocampal neurons for Alzheimer's therapy</textarea>
+        </label>
+        <div class="actions-row">
+          <button id="submitDesignBtn">Run Live Pipeline</button>
+          <button id="resetStateBtn" class="secondary">Reset Local UI State</button>
+        </div>
+        <div id="designMeta" class="meta-grid"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Genome Browser (WOW 1)</h2>
+        <p class="muted">Bases append live from <code>generation_token</code> events. Click a base to edit it.</p>
+        <div class="genome-controls">
+          <div>
+            <span class="label">Active Candidate</span>
+            <select id="activeCandidateSelect"></select>
+          </div>
+          <div id="sequenceStats" class="chip">Length: 0</div>
+        </div>
+        <div id="sequenceViewport" class="sequence-viewport"></div>
+        <div id="baseEditPanel" class="base-edit-panel hidden">
+          <div id="selectedBaseInfo"></div>
+          <div class="base-buttons">
+            <button class="base-btn" data-base="A">A</button>
+            <button class="base-btn" data-base="T">T</button>
+            <button class="base-btn" data-base="C">C</button>
+            <button class="base-btn" data-base="G">G</button>
+          </div>
+          <div id="editResult" class="muted"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Candidate Leaderboard</h2>
+        <p class="muted">Cards add/update on <code>candidate_scored</code> and <code>pipeline_complete</code>.</p>
+        <div id="leaderboard" class="leaderboard"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Intent + Retrieval</h2>
+        <div>
+          <h3>Intent Spec</h3>
+          <pre id="intentSpec" class="code-block">{}</pre>
+        </div>
+        <div>
+          <h3>Retrieval Progress</h3>
+          <div id="retrievalGrid" class="retrieval-grid"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Chat Follow-up + Explanation (WOW 2 Loop)</h2>
+        <p class="muted">Follow-ups call <code>POST /api/edit/followup</code> and stream partial rerun events over the same socket.</p>
+        <div id="chatHistory" class="chat-history"></div>
+        <div class="chat-input-row">
+          <input id="followupInput" placeholder="Make this more tissue-specific" />
+          <button id="sendFollowupBtn">Send</button>
+        </div>
+        <div>
+          <h3>Explanation Stream</h3>
+          <div id="explanationText" class="explanation"></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Structure + Event Log</h2>
+        <div id="structureInfo" class="structure-info muted">No structure yet.</div>
+        <h3>Event Log</h3>
+        <div id="eventLog" class="event-log"></div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
