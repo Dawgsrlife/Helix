@@ -1,12 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { Dna, FlaskConical, BarChart3, Search, Home } from "lucide-react";
 import { useHelixStore } from "@/lib/store";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
 import { useMutationSim } from "@/hooks/useMutationSim";
-import AppShell from "@/components/layout/AppShell";
 import SequenceInput from "@/components/sequence/SequenceInput";
 import SequenceViewer from "@/components/sequence/SequenceViewer";
 import AnnotationTrack from "@/components/annotation/AnnotationTrack";
@@ -16,21 +17,19 @@ import MutationPanel from "@/components/mutation/MutationPanel";
 import MutationDiff from "@/components/mutation/MutationDiff";
 import StructureControls from "@/components/structure/StructureControls";
 
-// Dynamic import for Three.js to avoid SSR issues and reduce initial bundle
 const ProteinViewer = dynamic(
   () => import("@/components/structure/ProteinViewer"),
   { ssr: false }
 );
 
-const fadeUp = {
-  initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -8 },
-  transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] as [number, number, number, number] },
-};
+const SIDEBAR_ITEMS = [
+  { icon: Dna, label: "Sequencing", active: true },
+  { icon: Search, label: "Proteomics", active: false },
+  { icon: FlaskConical, label: "Synthesis", active: false },
+  { icon: BarChart3, label: "Analysis", active: false },
+];
 
 export default function AnalyzePage() {
-  // Zustand selectors
   const rawSequence = useHelixStore((s) => s.rawSequence);
   const bases = useHelixStore((s) => s.bases);
   const regions = useHelixStore((s) => s.regions);
@@ -48,17 +47,20 @@ export default function AnalyzePage() {
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { simulate } = useMutationSim();
 
+  // Auto-load protein structure when analysis completes
+  useEffect(() => {
+    if (analysisResult?.predictedProteins?.[0]?.pdbData && !activePdb) {
+      setActivePdb(analysisResult.predictedProteins[0].pdbData);
+    }
+  }, [analysisResult, activePdb, setActivePdb]);
+
   const handleSequenceSubmit = useCallback(
-    (sequence: string) => {
-      analyze(sequence);
-    },
+    (sequence: string) => { analyze(sequence); },
     [analyze]
   );
 
   const handleBaseClick = useCallback(
-    (position: number) => {
-      setSelectedPosition(position);
-    },
+    (position: number) => { setSelectedPosition(position); },
     [setSelectedPosition]
   );
 
@@ -72,183 +74,212 @@ export default function AnalyzePage() {
   const showResults = analysisResult !== null;
 
   return (
-    <AppShell sequenceName={showResults ? "analysis_session" : undefined}>
-      <AnimatePresence mode="wait">
-        {!showResults ? (
-          <motion.div
-            key="input"
-            className="flex-1 flex items-center justify-center"
-            style={{ background: "var(--surface-void)" }}
-            {...fadeUp}
+    <div className="h-screen flex overflow-hidden" style={{ background: "#0e0e10", color: "#fffbfe" }}>
+      {/* Sidebar */}
+      <aside
+        className="w-14 shrink-0 flex flex-col items-center py-4 gap-1"
+        style={{ background: "#0a0a0c", borderRight: "0.5px solid rgba(255,255,255,0.06)" }}
+      >
+        <Link
+          href="/"
+          className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 cursor-pointer transition-colors hover:bg-white/5"
+          title="Home"
+        >
+          <Home size={18} style={{ color: "#93edd9" }} />
+        </Link>
+
+        {SIDEBAR_ITEMS.map(({ icon: Icon, label, active }) => (
+          <button
+            key={label}
+            title={label}
+            className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
+            style={{
+              background: active ? "rgba(147, 237, 217, 0.1)" : "transparent",
+              color: active ? "#93edd9" : "#48474a",
+            }}
+            onMouseEnter={(e) => {
+              if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
+            }}
+            onMouseLeave={(e) => {
+              if (!active) e.currentTarget.style.background = "transparent";
+            }}
           >
-            <SequenceInput
-              onSubmit={handleSequenceSubmit}
-              isLoading={isLoading}
-              error={error}
-            />
-          </motion.div>
-        ) : (
-          <motion.div
-            key="workspace"
-            className="flex-1 flex flex-col overflow-hidden"
-            style={{ background: "var(--surface-void)" }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
-          >
-            {/* Top: Annotation Track */}
-            <div
-              className="px-5 py-2.5"
-              style={{ background: "var(--surface-base)" }}
+            <Icon size={18} />
+          </button>
+        ))}
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Top bar */}
+        <header
+          className="h-12 shrink-0 flex items-center justify-between px-5"
+          style={{ background: "#0e0e10", borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center gap-3">
+            <span
+              className="text-xs font-bold tracking-[-0.04em] uppercase"
+              style={{ fontFamily: "var(--font-headline), serif", fontStyle: "italic", color: "#93edd9" }}
             >
-              <AnnotationTrack
-                regions={regions}
-                sequenceLength={rawSequence.length}
+              Helix
+            </span>
+            {showResults && (
+              <>
+                <span style={{ color: "#48474a" }}>/</span>
+                <span className="text-xs font-mono" style={{ color: "#adaaad" }}>
+                  Sequence Explorer
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono" style={{ color: "#48474a" }}>Evo 2 40B</span>
+            <div
+              className="w-[6px] h-[6px] rounded-full"
+              style={{ background: "#93edd9", animation: "pulse-soft 2s ease-in-out infinite" }}
+            />
+          </div>
+        </header>
+
+        {/* Content area */}
+        <AnimatePresence mode="wait">
+          {!showResults ? (
+            <motion.div
+              key="input"
+              className="flex-1 flex items-center justify-center overflow-auto py-12 px-6"
+              style={{ background: "#0e0e10" }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SequenceInput
+                onSubmit={handleSequenceSubmit}
+                isLoading={isLoading}
+                error={error}
               />
-              <AnnotationLegend regions={regions} />
-            </div>
-
-            {/* Middle: Sequence Viewer + Right Sidebar */}
-            <div className="flex-1 flex overflow-hidden">
-              {/* Left: Sequence + Likelihood */}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Sequence viewer */}
-                <div
-                  className="flex-1 overflow-auto px-5 py-4"
-                  style={{ background: "var(--surface-void)" }}
-                >
-                  <SequenceViewer
-                    bases={bases}
-                    regions={regions}
-                    highlightedPosition={selectedPosition ?? undefined}
-                    onBaseClick={handleBaseClick}
-                  />
-                </div>
-
-                {/* Likelihood graph */}
-                <div
-                  className="h-44 px-5 py-3"
-                  style={{ background: "var(--surface-base)" }}
-                >
-                  <LikelihoodGraph
-                    scores={scores}
-                    highlightedPosition={selectedPosition ?? undefined}
-                    onPositionHover={setSelectedPosition}
-                  />
-                </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="workspace"
+              className="flex-1 flex flex-col overflow-hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* Annotation track */}
+              <div className="px-5 py-2 shrink-0" style={{ background: "#131316" }}>
+                <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
+                <AnnotationLegend regions={regions} />
               </div>
 
-              {/* Right sidebar */}
-              <div
-                className="w-[360px] shrink-0 flex flex-col overflow-hidden"
-                style={{ background: "var(--surface-raised)" }}
-              >
-                {/* Mutation panel */}
-                <div className="p-5">
-                  <MutationPanel
-                    sequence={rawSequence}
-                    onMutationSubmit={handleMutationSubmit}
-                    mutationEffect={mutationEffect ?? undefined}
-                    isLoading={mutationLoading}
-                  />
-                  {mutationEffect && (
-                    <div className="mt-4">
-                      <MutationDiff effect={mutationEffect} />
-                    </div>
-                  )}
+              {/* Main workspace: sequence + sidebar */}
+              <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Left: Sequence + Likelihood */}
+                <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                  <div className="flex-1 overflow-auto px-5 py-4" style={{ background: "#0e0e10" }}>
+                    <SequenceViewer
+                      bases={bases}
+                      regions={regions}
+                      highlightedPosition={selectedPosition ?? undefined}
+                      onBaseClick={handleBaseClick}
+                    />
+                  </div>
+                  <div className="h-40 shrink-0 px-5 py-3" style={{ background: "#131316" }}>
+                    <LikelihoodGraph
+                      scores={scores}
+                      highlightedPosition={selectedPosition ?? undefined}
+                      onPositionHover={setSelectedPosition}
+                    />
+                  </div>
                 </div>
 
-                {/* Divider via tonal shift */}
+                {/* Right sidebar panel */}
                 <div
-                  className="h-px mx-5"
-                  style={{ background: "var(--surface-overlay)", opacity: 0.5 }}
-                />
-
-                {/* Protein structure viewer */}
-                <div className="flex-1 flex flex-col p-5 min-h-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <span
-                      className="text-[11px] font-medium uppercase tracking-[0.08em]"
-                      style={{ color: "var(--text-muted)" }}
-                    >
-                      Structure
-                    </span>
-                    {analysisResult.predictedProteins.length > 0 && (
-                      <span
-                        className="text-[11px] font-mono"
-                        style={{ color: "var(--text-faint)" }}
-                      >
-                        {analysisResult.predictedProteins.length} region
-                        {analysisResult.predictedProteins.length !== 1
-                          ? "s"
-                          : ""}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Protein region buttons */}
-                  {analysisResult.predictedProteins.length > 0 && (
-                    <div className="flex gap-1.5 mb-3 flex-wrap">
-                      {analysisResult.predictedProteins.map((protein, i) => (
-                        <button
-                          key={i}
-                          onClick={() =>
-                            protein.pdbData && setActivePdb(protein.pdbData)
-                          }
-                          className="px-2.5 py-1 text-[11px] rounded-md font-mono transition-all"
-                          style={{
-                            background:
-                              activePdb === protein.pdbData
-                                ? "var(--surface-overlay)"
-                                : "var(--surface-elevated)",
-                            color:
-                              activePdb === protein.pdbData
-                                ? "var(--accent)"
-                                : "var(--text-muted)",
-                          }}
-                        >
-                          {protein.regionStart}-{protein.regionEnd}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 3D viewer */}
-                  <div
-                    className="flex-1 rounded-lg overflow-hidden min-h-[240px]"
-                    style={{ background: "var(--surface-base)" }}
-                  >
-                    {activePdb ? (
-                      <ProteinViewer
-                        pdbData={activePdb}
-                        highlightResidues={highlightResidues}
-                      />
-                    ) : (
-                      <div
-                        className="flex items-center justify-center h-full"
-                        style={{ color: "var(--text-faint)", fontSize: "12px" }}
-                      >
-                        {analysisResult.predictedProteins.length > 0
-                          ? "Select a region above"
-                          : "No protein regions predicted"}
+                  className="w-[340px] shrink-0 flex flex-col overflow-y-auto"
+                  style={{ background: "#19191c", borderLeft: "0.5px solid rgba(255,255,255,0.06)" }}
+                >
+                  {/* Mutation panel */}
+                  <div className="p-5">
+                    <MutationPanel
+                      sequence={rawSequence}
+                      onMutationSubmit={handleMutationSubmit}
+                      mutationEffect={mutationEffect ?? undefined}
+                      isLoading={mutationLoading}
+                    />
+                    {mutationEffect && (
+                      <div className="mt-4">
+                        <MutationDiff effect={mutationEffect} />
                       </div>
                     )}
                   </div>
 
-                  <StructureControls
-                    onReset={() => setHighlightResidues([])}
-                    onHighlight={() =>
-                      selectedPosition !== null
-                        ? setHighlightResidues([selectedPosition])
-                        : undefined
-                    }
-                  />
+                  {/* Divider */}
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.06)" }} />
+
+                  {/* Structure viewer */}
+                  <div className="p-5 flex-1 flex flex-col min-h-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <span
+                        className="text-[11px] font-medium uppercase tracking-[0.08em]"
+                        style={{ color: "#6b6b6b" }}
+                      >
+                        Structure
+                      </span>
+                      {analysisResult.predictedProteins.length > 0 && (
+                        <span className="text-[11px] font-mono" style={{ color: "#48474a" }}>
+                          {analysisResult.predictedProteins.length} region
+                          {analysisResult.predictedProteins.length !== 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
+
+                    {analysisResult.predictedProteins.length > 0 && (
+                      <div className="flex gap-1.5 mb-3 flex-wrap">
+                        {analysisResult.predictedProteins.map((protein, i) => (
+                          <button
+                            key={i}
+                            onClick={() => protein.pdbData && setActivePdb(protein.pdbData)}
+                            className="px-2.5 py-1 text-[11px] rounded font-mono cursor-pointer transition-all"
+                            style={{
+                              background: activePdb === protein.pdbData ? "#262529" : "#1f1f22",
+                              color: activePdb === protein.pdbData ? "#93edd9" : "#6b6b6b",
+                            }}
+                          >
+                            {protein.regionStart}-{protein.regionEnd}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    <div
+                      className="flex-1 rounded overflow-hidden min-h-[200px]"
+                      style={{ background: "#0e0e10" }}
+                    >
+                      {activePdb ? (
+                        <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} />
+                      ) : (
+                        <div className="flex items-center justify-center h-full" style={{ color: "#48474a", fontSize: "12px" }}>
+                          No protein data available
+                        </div>
+                      )}
+                    </div>
+
+                    <StructureControls
+                      onReset={() => setHighlightResidues([])}
+                      onHighlight={() =>
+                        selectedPosition !== null
+                          ? setHighlightResidues([selectedPosition])
+                          : undefined
+                      }
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </AppShell>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }

@@ -64,13 +64,50 @@ export default function Home() {
 
       {/* Hero */}
       <section className="relative min-h-screen flex flex-col items-center justify-center pt-32 pb-20 px-6 overflow-hidden">
-        {/* Background glow */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
+        {/* DNA Helix background */}
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          {/* Central glow */}
           <div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full"
-            style={{ background: "radial-gradient(circle, rgba(147,237,217,0.08) 0%, transparent 70%)" }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(147,237,217,0.12) 0%, rgba(147,237,217,0.03) 40%, transparent 70%)" }}
           />
-          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, #0e0e10, transparent 30%, transparent 70%, #0e0e10)" }} />
+          {/* DNA strand visualization */}
+          <svg
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-20"
+            width="600"
+            height="800"
+            viewBox="0 0 600 800"
+            fill="none"
+          >
+            {Array.from({ length: 20 }, (_, i) => {
+              const y = i * 40 + 20;
+              const x1 = 300 + Math.sin(i * 0.6) * 120;
+              const x2 = 300 - Math.sin(i * 0.6) * 120;
+              return (
+                <g key={i}>
+                  <circle cx={x1} cy={y} r={4} fill="#93edd9" opacity={0.6 + Math.sin(i * 0.3) * 0.3} />
+                  <circle cx={x2} cy={y} r={4} fill="#93edd9" opacity={0.6 - Math.sin(i * 0.3) * 0.3} />
+                  <line x1={x1} y1={y} x2={x2} y2={y} stroke="#93edd9" strokeWidth={0.5} opacity={0.15} />
+                  {i < 19 && (
+                    <>
+                      <line
+                        x1={x1} y1={y}
+                        x2={300 + Math.sin((i + 1) * 0.6) * 120} y2={y + 40}
+                        stroke="#93edd9" strokeWidth={1} opacity={0.2}
+                      />
+                      <line
+                        x1={x2} y1={y}
+                        x2={300 - Math.sin((i + 1) * 0.6) * 120} y2={y + 40}
+                        stroke="#93edd9" strokeWidth={1} opacity={0.2}
+                      />
+                    </>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
+          {/* Edge fade */}
+          <div className="absolute inset-0" style={{ background: "linear-gradient(to bottom, #0e0e10 5%, transparent 25%, transparent 75%, #0e0e10 95%)" }} />
         </div>
 
         <div className="relative z-10 text-center max-w-5xl animate-[fade-in-up_0.8s_ease-out_both]">
