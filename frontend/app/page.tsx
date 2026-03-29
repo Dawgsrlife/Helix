@@ -173,36 +173,14 @@ export default function Home() {
       {/* ═══ SCENE 3: SCORING CONSOLE ═══ */}
       <section className="scene-score min-h-screen flex items-center justify-center px-6 md:px-16"
         style={{ background: "var(--surface-base)" }}>
-        <div className="max-w-4xl mx-auto w-full">
-          <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-6 text-center" style={{ color: "var(--accent)" }}>
+        <div className="max-w-5xl mx-auto w-full text-center">
+          <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-10" style={{ color: "var(--accent)" }}>
             Multi-dimensional scoring
           </p>
-          <div className="score-console opacity-0 rounded-2xl overflow-hidden"
-            style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <div className="flex items-center gap-3">
-                <span className="text-[15px] font-semibold">BDNF_reg_v4</span>
-                <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Candidate #001</span>
-              </div>
-              <span className="text-sm font-mono font-semibold" style={{ color: "var(--accent)" }}>94.2</span>
-            </div>
-            {[
-              { cls: "score-row-0", name: "Functional plausibility", val: "94%", delta: "+2.1", color: "var(--accent)", conf: "High", w: "94%" },
-              { cls: "score-row-1", name: "Tissue specificity", val: "82%", delta: "+0.8", color: "var(--base-c)", conf: "Moderate", w: "82%" },
-              { cls: "score-row-2", name: "Off-target risk", val: "0.04%", delta: "-0.01", color: "var(--base-t)", conf: "Low risk", w: "4%" },
-              { cls: "score-row-3", name: "Novelty index", val: "67%", delta: "+5.2", color: "var(--base-g)", conf: "Acceptable", w: "67%" },
-            ].map((r) => (
-              <div key={r.name} className={`${r.cls} flex items-center gap-5 px-6 py-4 transition-colors duration-300`}
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <span className="text-sm w-40 shrink-0" style={{ color: "var(--text-secondary)" }}>{r.name}</span>
-                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
-                  <div className="h-full rounded-full" style={{ width: r.w, background: r.color, opacity: 0.6 }} />
-                </div>
-                <span className="text-base font-semibold font-mono w-14 text-right" style={{ color: r.color }}>{r.val}</span>
-                <span className="text-xs font-mono w-12 text-right" style={{ color: r.delta.startsWith("-") ? "var(--base-t)" : "var(--accent)" }}>{r.delta}</span>
-                <span className="text-xs w-20 text-right" style={{ color: "var(--text-muted)" }}>{r.conf}</span>
-              </div>
-            ))}
+          <div className="score-console opacity-0">
+            <Image src="/assets/scoring-console.png" alt="Helix Sequence Editor with scoring" width={1920} height={1080}
+              className="w-full h-auto rounded-2xl"
+              style={{ boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06) inset" }} />
           </div>
         </div>
       </section>
