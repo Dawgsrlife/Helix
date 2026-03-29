@@ -14,20 +14,20 @@ interface MutationPanelProps {
 const BASES: Nucleotide[] = ["A", "T", "C", "G"];
 
 const BASE_COLORS: Record<Nucleotide, string> = {
-  A: "#6bbd7a",
-  T: "#d47a7a",
-  C: "#6b9fd4",
-  G: "#c9a855",
-  N: "#6b6b6b",
+  A: "var(--base-a)",
+  T: "var(--base-t)",
+  C: "var(--base-c)",
+  G: "var(--base-g)",
+  N: "var(--base-n)",
 };
 
 const IMPACT_STYLES: Record<
   MutationEffect["predictedImpact"],
   { color: string; label: string }
 > = {
-  benign: { color: "#6bbd7a", label: "Benign" },
-  moderate: { color: "#c9a855", label: "Moderate" },
-  deleterious: { color: "#d47a7a", label: "Deleterious" },
+  benign: { color: "var(--impact-benign)", label: "Benign" },
+  moderate: { color: "var(--impact-moderate)", label: "Moderate" },
+  deleterious: { color: "var(--impact-deleterious)", label: "Deleterious" },
 };
 
 export default function MutationPanel({
@@ -63,11 +63,11 @@ export default function MutationPanel({
     <div className="flex flex-col gap-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#6b6b6b]">
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-muted)]">
           Mutation
         </span>
         {currentBase && (
-          <span className="text-[11px] font-mono text-[#4a4a4a]">
+          <span className="text-[11px] font-mono text-[var(--text-faint)]">
             Wildtype:{" "}
             <span style={{ color: BASE_COLORS[currentBase] }}>
               {currentBase}
@@ -78,7 +78,7 @@ export default function MutationPanel({
 
       {/* Position input */}
       <div>
-        <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-[#4a4a4a] mb-1.5">
+        <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1.5">
           Position
         </label>
         <input
@@ -89,13 +89,13 @@ export default function MutationPanel({
           placeholder="0"
           min={0}
           max={sequence.length - 1}
-          className="w-full h-9 px-3 rounded-lg bg-[#1b1b1d] text-[#e5e1e4] text-sm font-mono placeholder:text-[#3a3a3c] outline-none transition-colors focus:bg-[#222224]"
+          className="w-full h-9 px-3 rounded-lg bg-[var(--surface-raised)] text-[var(--text-primary)] text-sm font-mono placeholder:text-[var(--text-faint)] outline-none transition-colors focus:bg-[var(--surface-elevated)]"
         />
       </div>
 
       {/* Base selector */}
       <div>
-        <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-[#4a4a4a] mb-1.5">
+        <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-faint)] mb-1.5">
           Target base
         </label>
         <div className="grid grid-cols-4 gap-2">
@@ -111,16 +111,16 @@ export default function MutationPanel({
                 whileTap={!isCurrentBase ? { scale: 0.95 } : undefined}
                 className={`
                   h-10 rounded-lg font-mono text-sm font-semibold transition-all duration-150
-                  ${isCurrentBase ? "bg-[#131315] cursor-not-allowed opacity-25" : ""}
-                  ${isSelected && !isCurrentBase ? "bg-[#2a2a2c]" : ""}
-                  ${!isSelected && !isCurrentBase ? "bg-[#1b1b1d] hover:bg-[#222224]" : ""}
+                  ${isCurrentBase ? "bg-[var(--surface-base)] cursor-not-allowed opacity-25" : ""}
+                  ${isSelected && !isCurrentBase ? "bg-[var(--surface-overlay)]" : ""}
+                  ${!isSelected && !isCurrentBase ? "bg-[var(--surface-raised)] hover:bg-[var(--surface-elevated)]" : ""}
                 `}
                 style={{
                   color: isCurrentBase
-                    ? "#2a2a2c"
+                    ? "var(--surface-overlay)"
                     : isSelected
                       ? color
-                      : "#6b6b6b",
+                      : "var(--text-muted)",
                   boxShadow: isSelected && !isCurrentBase
                     ? `inset 0 0 0 1px ${color}`
                     : undefined,
@@ -142,15 +142,15 @@ export default function MutationPanel({
           h-10 rounded-lg text-sm font-medium transition-all duration-200
           ${
             canSubmit
-              ? "bg-[#e5e1e4] text-[#0c0c0e] hover:bg-[#d0ccc8]"
-              : "bg-[#1b1b1d] text-[#3a3a3c] cursor-not-allowed"
+              ? "bg-[var(--text-primary)] text-[var(--surface-void)] hover:bg-[var(--text-secondary)]"
+              : "bg-[var(--surface-raised)] text-[var(--text-faint)] cursor-not-allowed"
           }
         `}
       >
         {isLoading ? (
           <span className="flex items-center justify-center gap-2">
             <motion.span
-              className="block w-3 h-3 rounded-full border-2 border-[#0c0c0e] border-t-transparent"
+              className="block w-3 h-3 rounded-full border-2 border-[var(--surface-void)] border-t-transparent"
               animate={{ rotate: 360 }}
               transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
             />
@@ -170,7 +170,7 @@ export default function MutationPanel({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-            className="rounded-lg bg-[#1b1b1d] p-4"
+            className="rounded-lg bg-[var(--surface-raised)] p-4"
           >
             {/* Delta score */}
             <div className="flex items-baseline justify-between mb-3">
@@ -183,7 +183,7 @@ export default function MutationPanel({
                 {mutationEffect.deltaLikelihood > 0 ? "+" : ""}
                 {mutationEffect.deltaLikelihood.toFixed(2)}
               </span>
-              <span className="text-[11px] font-mono text-[#4a4a4a]">
+              <span className="text-[11px] font-mono text-[var(--text-faint)]">
                 delta log-likelihood
               </span>
             </div>
@@ -205,7 +205,7 @@ export default function MutationPanel({
               >
                 {IMPACT_STYLES[mutationEffect.predictedImpact].label}
               </span>
-              <span className="text-[11px] text-[#4a4a4a] font-mono ml-auto">
+              <span className="text-[11px] text-[var(--text-faint)] font-mono ml-auto">
                 {mutationEffect.referenceBase} &rarr;{" "}
                 {mutationEffect.alternateBase} at {mutationEffect.position}
               </span>

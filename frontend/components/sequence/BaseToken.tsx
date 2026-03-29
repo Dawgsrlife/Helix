@@ -12,11 +12,11 @@ interface BaseTokenProps {
 }
 
 const BASE_HEX: Record<Nucleotide, string> = {
-  A: "#6bbd7a",
-  T: "#d47a7a",
-  C: "#6b9fd4",
-  G: "#c9a855",
-  N: "#6b6b6b",
+  A: "var(--base-a)",
+  T: "var(--base-t)",
+  C: "var(--base-c)",
+  G: "var(--base-g)",
+  N: "var(--base-n)",
 };
 
 const REGION_TINT: Record<AnnotationType, string> = {
@@ -56,7 +56,7 @@ function BaseTokenInner({
         lineHeight: "22px",
         fontSize: "13px",
         borderBottom: isHighlighted
-          ? "1.5px solid #5bb5a2"
+          ? "1.5px solid var(--accent)"
           : "1.5px solid transparent",
       }}
     >

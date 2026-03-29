@@ -8,15 +8,15 @@ interface RegionHighlightProps {
   sequenceLength: number;
 }
 
-const REGION_COLORS: Record<string, string> = {
-  exon: "#7c6bc4",
-  intron: "#3a3a3c",
-  orf: "#5bb5a2",
-  prophage: "#c46b6b",
-  trna: "#6bbd7a",
-  rrna: "#c9a855",
-  intergenic: "#2a2a2c",
-  unknown: "#4a4a4a",
+const REGION_VARS: Record<string, string> = {
+  exon: "var(--annotation-exon)",
+  intron: "var(--annotation-intron)",
+  orf: "var(--annotation-orf)",
+  prophage: "var(--annotation-prophage)",
+  trna: "var(--annotation-trna)",
+  rrna: "var(--annotation-rrna)",
+  intergenic: "var(--annotation-intergenic)",
+  unknown: "var(--annotation-unknown)",
 };
 
 const REGION_NAMES: Record<string, string> = {
@@ -38,7 +38,7 @@ export default function RegionHighlight({
 
   const leftPct = (region.start / sequenceLength) * 100;
   const widthPct = ((region.end - region.start) / sequenceLength) * 100;
-  const color = REGION_COLORS[region.type] ?? "#4a4a4a";
+  const color = REGION_VARS[region.type] ?? "var(--annotation-unknown)";
   const label = region.label ?? REGION_NAMES[region.type] ?? region.type;
 
   return (
@@ -48,8 +48,8 @@ export default function RegionHighlight({
         left: `${leftPct}%`,
         width: `${widthPct}%`,
         backgroundColor: hovered
-          ? `${color}33`
-          : `${color}1a`,
+          ? `color-mix(in oklch, ${color}, transparent 80%)`
+          : `color-mix(in oklch, ${color}, transparent 90%)`,
         borderBottom: `2px solid ${color}`,
         transition: "background-color 0.15s ease",
       }}
@@ -64,18 +64,18 @@ export default function RegionHighlight({
             top: "-32px",
             left: "50%",
             transform: "translateX(-50%)",
-            backgroundColor: "#1b1b1d",
+            backgroundColor: "var(--surface-raised)",
             border: "1px solid rgba(62, 73, 70, 0.15)",
             borderRadius: "4px",
             padding: "4px 8px",
             whiteSpace: "nowrap",
             fontSize: "11px",
-            color: "#e5e1e4",
+            color: "var(--text-primary)",
             boxShadow: "0 4px 16px rgba(0,0,0,0.4)",
           }}
         >
           <span style={{ color }}>{label}</span>
-          <span style={{ color: "#6b6b6b", marginLeft: "6px" }}>
+          <span style={{ color: "var(--text-muted)", marginLeft: "6px" }}>
             {region.start}-{region.end}
           </span>
         </div>

@@ -88,7 +88,7 @@ export default function LikelihoodGraph({
     return (
       <div
         className="h-full flex items-center justify-center"
-        style={{ color: "#4a4a4a", fontSize: "12px" }}
+        style={{ color: "var(--text-faint)", fontSize: "12px" }}
       >
         No likelihood data
       </div>
@@ -100,11 +100,11 @@ export default function LikelihoodGraph({
       <div className="flex justify-between items-center mb-1.5">
         <span
           className="select-none uppercase tracking-wider"
-          style={{ fontSize: "10px", color: "#4a4a4a", fontWeight: 600, letterSpacing: "0.05em" }}
+          style={{ fontSize: "10px", color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.05em" }}
         >
           Log-likelihood
         </span>
-        <span style={{ fontSize: "11px", color: "#3a3a3c", fontFamily: "var(--font-mono, monospace)" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-faint)", fontFamily: "var(--font-mono, monospace)" }}>
           {scores.length} pos
         </span>
       </div>
@@ -112,7 +112,7 @@ export default function LikelihoodGraph({
         ref={containerRef}
         className="flex-1 cursor-crosshair"
         onMouseMove={handleMouseMove}
-        style={{ backgroundColor: "#111113", borderRadius: "3px", minHeight: "80px" }}
+        style={{ backgroundColor: "var(--surface-void)", borderRadius: "3px", minHeight: "80px" }}
       >
         <canvas ref={canvasRef} className="w-full h-full" />
       </div>

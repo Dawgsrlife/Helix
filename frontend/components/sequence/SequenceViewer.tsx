@@ -58,7 +58,7 @@ export default function SequenceViewer({
 
   if (bases.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full" style={{ color: "#4a4a4a" }}>
+      <div className="flex items-center justify-center h-full" style={{ color: "var(--text-faint)" }}>
         <span style={{ fontSize: "13px" }}>No sequence loaded</span>
       </div>
     );
@@ -93,7 +93,7 @@ export default function SequenceViewer({
               className="select-none shrink-0 text-right tabular-nums"
               style={{
                 width: "48px",
-                color: "#3a3a3c",
+                color: "var(--text-faint)",
                 fontSize: "11px",
                 lineHeight: "22px",
                 paddingTop: "0px",

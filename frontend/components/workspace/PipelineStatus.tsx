@@ -49,16 +49,16 @@ export default function PipelineStatus() {
   const progress = ((completedStages.length) / STAGES.length) * 100;
 
   return (
-    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "#141416" }}>
+    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "var(--surface-base)" }}>
       <div className="max-w-lg w-full">
         <h2 className="text-xl font-semibold tracking-tight mb-2">Running analysis</h2>
-        <p className="text-[13px] mb-8" style={{ color: "#888" }}>
+        <p className="text-[13px] mb-8" style={{ color: "var(--text-muted)" }}>
           Evo 2 is processing your sequence through the full pipeline.
         </p>
 
         {/* Progress bar */}
         <div className="h-1 rounded-full mb-8 overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
-          <motion.div className="h-full rounded-full" style={{ background: "#5bb5a2" }}
+          <motion.div className="h-full rounded-full" style={{ background: "var(--accent)" }}
             animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
         </div>
 
@@ -72,15 +72,15 @@ export default function PipelineStatus() {
                 style={{ background: isActive ? "rgba(91,181,162,0.05)" : "transparent" }}>
                 <div className="w-5 h-5 flex items-center justify-center">
                   {isComplete ? (
-                    <Check size={14} style={{ color: "#5bb5a2" }} />
+                    <Check size={14} style={{ color: "var(--accent)" }} />
                   ) : isActive ? (
-                    <Loader2 size={14} className="animate-spin" style={{ color: "#5bb5a2" }} />
+                    <Loader2 size={14} className="animate-spin" style={{ color: "var(--accent)" }} />
                   ) : (
-                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "#333" }} />
+                    <div className="w-1.5 h-1.5 rounded-full" style={{ background: "var(--surface-overlay)" }} />
                   )}
                 </div>
                 <span className="text-[13px]" style={{
-                  color: isComplete ? "#5bb5a2" : isActive ? "#F0EFED" : "#555",
+                  color: isComplete ? "var(--accent)" : isActive ? "var(--text-primary)" : "var(--text-faint)",
                 }}>
                   {stage.label}
                 </span>

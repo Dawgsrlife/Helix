@@ -7,10 +7,10 @@ interface LoadingStateProps {
 }
 
 const BASES = [
-  { letter: "A", color: "#6bbd7a" },
-  { letter: "T", color: "#d47a7a" },
-  { letter: "C", color: "#6b9fd4" },
-  { letter: "G", color: "#c9a855" },
+  { letter: "A", color: "var(--base-a)" },
+  { letter: "T", color: "var(--base-t)" },
+  { letter: "C", color: "var(--base-c)" },
+  { letter: "G", color: "var(--base-g)" },
 ];
 
 export default function LoadingState({
@@ -39,7 +39,7 @@ export default function LoadingState({
           </motion.span>
         ))}
       </div>
-      <p className="text-xs text-[#4a4a4a]">{message}</p>
+      <p className="text-xs text-[var(--text-faint)]">{message}</p>
     </div>
   );
 }

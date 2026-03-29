@@ -22,7 +22,7 @@ function IconButton({
     <button
       onClick={onClick}
       title={label}
-      className="w-8 h-8 rounded-lg bg-[#1b1b1d] hover:bg-[#222224] flex items-center justify-center text-[#6b6b6b] hover:text-[#8a8a8a] transition-colors"
+      className="w-8 h-8 rounded-lg bg-[var(--surface-raised)] hover:bg-[var(--surface-elevated)] flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-muted)] transition-colors"
     >
       {children}
     </button>
@@ -51,17 +51,17 @@ export default function StructureControls({
       {/* pLDDT legend */}
       <div className="flex items-center gap-2 ml-auto">
         {[
-          { color: "#5bb5a2", label: ">90" },
-          { color: "#6b9fd4", label: ">70" },
-          { color: "#c9a855", label: ">50" },
-          { color: "#d47a7a", label: "<50" },
+          { color: "var(--accent)", label: ">90" },
+          { color: "var(--base-c)", label: ">70" },
+          { color: "var(--base-g)", label: ">50" },
+          { color: "var(--base-t)", label: "<50" },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1">
             <span
               className="w-1.5 h-1.5 rounded-full"
               style={{ backgroundColor: color }}
             />
-            <span className="text-[10px] text-[#4a4a4a] font-mono">{label}</span>
+            <span className="text-[10px] text-[var(--text-faint)] font-mono">{label}</span>
           </div>
         ))}
       </div>

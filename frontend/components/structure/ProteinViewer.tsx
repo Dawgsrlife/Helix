@@ -116,8 +116,8 @@ function ViewerFallback() {
   return (
     <div className="flex items-center justify-center h-full">
       <div className="flex flex-col items-center gap-2">
-        <div className="w-6 h-6 rounded-full border-2 border-[#5bb5a2] border-t-transparent animate-spin" />
-        <span className="text-[11px] text-[#4a4a4a]">Loading structure</span>
+        <div className="w-6 h-6 rounded-full border-2 border-[var(--accent)] border-t-transparent animate-spin" />
+        <span className="text-[11px] text-[var(--text-faint)]">Loading structure</span>
       </div>
     </div>
   );

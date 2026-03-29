@@ -8,9 +8,9 @@ interface MutationDiffProps {
 }
 
 const IMPACT_COLORS: Record<MutationEffect["predictedImpact"], string> = {
-  benign: "#6bbd7a",
-  moderate: "#c9a855",
-  deleterious: "#d47a7a",
+  benign: "var(--impact-benign)",
+  moderate: "var(--impact-moderate)",
+  deleterious: "var(--impact-deleterious)",
 };
 
 export default function MutationDiff({ effect }: MutationDiffProps) {
@@ -27,19 +27,19 @@ export default function MutationDiff({ effect }: MutationDiffProps) {
       transition={{ type: "spring", stiffness: 400, damping: 30 }}
     >
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[#4a4a4a]">
+        <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-faint)]">
           Likelihood delta
         </span>
-        <span className="text-[11px] font-mono text-[#4a4a4a]">
+        <span className="text-[11px] font-mono text-[var(--text-faint)]">
           {effect.deltaLikelihood > 0 ? "+" : ""}
           {effect.deltaLikelihood.toFixed(2)}
         </span>
       </div>
 
       {/* Bar visualization */}
-      <div className="h-2 bg-[#131315] rounded-full overflow-hidden relative">
+      <div className="h-2 bg-[var(--surface-base)] rounded-full overflow-hidden relative">
         {/* Center line */}
-        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[#2a2a2c]" />
+        <div className="absolute left-1/2 top-0 bottom-0 w-px bg-[var(--surface-overlay)]" />
 
         {/* Delta bar */}
         <motion.div
@@ -67,9 +67,9 @@ export default function MutationDiff({ effect }: MutationDiffProps) {
 
       {/* Scale labels */}
       <div className="flex justify-between mt-1">
-        <span className="text-[10px] text-[#3a3a3c] font-mono">-{maxDelta}</span>
-        <span className="text-[10px] text-[#3a3a3c] font-mono">0</span>
-        <span className="text-[10px] text-[#3a3a3c] font-mono">+{maxDelta}</span>
+        <span className="text-[10px] text-[var(--text-faint)] font-mono">-{maxDelta}</span>
+        <span className="text-[10px] text-[var(--text-faint)] font-mono">0</span>
+        <span className="text-[10px] text-[var(--text-faint)] font-mono">+{maxDelta}</span>
       </div>
     </motion.div>
   );

@@ -18,7 +18,7 @@ export default function AnnotationTrack({
     <div className="flex flex-col gap-1">
       <span
         className="select-none uppercase tracking-wider"
-        style={{ fontSize: "10px", color: "#4a4a4a", fontWeight: 600, letterSpacing: "0.05em" }}
+        style={{ fontSize: "10px", color: "var(--text-faint)", fontWeight: 600, letterSpacing: "0.05em" }}
       >
         Annotations
       </span>
@@ -26,7 +26,7 @@ export default function AnnotationTrack({
         className="relative overflow-hidden"
         style={{
           height: "20px",
-          backgroundColor: "#161618",
+          backgroundColor: "var(--surface-base)",
           borderRadius: "3px",
         }}
       >

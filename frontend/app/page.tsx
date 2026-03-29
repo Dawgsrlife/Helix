@@ -69,7 +69,7 @@ export default function Home() {
 
   return (
     <div ref={main} className="overflow-x-hidden font-sans"
-      style={{ background: "#141416", color: "#F0EFED" }}>
+      style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
 
       {/* Grain texture overlay */}
       <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03]"
@@ -80,7 +80,7 @@ export default function Home() {
         style={{ background: "rgba(15,15,15,0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
         <HelixLogo size="sm" />
         <Link href="/analyze" className="text-[13px] font-medium px-5 py-2 rounded-full transition-colors"
-          style={{ background: "#F0EFED", color: "#141416" }}>
+          style={{ background: "var(--text-primary)", color: "var(--surface-base)" }}>
           Open IDE
         </Link>
       </nav>
@@ -93,7 +93,7 @@ export default function Home() {
             <span key={i} className="absolute font-mono text-xl select-none"
               style={{
                 left: `${8 + i * 9}%`,
-                color: b === "A" ? "#6bbd7a" : b === "T" ? "#d47a7a" : b === "C" ? "#6b9fd4" : "#c9a855",
+                color: b === "A" ? "var(--base-a)" : b === "T" ? "var(--base-t)" : b === "C" ? "var(--base-c)" : "var(--base-g)",
                 opacity: 0.06 + (i % 3) * 0.03,
                 animation: `float-particle ${18 + i * 2}s linear infinite`,
                 animationDelay: `${i * 1.5}s`,
@@ -105,29 +105,29 @@ export default function Home() {
         {/* Text layer (z-30, fades on scroll) */}
         <div className="hero-text-layer relative z-30 text-center max-w-4xl mb-12">
           <p className="h-tag opacity-0 text-[13px] font-medium tracking-widest uppercase mb-8"
-            style={{ color: "#5bb5a2" }}>
+            style={{ color: "var(--accent)" }}>
             Evo 2 / 40B parameters / 9T base pairs
           </p>
           <h1 className="text-[clamp(2.4rem,5.5vw,4.8rem)] font-bold tracking-tight leading-[1.06] mb-6">
             <span className="h-line block opacity-0">Co-design genomes with</span>
             <span className="h-line block opacity-0">an IDE that{" "}
-              <em className="not-italic" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "#5bb5a2" }}>
+              <em className="not-italic" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "var(--accent)" }}>
                 thinks out loud
               </em>
             </span>
           </h1>
           <p className="h-sub opacity-0 text-[17px] max-w-xl mx-auto leading-relaxed mb-8"
-            style={{ color: "#D1D0CC" }}>
+            style={{ color: "var(--text-secondary)" }}>
             Paste a sequence. Watch Evo 2 annotate, score, and fold it in real time. Click any base for instant feedback.
           </p>
           <div className="h-actions flex gap-3 justify-center">
             <Link href="/analyze" className="opacity-0 inline-flex items-center gap-2 px-7 py-3 rounded-full text-sm font-medium hover:scale-[1.02] transition-transform"
-              style={{ background: "#F0EFED", color: "#141416" }}>
+              style={{ background: "var(--text-primary)", color: "var(--surface-base)" }}>
               Get started <ArrowRight size={16} />
             </Link>
             <a href="https://github.com/Dawgsrlife/Helix" target="_blank" rel="noopener noreferrer"
               className="opacity-0 inline-flex items-center gap-2 px-7 py-3 rounded-full border text-sm transition-all hover:border-white/25"
-              style={{ borderColor: "rgba(255,255,255,0.12)", color: "#D1D0CC" }}>
+              style={{ borderColor: "rgba(255,255,255,0.12)", color: "var(--text-secondary)" }}>
               GitHub
             </a>
           </div>
@@ -143,7 +143,7 @@ export default function Home() {
 
       {/* ═══ SCENE 2: EDITABLE BIOLOGY ═══ */}
       <section className="scene-edit min-h-screen flex items-center px-6 md:px-16"
-        style={{ background: "#1c1c1f" }}>
+        style={{ background: "var(--surface-raised)" }}>
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           <div className="edit-img opacity-0">
             <Image src="/assets/edit-closeup.png" alt="Base pair editing" width={1280} height={720}
@@ -151,19 +151,19 @@ export default function Home() {
               style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06) inset" }} />
           </div>
           <div className="edit-text flex flex-col gap-5">
-            <p className="opacity-0 text-sm font-medium tracking-widest uppercase" style={{ color: "#5bb5a2" }}>Editable biology</p>
+            <p className="opacity-0 text-sm font-medium tracking-widest uppercase" style={{ color: "var(--accent)" }}>Editable biology</p>
             <h2 className="opacity-0 text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight leading-[1.12]">
               Click any base.{" "}
-              <span style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "#D1D0CC" }}>
+              <span style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "var(--text-secondary)" }}>
                 See the consequence.
               </span>
             </h2>
-            <p className="opacity-0 text-[16px] leading-relaxed max-w-md" style={{ color: "#D1D0CC" }}>
+            <p className="opacity-0 text-[16px] leading-relaxed max-w-md" style={{ color: "var(--text-secondary)" }}>
               Edit T to G at position 121,452,891. Affinity, stability, and variant impact re-score in under two seconds. Every edit is versioned.
             </p>
             <div className="opacity-0 flex flex-wrap gap-3">
               {["Realtime scoring", "Partial re-runs", "Version history"].map((t) => (
-                <span key={t} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", color: "#888" }}>{t}</span>
+                <span key={t} className="text-xs px-3 py-1.5 rounded-lg" style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)", color: "var(--text-muted)" }}>{t}</span>
               ))}
             </div>
           </div>
@@ -172,35 +172,35 @@ export default function Home() {
 
       {/* ═══ SCENE 3: SCORING CONSOLE ═══ */}
       <section className="scene-score min-h-screen flex items-center justify-center px-6 md:px-16"
-        style={{ background: "#141416" }}>
+        style={{ background: "var(--surface-base)" }}>
         <div className="max-w-4xl mx-auto w-full">
-          <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-6 text-center" style={{ color: "#5bb5a2" }}>
+          <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-6 text-center" style={{ color: "var(--accent)" }}>
             Multi-dimensional scoring
           </p>
           <div className="score-console opacity-0 rounded-2xl overflow-hidden"
-            style={{ background: "#222225", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
+            style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
               <div className="flex items-center gap-3">
                 <span className="text-[15px] font-semibold">BDNF_reg_v4</span>
-                <span className="text-xs font-mono" style={{ color: "#888" }}>Candidate #001</span>
+                <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Candidate #001</span>
               </div>
-              <span className="text-sm font-mono font-semibold" style={{ color: "#5bb5a2" }}>94.2</span>
+              <span className="text-sm font-mono font-semibold" style={{ color: "var(--accent)" }}>94.2</span>
             </div>
             {[
-              { cls: "score-row-0", name: "Functional plausibility", val: "94%", delta: "+2.1", color: "#5bb5a2", conf: "High", w: "94%" },
-              { cls: "score-row-1", name: "Tissue specificity", val: "82%", delta: "+0.8", color: "#6b9fd4", conf: "Moderate", w: "82%" },
-              { cls: "score-row-2", name: "Off-target risk", val: "0.04%", delta: "-0.01", color: "#d47a7a", conf: "Low risk", w: "4%" },
-              { cls: "score-row-3", name: "Novelty index", val: "67%", delta: "+5.2", color: "#c9a855", conf: "Acceptable", w: "67%" },
+              { cls: "score-row-0", name: "Functional plausibility", val: "94%", delta: "+2.1", color: "var(--accent)", conf: "High", w: "94%" },
+              { cls: "score-row-1", name: "Tissue specificity", val: "82%", delta: "+0.8", color: "var(--base-c)", conf: "Moderate", w: "82%" },
+              { cls: "score-row-2", name: "Off-target risk", val: "0.04%", delta: "-0.01", color: "var(--base-t)", conf: "Low risk", w: "4%" },
+              { cls: "score-row-3", name: "Novelty index", val: "67%", delta: "+5.2", color: "var(--base-g)", conf: "Acceptable", w: "67%" },
             ].map((r) => (
               <div key={r.name} className={`${r.cls} flex items-center gap-5 px-6 py-4 transition-colors duration-300`}
                 style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                <span className="text-sm w-40 shrink-0" style={{ color: "#D1D0CC" }}>{r.name}</span>
+                <span className="text-sm w-40 shrink-0" style={{ color: "var(--text-secondary)" }}>{r.name}</span>
                 <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
                   <div className="h-full rounded-full" style={{ width: r.w, background: r.color, opacity: 0.6 }} />
                 </div>
                 <span className="text-base font-semibold font-mono w-14 text-right" style={{ color: r.color }}>{r.val}</span>
-                <span className="text-xs font-mono w-12 text-right" style={{ color: r.delta.startsWith("-") ? "#d47a7a" : "#5bb5a2" }}>{r.delta}</span>
-                <span className="text-xs w-20 text-right" style={{ color: "#888" }}>{r.conf}</span>
+                <span className="text-xs font-mono w-12 text-right" style={{ color: r.delta.startsWith("-") ? "var(--base-t)" : "var(--accent)" }}>{r.delta}</span>
+                <span className="text-xs w-20 text-right" style={{ color: "var(--text-muted)" }}>{r.conf}</span>
               </div>
             ))}
           </div>
@@ -209,15 +209,15 @@ export default function Home() {
 
       {/* ═══ SCENE 4: STRUCTURE ═══ */}
       <section className="scene-struct min-h-screen flex items-center px-6 md:px-16"
-        style={{ background: "#1c1c1f" }}>
+        style={{ background: "var(--surface-raised)" }}>
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           <div className="struct-text flex flex-col gap-5 order-2 lg:order-1">
-            <p className="opacity-0 text-sm font-medium tracking-widest uppercase" style={{ color: "#5bb5a2" }}>Structure prediction</p>
+            <p className="opacity-0 text-sm font-medium tracking-widest uppercase" style={{ color: "var(--accent)" }}>Structure prediction</p>
             <h2 className="opacity-0 text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight leading-[1.12]">
               From sequence to{" "}
-              <em className="not-italic" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "#D1D0CC" }}>structure</em>
+              <em className="not-italic" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "var(--text-secondary)" }}>structure</em>
             </h2>
-            <p className="opacity-0 text-[16px] leading-relaxed max-w-md" style={{ color: "#D1D0CC" }}>
+            <p className="opacity-0 text-[16px] leading-relaxed max-w-md" style={{ color: "var(--text-secondary)" }}>
               AlphaFold 3 folds top candidates into 3D protein structures with per-residue confidence. Rendered in-browser. ColabFold local fallback when rate-limited.
             </p>
           </div>
@@ -231,23 +231,23 @@ export default function Home() {
 
       {/* ═══ SCENE 5: IMPACT ═══ */}
       <section className="scene-impact min-h-screen flex items-center justify-center px-6"
-        style={{ background: "#141416" }}>
+        style={{ background: "var(--surface-base)" }}>
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-[clamp(2.5rem,6vw,5rem)] font-bold tracking-tight leading-[1.06]">
             <span className="impact-line block opacity-0">From weeks of work</span>
-            <span className="impact-line block opacity-0" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "#5bb5a2" }}>to minutes.</span>
+            <span className="impact-line block opacity-0" style={{ fontFamily: "var(--font-display), serif", fontStyle: "italic", color: "var(--accent)" }}>to minutes.</span>
           </h2>
         </div>
       </section>
 
       {/* ═══ CTA ═══ */}
-      <section className="scene-cta py-32 px-6" style={{ background: "#1c1c1f" }}>
+      <section className="scene-cta py-32 px-6" style={{ background: "var(--surface-raised)" }}>
         <div className="cta-inner opacity-0 max-w-2xl mx-auto text-center">
           <h2 className="text-[clamp(1.8rem,3.5vw,2.8rem)] font-bold tracking-tight leading-[1.15] mb-8">
             The interface layer genomic design has been missing.
           </h2>
           <Link href="/analyze" className="inline-flex items-center gap-2 px-9 py-3.5 rounded-full text-[15px] font-semibold transition-all hover:scale-[1.02]"
-            style={{ background: "#5bb5a2", color: "#141416" }}>
+            style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
             Open Helix IDE <ArrowRight size={18} />
           </Link>
         </div>
@@ -255,8 +255,8 @@ export default function Home() {
 
       {/* ── FOOTER ── */}
       <footer className="py-8 px-8" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div className="max-w-5xl mx-auto flex justify-between items-center text-sm" style={{ color: "#888" }}>
-          <HelixLogo variant="wordmark" size="sm" className="text-[#F0EFED]" />
+        <div className="max-w-5xl mx-auto flex justify-between items-center text-sm" style={{ color: "var(--text-muted)" }}>
+          <HelixLogo variant="wordmark" size="sm" className="text-[var(--text-primary)]" />
           <span>Genomic Design IDE</span>
         </div>
       </footer>

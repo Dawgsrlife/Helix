@@ -81,21 +81,21 @@ export default function ChatPanel() {
 
   return (
     <div className="w-[340px] shrink-0 flex flex-col h-full"
-      style={{ background: "#1c1c1f", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+      style={{ background: "var(--surface-raised)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
         <div className="flex items-center gap-2">
-          <Sparkles size={14} style={{ color: "#5bb5a2" }} />
-          <span className="text-sm font-medium" style={{ color: "#F0EFED" }}>Copilot</span>
+          <Sparkles size={14} style={{ color: "var(--accent)" }} />
+          <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Copilot</span>
           <span className="text-[10px] px-1.5 py-0.5 rounded font-mono"
-            style={{ background: "rgba(91,181,162,0.1)", color: "#5bb5a2" }}>
+            style={{ background: "rgba(91,181,162,0.1)", color: "var(--accent)" }}>
             {viewMode === "ide" ? "Studio" : viewMode === "explorer" ? "Explorer" : viewMode === "compare" ? "Compare" : "Analysis"}
           </span>
         </div>
         <button onClick={toggleChat} className="p-1 rounded hover:bg-white/5 transition-colors">
-          <X size={16} style={{ color: "#888" }} />
+          <X size={16} style={{ color: "var(--text-muted)" }} />
         </button>
       </div>
 
@@ -103,14 +103,14 @@ export default function ChatPanel() {
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {chatMessages.length === 0 && (
           <div className="py-4">
-            <p className="text-[13px] mb-4 leading-relaxed" style={{ color: "#D1D0CC" }}>
+            <p className="text-[13px] mb-4 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Ask about your analysis, candidates, or get mutation suggestions.
             </p>
             <div className="space-y-2">
               {prompts.map((q) => (
                 <button key={q} onClick={() => handleSend(q)}
                   className="block w-full text-left text-[12px] px-3 py-2.5 rounded-lg transition-colors hover:bg-white/[0.04]"
-                  style={{ color: "#D1D0CC", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ color: "var(--text-secondary)", border: "1px solid rgba(255,255,255,0.04)" }}>
                   {q}
                 </button>
               ))}
@@ -120,12 +120,12 @@ export default function ChatPanel() {
         {chatMessages.map((msg, i) => (
           <div key={i}>
             <div className="text-[10px] font-medium uppercase tracking-wider mb-1.5"
-              style={{ color: msg.role === "user" ? "#888" : "#5bb5a2" }}>
+              style={{ color: msg.role === "user" ? "var(--text-muted)" : "var(--accent)" }}>
               {msg.role === "user" ? "You" : "Copilot"}
             </div>
             <div className={`text-[13px] leading-relaxed ${msg.role === "user" ? "pl-3" : ""}`}
               style={{
-                color: "#F0EFED",
+                color: "var(--text-primary)",
                 borderLeft: msg.role === "user" ? "2px solid rgba(255,255,255,0.08)" : "none",
               }}>
               {msg.content}
@@ -134,10 +134,10 @@ export default function ChatPanel() {
         ))}
         {isTyping && (
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-wider mb-1.5" style={{ color: "#5bb5a2" }}>Copilot</div>
+            <div className="text-[10px] font-medium uppercase tracking-wider mb-1.5" style={{ color: "var(--accent)" }}>Copilot</div>
             <div className="flex gap-1">
               {[0, 1, 2].map(i => (
-                <div key={i} className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#5bb5a2", animationDelay: `${i * 0.2}s` }} />
+                <div key={i} className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--accent)", animationDelay: `${i * 0.2}s` }} />
               ))}
             </div>
           </div>
@@ -146,15 +146,15 @@ export default function ChatPanel() {
 
       {/* Input */}
       <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div className="flex gap-2 items-center rounded-lg px-3 py-2" style={{ background: "#141416", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex gap-2 items-center rounded-lg px-3 py-2" style={{ background: "var(--surface-base)", border: "1px solid rgba(255,255,255,0.06)" }}>
           <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder={viewMode === "ide" ? "Ask about your edits..." : "Ask about this analysis..."}
             className="flex-1 text-[13px] outline-none bg-transparent"
-            style={{ color: "#F0EFED" }} />
+            style={{ color: "var(--text-primary)" }} />
           <button onClick={() => handleSend()} disabled={!input.trim()}
             className="p-1.5 rounded transition-colors hover:bg-white/5 disabled:opacity-30"
-            style={{ color: input.trim() ? "#5bb5a2" : "#555" }}>
+            style={{ color: input.trim() ? "var(--accent)" : "var(--text-faint)" }}>
             <Send size={14} />
           </button>
         </div>
