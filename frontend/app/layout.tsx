@@ -27,6 +27,7 @@ export const metadata: Metadata = {
   title: "Helix",
   description:
     "The genomic IDE. Design, annotate, and analyze DNA sequences with Evo 2 and AlphaFold.",
+  icons: { icon: "/favicon.svg" },
 };
 
 export default function RootLayout({

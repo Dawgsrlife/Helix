@@ -5,6 +5,7 @@ import { useCallback, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { Dna, FlaskConical, BarChart3, Search, Home } from "lucide-react";
+import HelixLogo from "@/components/brand/HelixLogo";
 import { useHelixStore } from "@/lib/store";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
 import { useMutationSim } from "@/hooks/useMutationSim";
@@ -117,12 +118,7 @@ export default function AnalyzePage() {
           style={{ background: "#0e0e10", borderBottom: "0.5px solid rgba(255,255,255,0.06)" }}
         >
           <div className="flex items-center gap-3">
-            <span
-              className="text-xs font-bold tracking-[-0.04em] uppercase"
-              style={{ fontWeight: 600, color: "#5bb5a2" }}
-            >
-              Helix
-            </span>
+            <HelixLogo size="sm" className="text-[#5bb5a2]" />
             {showResults && (
               <>
                 <span style={{ color: "#48474a" }}>/</span>

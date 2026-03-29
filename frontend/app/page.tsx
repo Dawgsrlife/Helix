@@ -7,6 +7,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { ArrowRight } from "lucide-react";
+import HelixLogo from "@/components/brand/HelixLogo";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -84,7 +85,7 @@ export default function Home() {
       {/* ── NAV ── */}
       <nav className="fixed top-0 w-full z-50 flex justify-between items-center px-8 md:px-12 h-14"
         style={{ background: "rgba(15,15,15,0.85)", backdropFilter: "blur(16px)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-        <span className="text-lg font-semibold tracking-tight">Helix</span>
+        <HelixLogo size="sm" />
         <Link href="/analyze" className="text-[13px] font-medium px-5 py-2 rounded-full transition-colors"
           style={{ background: "#F0EFED", color: "#0F0F0F" }}>
           Open IDE
@@ -262,7 +263,7 @@ export default function Home() {
       {/* ── FOOTER ── */}
       <footer className="py-8 px-8" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
         <div className="max-w-5xl mx-auto flex justify-between items-center text-sm" style={{ color: "#888" }}>
-          <span className="font-semibold" style={{ color: "#F0EFED" }}>Helix</span>
+          <HelixLogo variant="wordmark" size="sm" className="text-[#F0EFED]" />
           <span>Genomic Design IDE</span>
         </div>
       </footer>
