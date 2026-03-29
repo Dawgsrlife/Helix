@@ -57,6 +57,7 @@ class AgentCandidateUpdateResponse(BaseModel):
     pdb_data: str | None = None
     confidence: float | None = None
     structure_model: str | None = None
+    regulatory_map: dict[str, object] | None = None
 
 
 class AgentChatResponse(BaseModel):

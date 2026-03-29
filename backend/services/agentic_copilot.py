@@ -94,6 +94,7 @@ class AgentCandidateUpdate:
     pdb_data: str | None = None
     confidence: float | None = None
     structure_model: str | None = None
+    regulatory_map: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -111,6 +112,8 @@ class AgentCandidateUpdate:
             payload["confidence"] = self.confidence
         if self.structure_model is not None:
             payload["structure_model"] = self.structure_model
+        if self.regulatory_map is not None:
+            payload["regulatory_map"] = self.regulatory_map
         return payload
 
 
@@ -172,6 +175,7 @@ class AgenticCopilot:
                 pdb_data=update_payload.get("pdb_data"),
                 confidence=update_payload.get("confidence"),
                 structure_model=update_payload.get("structure_model"),
+                regulatory_map=update_payload.get("regulatory_map"),
             )
 
         return AgentChatResult(
@@ -639,6 +643,8 @@ def _merge_candidate_updates(
         current.confidence = previous.confidence
     if current.structure_model is None and previous.structure_model is not None:
         current.structure_model = previous.structure_model
+    if current.regulatory_map is None and previous.regulatory_map is not None:
+        current.regulatory_map = previous.regulatory_map
     return current
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,7 @@ from pipeline.orchestrator import (
 )
 from services.evo2 import create_evo2_service
 from services.mock_pdb import build_mock_pdb_from_dna
+from services.regulatory_viz import build_regulatory_map
 from services.agentic_copilot import AgenticCopilot
 from services.session_store import (
     CandidateNotFoundError,
@@ -52,6 +54,8 @@ from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
     CandidateStatusEvent,
+    RegulatoryMapReadyData,
+    RegulatoryMapReadyEvent,
     StructureReadyData,
     StructureReadyEvent,
 )
@@ -69,6 +73,7 @@ ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
+SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 
 
 @app.on_event("startup")
@@ -110,6 +115,11 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
     session_id = request.session_id or create_session_id()
     num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
     await session_store.initialize_session(session_id)
+    SESSION_CONTEXT[session_id] = {
+        "run_profile": request.run_profile,
+        "truth_mode": request.truth_mode,
+        "design_type": "regulatory_element",
+    }
     asyncio.create_task(
         run_generation_pipeline(
             manager=ws_manager,
@@ -118,10 +128,12 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             goal=request.goal,
             n_candidates=num_candidates,
             run_profile=request.run_profile,
+            truth_mode=request.truth_mode,
             seed_sequence=DEFAULT_SEED,
             on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
                 session_id, candidate_id, sequence
             ),
+            on_spec_ready=lambda spec: _set_session_design_type(session_id, spec.design_type),
         )
     )
     return DesignAcceptedResponse(
@@ -184,6 +196,7 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
     except SessionLockTimeoutError as exc:
         raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
 
+    context = SESSION_CONTEXT.get(request.session_id, {})
     asyncio.create_task(
         run_followup_pipeline(
             manager=ws_manager,
@@ -192,9 +205,13 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
             message=request.message,
             candidate_id=candidate_id,
             base_sequence=base_sequence,
+            run_profile=str(context.get("run_profile", "demo")),
+            truth_mode=str(context.get("truth_mode", "demo_fallback")),
+            design_type_hint=str(context.get("design_type", "regulatory_element")),
             on_candidate_ready=lambda updated_candidate_id, sequence: _persist_candidate_sequence(
                 request.session_id, updated_candidate_id, sequence
             ),
+            on_spec_ready=lambda spec: _set_session_design_type(request.session_id, spec.design_type),
         )
     )
     return FollowupAcceptedResponse(steps_rerunning=steps)
@@ -220,9 +237,11 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
     candidate_update = None
     if result.candidate_update is not None:
         update = result.candidate_update
+        design_type = str(SESSION_CONTEXT.get(request.session_id, {}).get("design_type", "regulatory_element"))
         pdb_data = update.pdb_data
         confidence = update.confidence
         structure_model = update.structure_model
+        regulatory_map = update.regulatory_map
         if pdb_data is None:
             try:
                 pdb_data, confidence, structure_model = await _predict_structure_snapshot(
@@ -251,6 +270,27 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
             except Exception:
                 # Keep chat endpoint resilient even if structure refresh fails.
                 pass
+        if not _design_uses_protein_structure(design_type) and regulatory_map is None:
+            try:
+                regulatory_map = build_regulatory_map(update.sequence)
+                update.regulatory_map = regulatory_map
+                await ws_manager.send_event(
+                    request.session_id,
+                    RegulatoryMapReadyEvent(
+                        data=RegulatoryMapReadyData(
+                            candidate_id=update.candidate_id,
+                            regulatory_map=regulatory_map,
+                        )
+                    ).to_json(),
+                )
+                await ws_manager.send_event(
+                    request.session_id,
+                    CandidateStatusEvent(
+                        data=CandidateStatusData(candidate_id=update.candidate_id, status="structured")
+                    ).to_json(),
+                )
+            except Exception:
+                pass
         candidate_update = AgentCandidateUpdateResponse(
             candidate_id=update.candidate_id,
             sequence=update.sequence,
@@ -260,6 +300,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
             pdb_data=update.pdb_data,
             confidence=update.confidence,
             structure_model=update.structure_model,
+            regulatory_map=update.regulatory_map,
         )
 
     return AgentChatResponse(
@@ -323,6 +364,18 @@ async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tu
             return result.pdb_data, result.confidence, result.model
     pdb, confidence = build_mock_pdb_from_dna(sequence, candidate_id=candidate_id)
     return pdb, confidence, "mock"
+
+
+async def _set_session_design_type(session_id: str, design_type: str) -> None:
+    context = SESSION_CONTEXT.setdefault(session_id, {})
+    context["design_type"] = design_type
+
+
+def _design_uses_protein_structure(design_type: str | None) -> bool:
+    if not design_type:
+        return False
+    key = design_type.lower()
+    return any(token in key for token in ("coding", "protein", "peptide", "orf"))
 
 def _build_ws_url(http_request: Request, session_id: str) -> str:
     ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"

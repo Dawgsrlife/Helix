@@ -27,6 +27,13 @@ export interface CandidateState {
   perPositionScores: Record<number, number>;
   confidence: number | null;
   pdbData: string;
+  regulatoryMap: {
+    sequence_length: number;
+    gc_content: number;
+    features: Array<{ name: string; start: number; end: number; score: number }>;
+    gc_windows: Array<{ start: number; end: number; gc: number }>;
+    hotspots: number[];
+  } | null;
   error: string | null;
   baseHeat: Record<number, { deltaLikelihood: number; impact: string; updatedAt: number }>;
 }
@@ -47,6 +54,7 @@ export interface PipelineState {
   wsUrl: string;
   wsStatus: "disconnected" | "connecting" | "connected";
   runProfile: "demo" | "live";
+  truthMode: "demo_fallback" | "real_only";
   requestedCandidates: number;
   pipelineStatus: "idle" | "running" | "complete" | "error";
   stages: Record<StageKey, StageState>;
@@ -83,6 +91,7 @@ export type PipelineEvent =
         requested_candidates: number;
         candidate_ids: number[];
         run_profile: "demo" | "live";
+        truth_mode: "demo_fallback" | "real_only";
         candidate_seed_sequences?: Record<string, string>;
       };
     }
@@ -90,6 +99,7 @@ export type PipelineEvent =
   | { event: "intent_parsed"; data: { spec: Record<string, unknown> } }
   | { event: "retrieval_progress"; data: { source: "ncbi" | "pubmed" | "clinvar"; status: RetrievalState["status"]; result?: Record<string, unknown> } }
   | { event: "candidate_status"; data: { candidate_id: number; status: CandidateStatus; reason?: string | null } }
+  | { event: "candidate_seeded"; data: { candidate_id: number; sequence: string; source: "retrieval_context" | "fallback_seed" } }
   | { event: "generation_token"; data: { candidate_id: number; token: string; position: number } }
   | {
       event: "candidate_scored";
@@ -100,6 +110,19 @@ export type PipelineEvent =
       };
     }
   | { event: "structure_ready"; data: { candidate_id: number; pdb_data: string; confidence?: number | null } }
+  | {
+      event: "regulatory_map_ready";
+      data: {
+        candidate_id: number;
+        regulatory_map: {
+          sequence_length: number;
+          gc_content: number;
+          features: Array<{ name: string; start: number; end: number; score: number }>;
+          gc_windows: Array<{ start: number; end: number; gc: number }>;
+          hotspots: number[];
+        };
+      };
+    }
   | { event: "explanation_chunk"; data: { candidate_id: number; text: string } }
   | {
       event: "pipeline_complete";
@@ -113,6 +136,13 @@ export type PipelineEvent =
           sequence?: string;
           scores?: CandidateScores | null;
           pdb_data?: string | null;
+          regulatory_map?: {
+            sequence_length: number;
+            gc_content: number;
+            features: Array<{ name: string; start: number; end: number; score: number }>;
+            gc_windows: Array<{ start: number; end: number; gc: number }>;
+            hotspots: number[];
+          } | null;
           confidence?: number | null;
           error?: string | null;
         }>;
@@ -150,6 +180,13 @@ export interface AgentCandidateUpdate {
   sequence: string;
   scores: CandidateScores;
   pdb_data?: string | null;
+  regulatory_map?: {
+    sequence_length: number;
+    gc_content: number;
+    features: Array<{ name: string; start: number; end: number; score: number }>;
+    gc_windows: Array<{ start: number; end: number; gc: number }>;
+    hotspots: number[];
+  } | null;
   confidence?: number | null;
   structure_model?: string | null;
   mutation?: {

@@ -22,8 +22,20 @@ export const STAGE_KEYS: StageKey[] = [
 const RETRIEVAL_SOURCES = ["ncbi", "pubmed", "clinvar"] as const;
 
 export type PipelineAction =
-  | { type: "INIT_DESIGN_SUBMIT"; apiBase: string; requestedCandidates: number }
-  | { type: "DESIGN_ACCEPTED"; sessionId: string; wsUrl: string; runProfile: "demo" | "live"; goal: string }
+  | {
+      type: "INIT_DESIGN_SUBMIT";
+      apiBase: string;
+      requestedCandidates: number;
+      truthMode: "demo_fallback" | "real_only";
+    }
+  | {
+      type: "DESIGN_ACCEPTED";
+      sessionId: string;
+      wsUrl: string;
+      runProfile: "demo" | "live";
+      truthMode: "demo_fallback" | "real_only";
+      goal: string;
+    }
   | { type: "PIPELINE_EVENT"; payload: PipelineEvent }
   | { type: "WS_STATUS"; status: PipelineState["wsStatus"] }
   | { type: "SELECT_CANDIDATE"; candidateId: number }
@@ -54,6 +66,7 @@ function emptyCandidate(id: number): CandidateState {
     perPositionScores: {},
     confidence: null,
     pdbData: "",
+    regulatoryMap: null,
     error: null,
     baseHeat: {}
   };
@@ -127,6 +140,7 @@ export function createInitialState(apiBase = "http://localhost:8000"): PipelineS
     wsUrl: "",
     wsStatus: "disconnected",
     runProfile: "demo",
+    truthMode: "demo_fallback",
     requestedCandidates: 10,
     pipelineStatus: "idle",
     stages: {
@@ -169,6 +183,7 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
       state.sessionId = payload.data.session_id;
       state.requestedCandidates = payload.data.requested_candidates;
       state.runProfile = payload.data.run_profile;
+      state.truthMode = payload.data.truth_mode;
       state.pipelineStatus = "running";
       state.candidateOrder = [...payload.data.candidate_ids];
       for (const candidateId of payload.data.candidate_ids) {
@@ -218,6 +233,14 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
         candidate.error = payload.data.reason;
       }
       pushEvent(state, `candidate #${payload.data.candidate_id} ${payload.data.status}`);
+      break;
+    }
+
+    case "candidate_seeded": {
+      const candidate = ensureCandidate(state, payload.data.candidate_id);
+      candidate.sequence = payload.data.sequence;
+      candidate.streamOffset = null;
+      pushEvent(state, `candidate #${payload.data.candidate_id} seeded (${payload.data.source})`);
       break;
     }
 
@@ -271,6 +294,19 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
       break;
     }
 
+    case "regulatory_map_ready": {
+      const candidate = ensureCandidate(state, payload.data.candidate_id);
+      candidate.regulatoryMap = payload.data.regulatory_map;
+      if (candidate.status !== "failed") {
+        candidate.status = "structured";
+      }
+      const active = state.activeCandidateId === null ? null : state.candidates[state.activeCandidateId];
+      if (!active || active.status !== "structured") {
+        state.activeCandidateId = payload.data.candidate_id;
+      }
+      break;
+    }
+
     case "explanation_chunk": {
       const text = state.explanationByCandidate[payload.data.candidate_id] ?? "";
       state.explanationByCandidate[payload.data.candidate_id] = `${text}${payload.data.text}`;
@@ -286,7 +322,12 @@ function applyPipelineEvent(baseState: PipelineState, payload: PipelineEvent): P
         if (candidatePayload.sequence) candidate.sequence = candidatePayload.sequence;
         candidate.streamOffset = null;
         if (candidatePayload.scores) candidate.scores = candidatePayload.scores;
-        if (typeof candidatePayload.pdb_data === "string") candidate.pdbData = candidatePayload.pdb_data;
+        if (typeof candidatePayload.pdb_data === "string") {
+          candidate.pdbData = candidatePayload.pdb_data;
+        }
+        if (candidatePayload.regulatory_map) {
+          candidate.regulatoryMap = candidatePayload.regulatory_map;
+        }
         if (typeof candidatePayload.confidence === "number") candidate.confidence = candidatePayload.confidence;
         if (candidatePayload.error) candidate.error = candidatePayload.error;
       }
@@ -312,6 +353,7 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
     case "INIT_DESIGN_SUBMIT": {
       const next = createInitialState(action.apiBase);
       next.requestedCandidates = action.requestedCandidates;
+      next.truthMode = action.truthMode;
       next.pipelineStatus = "running";
       next.isSubmittingDesign = true;
       next.chat.push({ role: "system", text: "Design run started.", at: nowTag() });
@@ -323,6 +365,7 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       next.sessionId = action.sessionId;
       next.wsUrl = action.wsUrl;
       next.runProfile = action.runProfile;
+      next.truthMode = action.truthMode;
       next.isSubmittingDesign = false;
       next.chat.push({ role: "user", text: action.goal, at: nowTag() });
       pushEvent(next, `POST /api/design accepted (${action.sessionId})`);
@@ -428,9 +471,12 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
           candidate.pdbData = update.pdb_data;
           candidate.confidence = typeof update.confidence === "number" ? update.confidence : candidate.confidence;
           candidate.status = "structured";
-        } else {
-          candidate.status = candidate.status === "structured" ? "structured" : "scored";
         }
+        if (update.regulatory_map) {
+          candidate.regulatoryMap = update.regulatory_map;
+          candidate.status = "structured";
+        }
+        candidate.status = candidate.status === "structured" ? "structured" : "scored";
         candidate.perPositionScores = Object.fromEntries(
           (update.per_position_scores ?? []).map((row) => [row.position, Number(row.score)])
         );

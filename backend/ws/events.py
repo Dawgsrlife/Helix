@@ -24,6 +24,7 @@ class PipelineManifestData(BaseModel):
     requested_candidates: int
     candidate_ids: list[int]
     run_profile: Literal["demo", "live"]
+    truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"
     candidate_seed_sequences: dict[int, str] = Field(default_factory=dict)
 
 
@@ -105,6 +106,20 @@ class CandidateStatusEvent(BaseModel):
         return self.model_dump(mode="json")
 
 
+class CandidateSeedData(BaseModel):
+    candidate_id: int
+    sequence: str
+    source: Literal["retrieval_context", "fallback_seed"] = "fallback_seed"
+
+
+class CandidateSeedEvent(BaseModel):
+    event: Literal["candidate_seeded"] = "candidate_seeded"
+    data: CandidateSeedData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class StructureReadyData(BaseModel):
     candidate_id: int
     pdb_data: str
@@ -127,6 +142,19 @@ class ExplanationChunkData(BaseModel):
 class ExplanationChunkEvent(BaseModel):
     event: Literal["explanation_chunk"] = "explanation_chunk"
     data: ExplanationChunkData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
+class RegulatoryMapReadyData(BaseModel):
+    candidate_id: int
+    regulatory_map: dict[str, Any]
+
+
+class RegulatoryMapReadyEvent(BaseModel):
+    event: Literal["regulatory_map_ready"] = "regulatory_map_ready"
+    data: RegulatoryMapReadyData
 
     def to_json(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
