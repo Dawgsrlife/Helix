@@ -184,13 +184,13 @@ export default function TutorialOverlay({ isOpen, onClose, onViewChange }: Tutor
   }, [onClose, onViewChange]);
 
   const handleNext = useCallback(() => {
-    if (currentStep < totalSteps - 1) setCurrentStep((s) => s + 1);
-    else completeTutorial();
+    setCurrentStep((s) => s < STEPS.length - 1 ? s + 1 : s);
+    if (currentStep >= totalSteps - 1) completeTutorial();
   }, [currentStep, totalSteps, completeTutorial]);
 
   const handleBack = useCallback(() => {
-    if (currentStep > 0) setCurrentStep((s) => s - 1);
-  }, [currentStep]);
+    setCurrentStep((s) => s > 0 ? s - 1 : s);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;

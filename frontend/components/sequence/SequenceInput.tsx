@@ -237,7 +237,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 <p className="text-[13px] mb-4" style={{ color: "var(--base-t)" }}>{validationError ?? error}</p>
               )}
 
-              <button onClick={handleDesignSubmit} disabled={isLoading || !designGoal.trim()}
+              <button onClick={handleDesignSubmit} disabled={isLoading || designGoal.trim().length === 0}
                 className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
                 style={{ background: designGoal.trim() ? "var(--accent)" : "var(--surface-elevated)", color: designGoal.trim() ? "var(--surface-base)" : "var(--text-faint)" }}>
                 {isLoading ? (
