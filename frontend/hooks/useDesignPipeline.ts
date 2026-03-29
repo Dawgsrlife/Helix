@@ -56,8 +56,13 @@ export function useDesignPipeline() {
         setSessionId(sessionId);
 
         // Step 2: Open WebSocket
+        useHelixStore.getState().setWsStatus("connecting");
         const ws = new WebSocket(wsUrl);
         wsRef.current = ws;
+
+        ws.onopen = () => {
+          useHelixStore.getState().setWsStatus("connected");
+        };
 
         ws.onmessage = (event) => {
           try {
@@ -77,6 +82,7 @@ export function useDesignPipeline() {
 
         ws.onclose = () => {
           wsRef.current = null;
+          useHelixStore.getState().setWsStatus("disconnected");
         };
       } catch {
         // Backend unavailable — run mock pipeline simulation

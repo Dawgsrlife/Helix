@@ -82,7 +82,7 @@ export default function SequenceViewer({
               borderRadius: "2px",
             }}
             onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(27, 27, 29, 0.5)";
+              (e.currentTarget as HTMLElement).style.backgroundColor = "color-mix(in oklch, var(--surface-raised), transparent 50%)";
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLElement).style.backgroundColor = "transparent";

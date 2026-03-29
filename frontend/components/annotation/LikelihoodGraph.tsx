@@ -7,12 +7,14 @@ interface LikelihoodGraphProps {
   scores: LikelihoodScore[];
   highlightedPosition?: number;
   onPositionHover: (position: number) => void;
+  theme?: "dark" | "light";
 }
 
 export default function LikelihoodGraph({
   scores,
   highlightedPosition,
   onPositionHover,
+  theme = "dark",
 }: LikelihoodGraphProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,9 +56,9 @@ export default function LikelihoodGraph({
       const isHighlighted = score.position === highlightedPosition;
 
       if (isHighlighted) {
-        ctx.fillStyle = "#e5e1e4";
+        ctx.fillStyle = theme === "dark" ? "#e5e1e4" : "#1a1a1c";
       } else {
-        ctx.fillStyle = "rgba(91, 181, 162, 0.50)";
+        ctx.fillStyle = theme === "dark" ? "rgba(91, 181, 162, 0.50)" : "rgba(52, 140, 120, 0.55)";
       }
 
       ctx.fillRect(x, y, Math.max(barWidth - 0.5, 0.5), barHeight);
@@ -65,14 +67,14 @@ export default function LikelihoodGraph({
     // Highlight line
     if (highlightedPosition !== undefined && highlightedPosition < scores.length) {
       const x = (highlightedPosition / scores.length) * w;
-      ctx.strokeStyle = "rgba(229, 225, 228, 0.3)";
+      ctx.strokeStyle = theme === "dark" ? "rgba(229, 225, 228, 0.3)" : "rgba(26, 26, 28, 0.25)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, h);
       ctx.stroke();
     }
-  }, [scores, highlightedPosition, maxAbsScore]);
+  }, [scores, highlightedPosition, maxAbsScore, theme]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!containerRef.current || scores.length === 0) return;
