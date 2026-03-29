@@ -122,7 +122,7 @@ interface HelixState {
   setRetrievalStatuses: (statuses: RetrievalStatus[]) => void;
   updateRetrievalStatus: (source: string, status: RetrievalStatus["status"]) => void;
   addCompletedStage: (stage: string) => void;
-  savedSnapshot: { sequence: string; editHistory: EditEntry[] } | null;
+  savedSnapshot: { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null;
   saveVersion: () => void;
   revertVersion: () => void;
   reset: () => void;
@@ -158,7 +158,7 @@ const initialState = {
   completedStages: [] as string[],
   wsStatus: "disconnected" as "disconnected" | "connecting" | "connected",
   theme: "dark" as "dark" | "light",
-  savedSnapshot: null as { sequence: string; editHistory: EditEntry[] } | null,
+  savedSnapshot: null as { sequence: string; editHistory: EditEntry[]; pdb?: string | null } | null,
   user: null as { id: string; name: string; email: string } | null,
 };
 
@@ -270,12 +270,24 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   signIn: () => set({ user: { id: "user_1", name: "Demo User", email: "demo@helix.bio" } }),
   signOut: () => set({ user: null }),
   saveVersion: () => set((s) => ({
-    savedSnapshot: { sequence: s.rawSequence, editHistory: [...s.editHistory] },
+    savedSnapshot: { sequence: s.rawSequence, editHistory: [...s.editHistory], pdb: s.activePdb },
   })),
   revertVersion: () => {
     const snap = get().savedSnapshot;
     if (snap) {
-      set({ rawSequence: snap.sequence, editHistory: snap.editHistory });
+      const regions = get().regions;
+      const scores = get().scores;
+      const newBases = parseSequence(snap.sequence, regions).map((b, i) => ({
+        ...b,
+        likelihoodScore: scores[i]?.score,
+      }));
+      set({
+        rawSequence: snap.sequence,
+        bases: newBases,
+        editHistory: snap.editHistory,
+        activePdb: snap.pdb ?? get().activePdb,
+        mutationEffect: null,
+      });
     }
   },
   reset: () => set(initialState),

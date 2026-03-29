@@ -1014,23 +1014,27 @@ function AnalyzePageInner() {
                     })()}
                   </div>
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
-                  {/* Structure */}
+                  {/* Live 3D structure preview */}
                   <div className="p-5">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>
-                        <ScienceTooltip term="protein-structure">Structure</ScienceTooltip>
+                        <ScienceTooltip term="protein-structure">Live Structure</ScienceTooltip>
                       </span>
                       <button onClick={() => setViewMode("structure")} className="text-[10px] font-medium" style={{ color: "var(--accent)" }}>
-                        Expand <Maximize2 size={10} className="inline ml-0.5" />
+                        Fullscreen <Maximize2 size={10} className="inline ml-0.5" />
                       </button>
                     </div>
-                    <div className="rounded-lg overflow-hidden h-[100px] cursor-pointer flex items-center justify-center" style={{ background: "var(--surface-base)" }}
-                      onClick={() => setViewMode("structure")}>
-                      <div className="text-center">
-                        <Box size={28} style={{ color: "var(--accent)", margin: "0 auto 4px", opacity: 0.4 }} />
-                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>View 3D</span>
-                      </div>
+                    <div className="rounded-lg overflow-hidden h-[200px]" style={{ background: "var(--surface-void)" }}>
+                      <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues}
+                        onResidueClick={handleResidueClick} theme={theme} />
                     </div>
+                    {mutationEffect && (
+                      <div className="mt-2 text-center">
+                        <span className="text-[10px]" style={{ color: "var(--accent)" }}>
+                          Structure re-folded after {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
                   {/* Edit history */}
