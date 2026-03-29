@@ -22,15 +22,15 @@ export default function Home() {
       .fromTo(".h-tag", { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.5 })
       .fromTo(".h-line", { opacity: 0, y: 35 }, { opacity: 1, y: 0, stagger: 0.15, duration: 0.8 }, "-=0.2")
       .fromTo(".h-sub", { opacity: 0 }, { opacity: 1, duration: 0.5 }, "-=0.3")
-      .fromTo(".h-actions > *", { opacity: 0, y: 10 }, { opacity: 1, y: 0, stagger: 0.08, duration: 0.4 }, "-=0.2")
-      .fromTo(".hero-img-wrap", { opacity: 0, y: 50 }, { opacity: 1, y: 0, duration: 0.7 }, "-=0.3");
+      .fromTo(".h-actions > *", { opacity: 0, y: 10 }, { opacity: 1, y: 0, stagger: 0.08, duration: 0.4 }, "-=0.2");
 
-    // ── HERO ZOOM: text fades, image grows (HALVED distance) ──
+    // ── HERO SCROLL: text fades, bg image scales and sharpens ──
     gsap.timeline({
       scrollTrigger: { trigger: ".scene-hero", start: "top top", end: "+=1200", pin: true, scrub: 0.8 },
     })
-      .to(".hero-text-layer", { opacity: 0, y: -40, duration: 0.4 }, 0)
-      .to(".hero-img-wrap", { scale: 1.08, y: -20, duration: 0.6 }, 0.1);
+      .to(".hero-text-layer", { opacity: 0, y: -60, duration: 0.4 }, 0)
+      .to(".hero-bg-img", { scale: 1.12, filter: "blur(0px) brightness(0.6)", duration: 0.6 }, 0)
+      .to(".hero-overlay", { opacity: 0.3, duration: 0.6 }, 0);
 
     // ── EDIT SCENE (HALVED) ──
     gsap.timeline({
@@ -86,9 +86,17 @@ export default function Home() {
       </nav>
 
       {/* ═══ SCENE 1: HERO ═══ */}
-      <section className="scene-hero min-h-screen flex flex-col items-center justify-start pt-28 px-6 relative">
+      <section className="scene-hero min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden">
+        {/* Background image (full-bleed, blurred for contrast) */}
+        <div className="absolute inset-0 z-0">
+          <Image src="/assets/hero-editor.jpg" alt="" width={1920} height={1080} priority
+            className="hero-bg-img w-full h-full object-cover"
+            style={{ filter: "blur(8px) brightness(0.35)", transform: "scale(1.05)" }} />
+          <div className="hero-overlay absolute inset-0" style={{ background: "linear-gradient(to bottom, rgba(10,10,12,0.7) 0%, rgba(10,10,12,0.85) 50%, rgba(10,10,12,0.95) 100%)" }} />
+        </div>
+
         {/* Floating particles (subtle ATCG) */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden z-10">
           {["A", "T", "C", "G", "A", "T", "G", "C", "A", "G"].map((b, i) => (
             <span key={i} className="absolute font-mono text-xl select-none"
               style={{
@@ -103,7 +111,7 @@ export default function Home() {
         </div>
 
         {/* Text layer (z-30, fades on scroll) */}
-        <div className="hero-text-layer relative z-30 text-center max-w-4xl mb-8">
+        <div className="hero-text-layer relative z-30 text-center max-w-4xl">
           <p className="h-tag opacity-0 text-[13px] font-medium tracking-widest uppercase mb-8"
             style={{ color: "var(--accent)" }}>
             Evo 2 / 40B parameters / 9T base pairs
@@ -116,7 +124,7 @@ export default function Home() {
               </em>
             </span>
           </h1>
-          <p className="h-sub opacity-0 text-[17px] max-w-xl mx-auto leading-relaxed mb-8"
+          <p className="h-sub opacity-0 text-[17px] max-w-xl mx-auto leading-relaxed mb-10"
             style={{ color: "var(--text-secondary)" }}>
             Paste a sequence. Watch Evo 2 annotate, score, and fold it in real time. Click any base for instant feedback.
           </p>
@@ -127,17 +135,10 @@ export default function Home() {
             </Link>
             <a href="https://github.com/Dawgsrlife/Helix" target="_blank" rel="noopener noreferrer"
               className="opacity-0 inline-flex items-center gap-2 px-7 py-3 rounded-full border text-sm transition-all hover:border-white/25"
-              style={{ borderColor: "rgba(255,255,255,0.12)", color: "var(--text-secondary)" }}>
+              style={{ borderColor: "rgba(255,255,255,0.20)", color: "var(--text-secondary)" }}>
               GitHub
             </a>
           </div>
-        </div>
-
-        {/* Product image (z-10, scales up on scroll) */}
-        <div className="hero-img-wrap opacity-0 relative z-10 w-full max-w-4xl mx-auto -mb-8" style={{ transformOrigin: "center top" }}>
-          <Image src="/assets/hero-editor.jpg" alt="Helix Sequence Editor" width={1920} height={1080} priority
-            className="w-full h-auto rounded-2xl object-cover max-h-[520px]"
-            style={{ boxShadow: "0 24px 80px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06) inset" }} />
         </div>
       </section>
 
