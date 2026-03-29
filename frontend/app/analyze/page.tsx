@@ -85,7 +85,7 @@ export default function AnalyzePage() {
           className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 cursor-pointer transition-colors hover:bg-white/5"
           title="Home"
         >
-          <Home size={18} style={{ color: "#93edd9" }} />
+          <Home size={18} style={{ color: "#5bb5a2" }} />
         </Link>
 
         {SIDEBAR_ITEMS.map(({ icon: Icon, label, active }) => (
@@ -95,7 +95,7 @@ export default function AnalyzePage() {
             className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors"
             style={{
               background: active ? "rgba(147, 237, 217, 0.1)" : "transparent",
-              color: active ? "#93edd9" : "#48474a",
+              color: active ? "#5bb5a2" : "#48474a",
             }}
             onMouseEnter={(e) => {
               if (!active) e.currentTarget.style.background = "rgba(255,255,255,0.05)";
@@ -119,7 +119,7 @@ export default function AnalyzePage() {
           <div className="flex items-center gap-3">
             <span
               className="text-xs font-bold tracking-[-0.04em] uppercase"
-              style={{ fontFamily: "var(--font-headline), serif", fontStyle: "italic", color: "#93edd9" }}
+              style={{ fontWeight: 600, color: "#5bb5a2" }}
             >
               Helix
             </span>
@@ -136,7 +136,7 @@ export default function AnalyzePage() {
             <span className="text-[10px] font-mono" style={{ color: "#48474a" }}>Evo 2 40B</span>
             <div
               className="w-[6px] h-[6px] rounded-full"
-              style={{ background: "#93edd9", animation: "pulse-soft 2s ease-in-out infinite" }}
+              style={{ background: "#5bb5a2", animation: "pulse-soft 2s ease-in-out infinite" }}
             />
           </div>
         </header>
@@ -243,7 +243,7 @@ export default function AnalyzePage() {
                             className="px-2.5 py-1 text-[11px] rounded font-mono cursor-pointer transition-all"
                             style={{
                               background: activePdb === protein.pdbData ? "#262529" : "#1f1f22",
-                              color: activePdb === protein.pdbData ? "#93edd9" : "#6b6b6b",
+                              color: activePdb === protein.pdbData ? "#5bb5a2" : "#6b6b6b",
                             }}
                           >
                             {protein.regionStart}-{protein.regionEnd}

@@ -70,21 +70,21 @@ export default function SequenceInput({
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-2 h-2 rounded-full" style={{ background: "#93edd9" }} />
+          <div className="w-2 h-2 rounded-full" style={{ background: "#5bb5a2" }} />
           <span
             className="uppercase tracking-[0.3em]"
             style={{
-              fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
-              fontSize: "10px",
-              color: "#93edd9",
+              fontFamily: "var(--font-sans), sans-serif",
+              fontSize: "11px",
+              color: "#5bb5a2",
             }}
           >
             New Analysis
           </span>
         </div>
         <h1
-          className="italic text-4xl md:text-5xl mb-4"
-          style={{ fontFamily: "var(--font-headline), 'Noto Serif', serif", color: "#fffbfe" }}
+          className="text-3xl font-semibold tracking-tight mb-4"
+          style={{ color: "#e8e8e6" }}
         >
           Paste a sequence
         </h1>
@@ -116,13 +116,13 @@ export default function SequenceInput({
         <div className="flex justify-end gap-4 mt-2">
           <span
             className="uppercase tracking-widest"
-            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+            style={{ fontFamily: "var(--font-sans), sans-serif", fontSize: "11px", color: "#48474a" }}
           >
             {charCount} characters
           </span>
           <span
             className="uppercase tracking-widest"
-            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+            style={{ fontFamily: "var(--font-sans), sans-serif", fontSize: "11px", color: "#48474a" }}
           >
             {kbSize}kB
           </span>
@@ -141,7 +141,7 @@ export default function SequenceInput({
         <div className="flex items-center gap-4">
           <span
             className="uppercase tracking-widest"
-            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+            style={{ fontFamily: "var(--font-sans), sans-serif", fontSize: "11px", color: "#48474a" }}
           >
             Examples:
           </span>
@@ -149,11 +149,11 @@ export default function SequenceInput({
             <button
               key={name}
               onClick={() => loadExample(seq)}
-              className="transition-colors hover:text-[#93edd9]"
+              className="transition-colors hover:text-[#5bb5a2]"
               style={{
-                fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+                fontFamily: "var(--font-sans), sans-serif",
                 fontSize: "12px",
-                color: "#93edd9",
+                color: "#5bb5a2",
                 textDecoration: "underline",
                 textUnderlineOffset: "3px",
               }}
@@ -167,7 +167,7 @@ export default function SequenceInput({
           disabled={isLoading || charCount === 0}
           className="px-8 py-3 uppercase tracking-[0.2em] text-xs transition-all duration-300 disabled:opacity-30 disabled:cursor-not-allowed hover:opacity-90"
           style={{
-            fontFamily: "var(--font-label), 'Space Grotesk', sans-serif",
+            fontFamily: "var(--font-sans), sans-serif",
             background: "#fffbfe",
             color: "#0e0e10",
           }}
@@ -181,11 +181,11 @@ export default function SequenceInput({
         <div className="flex items-center gap-2">
           <div
             className="w-[6px] h-[6px] rounded-full"
-            style={{ background: "#93edd9", animation: "pulse-soft 2s ease-in-out infinite" }}
+            style={{ background: "#5bb5a2", animation: "pulse-soft 2s ease-in-out infinite" }}
           />
           <span
             className="uppercase tracking-widest"
-            style={{ fontFamily: "var(--font-label), 'Space Grotesk', sans-serif", fontSize: "10px", color: "#48474a" }}
+            style={{ fontFamily: "var(--font-sans), sans-serif", fontSize: "11px", color: "#48474a" }}
           >
             Helix Node: Active
           </span>
