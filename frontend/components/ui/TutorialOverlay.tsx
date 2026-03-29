@@ -105,10 +105,10 @@ const TUTORIAL_STEPS: TutorialStep[] = [
     icon: "pencil",
   },
   {
-    id: "copilot",
-    title: "Ask Copilot Anything",
+    id: "helio",
+    title: "Ask Helio Anything",
     description:
-      "Click the Copilot button to ask questions in plain English. It explains metrics, suggests edits, and helps you understand results.",
+      "Click the Helio button to ask questions in plain English. It explains metrics, suggests edits, and helps you understand results.",
     targetView: null,
     anchor: null,
     position: "bottom",

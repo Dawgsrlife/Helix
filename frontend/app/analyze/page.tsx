@@ -370,7 +370,7 @@ function AnalyzePageInner() {
                 <button onClick={toggleChat}
                   className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
                   style={{ color: chatOpen ? "var(--accent-bright)" : "var(--text-faint)" }}>
-                  Copilot
+                  Helio
                 </button>
               </>
             )}
@@ -409,7 +409,9 @@ function AnalyzePageInner() {
                   <motion.div {...staggerItem}>
                     <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
                     <p className="text-[13px]" style={{ color: "var(--text-secondary)" }}>
-                      <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> analyzed across {regions.length} regions. {codingRegions.length} <ScienceTooltip term="exon">coding region{codingRegions.length !== 1 ? "s" : ""}</ScienceTooltip> identified.
+                      <ScienceTooltip term="base-pair">{rawSequence.length} bp</ScienceTooltip> scored with {scores.length} per-position likelihoods.
+                      {regions.length > 0 && <> {codingRegions.length} <ScienceTooltip term="exon">coding region{codingRegions.length !== 1 ? "s" : ""}</ScienceTooltip> identified.</>}
+                      {analysisResult.predictedProteins.length > 0 && <> {analysisResult.predictedProteins.length} protein structure{analysisResult.predictedProteins.length !== 1 ? "s" : ""} predicted.</>}
                     </p>
                   </motion.div>
                   <div className="flex gap-2">
@@ -1050,7 +1052,7 @@ function AnalyzePageInner() {
         </AnimatePresence>
       </div>
 
-      {/* Floating Copilot button */}
+      {/* Floating Helio button */}
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
         <motion.button onClick={toggleChat}
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium"
@@ -1065,7 +1067,7 @@ function AnalyzePageInner() {
           whileTap={{ scale: 0.95 }}
           transition={springTransition}
         >
-          <Sparkles size={16} /> Ask Copilot
+          <Sparkles size={16} /> Ask Helio
         </motion.button>
       )}
     </div>
