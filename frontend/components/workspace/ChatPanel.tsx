@@ -6,29 +6,29 @@ import { X, Send, Sparkles } from "lucide-react";
 
 const SCREEN_PROMPTS: Record<string, string[]> = {
   analyze: [
-    "Why is the top candidate ranked highest?",
-    "Which region has the most functional significance?",
-    "Summarize the off-target risk across candidates",
+    "What do these scores mean?",
+    "Rescore the sequence",
+    "Suggest an edit to improve function",
   ],
   leaderboard: [
-    "Compare candidate #1 and #2 scoring",
-    "Which candidate has the best tissue specificity?",
-    "What makes novelty scores vary between candidates?",
+    "Compare candidate #1 and #2",
+    "Which candidate is safest?",
+    "What can you do?",
   ],
   explorer: [
-    "What annotation is at my selected position?",
-    "Suggest a mutation to improve this region",
-    "Why is the likelihood low at positions 40-60?",
+    "What is this base's annotation?",
+    "Mutate position 12 to C",
+    "Why is the likelihood low here?",
   ],
   ide: [
-    "Will this edit improve functional plausibility?",
-    "Suggest the next best mutation to try",
-    "Compare current version against the original",
+    "Mutate position 20 to G",
+    "Rescore the sequence",
+    "Refold the protein",
   ],
   compare: [
-    "Why does Candidate A outperform B overall?",
-    "Which sequence differences drive the score delta?",
-    "Is the off-target risk acceptable for Candidate B?",
+    "Why does Candidate A outperform B?",
+    "What can you do?",
+    "Suggest an improvement",
   ],
 };
 
@@ -102,16 +102,50 @@ Rules:
       if (res.ok) {
         const data = await res.json();
         addChatMessage({ role: "assistant", content: data.assistant_message ?? "I couldn't process that." });
-        // If the agent updated candidate scores, refresh them
-        if (data.candidate_update?.scores) {
-          const scores = data.candidate_update.scores;
-          const updated = store.candidates.map(c =>
-            c.id === (store.activeCandidateId ?? 0)
-              ? { ...c, scores: { functional: scores.functional, tissue: scores.tissue_specificity, offTarget: scores.off_target, novelty: scores.novelty }, overall: (scores.combined ?? c.overall) * 100 }
-              : c
-          );
-          useHelixStore.getState().setCandidates(updated);
+
+        // Apply candidate updates from the agent (mutations, rescoring, structure)
+        const update = data.candidate_update;
+        if (update) {
+          const s = useHelixStore.getState();
+
+          // Update sequence if the agent mutated it
+          if (update.sequence && update.sequence !== s.rawSequence) {
+            s.setSequence(update.sequence);
+            const { parseSequence } = await import("@/lib/sequenceUtils");
+            const newBases = parseSequence(update.sequence, s.regions).map((b: any, i: number) => ({
+              ...b, likelihoodScore: s.scores[i]?.score,
+            })) as typeof s.bases;
+            useHelixStore.setState({ bases: newBases });
+          }
+
+          // Update scores
+          if (update.scores) {
+            const scores = update.scores;
+            const updated = s.candidates.map(c =>
+              c.id === (s.activeCandidateId ?? 0)
+                ? { ...c, scores: { functional: scores.functional, tissue: scores.tissue_specificity, offTarget: scores.off_target, novelty: scores.novelty }, overall: (scores.combined ?? 0) * 100 }
+                : c
+            );
+            useHelixStore.getState().setCandidates(updated);
+          }
+
+          // Update 3D structure if agent re-folded it
+          if (update.pdb_data) {
+            useHelixStore.getState().setActivePdb(update.pdb_data);
+          }
+
+          // Log mutation if one was applied
+          if (update.mutation) {
+            const m = update.mutation;
+            useHelixStore.getState().addEditEntry({
+              position: m.position ?? 0,
+              from: m.original_base ?? "?",
+              to: m.new_base ?? "?",
+              delta: 0,
+            });
+          }
         }
+
         setIsTyping(false);
         return;
       }
@@ -119,38 +153,105 @@ Rules:
       console.debug("[Helio] Backend agent chat unavailable, using local responses:", err);
     }
 
-    // Fallback: context-aware local responses
-    setTimeout(() => {
-      const store = useHelixStore.getState();
+    // Fallback: local responses with action capability
+    const doFallback = async () => {
+      const s = useHelixStore.getState();
+      const lc = msg.toLowerCase();
       let response: string;
 
-      const lc = msg.toLowerCase();
-      if (lc.includes("what") && (lc.includes("plddt") || lc.includes("confidence"))) {
-        response = "pLDDT (predicted Local Distance Difference Test) is the AI's confidence score for each part of a protein structure prediction, from 0-100. Scores above 90 mean the shape prediction is very reliable. Between 70-90 is confident. Below 50 means that region's shape is uncertain — it might be a flexible loop or disordered region.";
-      } else if (lc.includes("what") && (lc.includes("functional") || lc.includes("plausibility"))) {
-        response = `Functional plausibility measures how likely this DNA sequence produces a working protein. It's based on the Evo 2 model's log-likelihood scores — sequences that look like real, working genes score higher. Your top candidate scores ${((store.candidates[0]?.scores.functional ?? 0) * 100).toFixed(0)}%, which is strong.`;
-      } else if (lc.includes("off-target") || lc.includes("risk") || lc.includes("safety")) {
-        response = `Off-target risk measures the chance your sequence could accidentally affect unintended genes. Lower is better. Your top candidate shows ${((store.candidates[0]?.scores.offTarget ?? 0) * 100).toFixed(1)}% off-target risk, which is ${(store.candidates[0]?.scores.offTarget ?? 0) < 0.03 ? "excellent — well below the safety threshold" : "moderate — consider reviewing for pathogenic similarities"}.`;
-      } else if (lc.includes("suggest") || lc.includes("mutation") || lc.includes("edit")) {
-        response = `Based on the likelihood graph, positions with the most negative log-likelihood scores are most evolutionarily constrained — editing those is riskier. I'd suggest trying conservative edits (e.g., synonymous substitutions within coding regions) first. Go to Design Studio, pick a position, change the base, and the simulation will show you the predicted impact instantly.`;
-      } else if (lc.includes("why") && lc.includes("rank")) {
-        response = `Candidates are ranked by a weighted composite: functional (40%), tissue specificity (25%), safety (20% inverted off-target), and novelty (15%). Your top candidate at ${store.candidates[0]?.overall.toFixed(1) ?? "N/A"} leads because it combines high function with low off-target risk.`;
-      } else if (lc.includes("compare") || lc.includes("difference")) {
-        const c1 = store.candidates[0], c2 = store.candidates[1];
-        if (c1 && c2) {
-          response = `Candidate #1 scores ${c1.overall.toFixed(1)} vs #2 at ${c2.overall.toFixed(1)}. The main gap is in functional plausibility (${(c1.scores.functional*100).toFixed(0)}% vs ${(c2.scores.functional*100).toFixed(0)}%). Candidate #2 has higher novelty (${(c2.scores.novelty*100).toFixed(0)}%), which could be valuable if you need a more unique design.`;
-        } else {
-          response = "Run the analysis to generate multiple candidates, then I can compare their scoring profiles for you.";
+      // ACTION: Mutate a specific position
+      const mutateMatch = lc.match(/(?:mutate|change|edit|swap)\s+(?:position\s+)?(\d+)\s+(?:to\s+)?([atcg])/i);
+      if (mutateMatch && s.rawSequence) {
+        const pos = parseInt(mutateMatch[1]);
+        const base = mutateMatch[2].toUpperCase();
+        if (pos >= 0 && pos < s.rawSequence.length) {
+          const oldBase = s.rawSequence[pos];
+          const mutated = s.rawSequence.slice(0, pos) + base + s.rawSequence.slice(pos + 1);
+          s.setSequence(mutated);
+          const { parseSequence } = await import("@/lib/sequenceUtils");
+          const newBases = parseSequence(mutated, s.regions).map((b: any, i: number) => ({ ...b, likelihoodScore: s.scores[i]?.score })) as typeof s.bases;
+          useHelixStore.setState({ bases: newBases });
+          s.addEditEntry({ position: pos, from: oldBase, to: base, delta: 0 });
+
+          // Try to predict mutation effect
+          try {
+            const { predictMutation } = await import("@/lib/api");
+            const effect = await predictMutation(s.rawSequence, pos, base);
+            s.setMutationEffect(effect);
+            response = `Done. Changed position ${pos} from ${oldBase} to ${base}. Delta log-likelihood: ${effect.deltaLikelihood.toFixed(4)} (${effect.predictedImpact}). The sequence is updated — check the viewer.`;
+          } catch {
+            response = `Done. Changed position ${pos} from ${oldBase} to ${base}. Sequence updated. I couldn't score the impact — try running Rescore in Design Studio.`;
+          }
+
+          // Re-fold in background
+          try {
+            const { fetchStructure } = await import("@/lib/api");
+            const pdb = await fetchStructure(0, mutated.length, mutated);
+            useHelixStore.getState().setActivePdb(pdb);
+            response += " The 3D structure has been re-folded with the new sequence.";
+          } catch { /* keep old structure */ }
+
+          addChatMessage({ role: "assistant", content: response });
+          setIsTyping(false);
+          return;
         }
-      } else if (lc.includes("likelihood") || lc.includes("log-lik") || lc.includes("score")) {
-        response = `Log-likelihood is how "natural" the Evo 2 model thinks each position looks. Values closer to 0 are more expected (the model says "yes, this looks like real DNA"). Very negative values mean that position is unusual — it could be functionally important or an error. The graph at the bottom of Explorer shows this for every position.`;
+      }
+
+      // ACTION: Rescore the sequence
+      if (lc.includes("rescore") || lc.includes("re-score") || lc.includes("re-analyze") || (lc.includes("score") && lc.includes("again"))) {
+        if (s.rawSequence) {
+          try {
+            const { analyzeSequence } = await import("@/lib/api");
+            const result = await analyzeSequence(s.rawSequence);
+            useHelixStore.getState().setAnalysisResult(result);
+            response = `Rescored. The sequence now has ${result.perPositionScores.length} per-position scores. ${result.predictedProteins.length} protein(s) predicted. Check the Overview for updated results.`;
+          } catch {
+            response = "I couldn't rescore — the backend might be unavailable. Try the Rescore button in Design Studio.";
+          }
+        } else {
+          response = "No sequence loaded to rescore. Submit a sequence first.";
+        }
+        addChatMessage({ role: "assistant", content: response });
+        setIsTyping(false);
+        return;
+      }
+
+      // ACTION: Re-fold structure
+      if (lc.includes("refold") || lc.includes("re-fold") || lc.includes("predict structure") || lc.includes("fold again")) {
+        if (s.rawSequence) {
+          try {
+            const { fetchStructure } = await import("@/lib/api");
+            const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
+            useHelixStore.getState().setActivePdb(pdb);
+            response = "Structure re-folded with ESMFold. Check the 3D Structure view for the updated protein.";
+          } catch {
+            response = "Structure prediction failed — ESMFold may be unavailable.";
+          }
+        } else {
+          response = "No sequence to fold. Submit a sequence first.";
+        }
+        addChatMessage({ role: "assistant", content: response });
+        setIsTyping(false);
+        return;
+      }
+
+      // INFORMATIONAL responses
+      if (lc.includes("what") && (lc.includes("plddt") || lc.includes("confidence"))) {
+        response = "pLDDT is the AI's confidence score (0-100) for each part of a protein structure prediction. Above 90 = very reliable. 70-90 = confident. Below 50 = uncertain shape.";
+      } else if (lc.includes("off-target") || lc.includes("risk") || lc.includes("safety")) {
+        response = `Off-target risk: ${((s.candidates[0]?.scores.offTarget ?? 0) * 100).toFixed(1)}%. ${(s.candidates[0]?.scores.offTarget ?? 0) < 0.03 ? "Excellent — well below safety threshold." : "Moderate — consider reviewing."}`;
+      } else if (lc.includes("suggest") || lc.includes("recommend")) {
+        response = "Try: \"mutate position 12 to C\" or \"mutate position 30 to G\". I'll apply the edit, score it, and re-fold the protein. You can also say \"rescore\" or \"refold\" anytime.";
+      } else if (lc.includes("help") || lc.includes("what can you do")) {
+        response = "I can: (1) mutate bases — say \"mutate position 15 to G\", (2) rescore — say \"rescore\", (3) refold — say \"refold\", (4) explain any metric — ask about pLDDT, functional, off-target, etc.";
       } else {
-        response = `Your analysis covers ${store.rawSequence.length} bp with ${store.candidates.length} candidates scored on function, tissue targeting, safety, and novelty. The top candidate scored ${store.candidates[0]?.overall.toFixed(1) ?? "N/A"} overall. What would you like to know more about?`;
+        response = `Sequence: ${s.rawSequence.length} bp, ${s.candidates.length} candidates. Top score: ${s.candidates[0]?.overall.toFixed(1) ?? "N/A"}. I can mutate bases, rescore, refold, or explain metrics — just ask.`;
       }
 
       addChatMessage({ role: "assistant", content: response });
       setIsTyping(false);
-    }, 600);
+    };
+    doFallback();
   };
 
   return (
@@ -174,7 +275,7 @@ Rules:
         {chatMessages.length === 0 && (
           <div>
             <p className="text-[13px] mb-4 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              I can help you understand your analysis, explain scores, or suggest edits.
+              I can mutate bases, rescore sequences, refold proteins, and explain any metric. Try it.
             </p>
             <div className="space-y-1.5">
               {prompts.map((q) => (
