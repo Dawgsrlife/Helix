@@ -85,21 +85,33 @@ Rules:
 - pLDDT scores: >90 very confident, 70-90 confident, 50-70 uncertain, <50 unreliable
 - Scoring dimensions: functional (does it make a working protein), tissue (targets right cells), off-target (unintended effects, lower=safer), novelty (how unique)`;
 
+    const store = useHelixStore.getState();
     try {
-      // Try calling the backend's Claude API if available
-      const res = await fetch(`${API_BASE}/api/chat`, {
+      // Try calling the backend's agentic chat endpoint
+      const res = await fetch(`${API_BASE}/api/agent/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          session_id: store.sessionId ?? "local",
+          candidate_id: store.activeCandidateId ?? 0,
           message: msg,
-          context: systemPrompt,
           history: chatMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
         }),
       });
 
       if (res.ok) {
         const data = await res.json();
-        addChatMessage({ role: "assistant", content: data.response ?? data.message ?? "I couldn't process that request." });
+        addChatMessage({ role: "assistant", content: data.assistant_message ?? "I couldn't process that." });
+        // If the agent updated candidate scores, refresh them
+        if (data.candidate_update?.scores) {
+          const scores = data.candidate_update.scores;
+          const updated = store.candidates.map(c =>
+            c.id === (store.activeCandidateId ?? 0)
+              ? { ...c, scores: { functional: scores.functional, tissue: scores.tissue_specificity, offTarget: scores.off_target, novelty: scores.novelty }, overall: (scores.combined ?? c.overall) * 100 }
+              : c
+          );
+          useHelixStore.getState().setCandidates(updated);
+        }
         setIsTyping(false);
         return;
       }

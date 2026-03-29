@@ -121,7 +121,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               <button onClick={() => { setMode("paste"); setValidationError(null); }}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-medium transition-colors"
                 style={{
-                  background: mode === "paste" ? "rgba(91,181,162,0.1)" : "transparent",
+                  background: mode === "paste" ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
                   color: mode === "paste" ? "var(--accent)" : "var(--text-muted)",
                 }}>
                 <Dna size={14} /> Paste Sequence
@@ -129,7 +129,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
               <button onClick={() => { setMode("design"); setValidationError(null); }}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-medium transition-colors"
                 style={{
-                  background: mode === "design" ? "rgba(91,181,162,0.1)" : "transparent",
+                  background: mode === "design" ? "color-mix(in oklch, var(--accent), transparent 90%)" : "transparent",
                   color: mode === "design" ? "var(--accent)" : "var(--text-muted)",
                   borderLeft: "1px solid var(--ghost-border)",
                 }}>
@@ -142,7 +142,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
             <>
               {/* Input surface */}
               <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
                   <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Sequence Editor</span>
                   <div className="flex items-center gap-2">
                     <button onClick={() => fileRef.current?.click()}
@@ -162,7 +162,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                   className="w-full h-48 px-4 py-3 text-[13px] resize-none outline-none font-mono"
                   style={{ background: "transparent", color: "var(--text-primary)", lineHeight: "1.7" }}
                 />
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid var(--ghost-border)" }}>
                   <div className="flex items-center gap-4">
                     {charCount > 0 && (
                       <>
@@ -196,7 +196,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                   {EXAMPLES.map(({ name, desc, len, seq }) => (
                     <button key={name} onClick={() => { setInput(seq); setValidationError(null); }}
                       className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.04]"
-                      style={{ border: "1px solid rgba(255,255,255,0.04)" }}>
+                      style={{ border: "1px solid var(--ghost-border)" }}>
                       <FileText size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>
@@ -213,7 +213,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
             <>
               {/* Design goal input */}
               <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
-                <div className="flex items-center px-4 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="flex items-center px-4 py-2" style={{ borderBottom: "1px solid var(--ghost-border)" }}>
                   <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Design Goal</span>
                 </div>
                 <textarea
@@ -225,7 +225,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                   className="w-full h-32 px-4 py-3 text-[13px] resize-none outline-none"
                   style={{ background: "transparent", color: "var(--text-primary)", lineHeight: "1.7" }}
                 />
-                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="flex items-center justify-between px-4 py-2" style={{ borderTop: "1px solid var(--ghost-border)" }}>
                   <span className="text-[11px] font-mono" style={{ color: "var(--text-faint)" }}>
                     {designGoal.trim().length > 0 ? `${designGoal.trim().length} chars` : ""}
                   </span>
@@ -254,7 +254,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                   {DESIGN_EXAMPLES.map(({ name, desc, goal }) => (
                     <button key={name} onClick={() => { setDesignGoal(goal); setValidationError(null); }}
                       className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.04]"
-                      style={{ border: "1px solid rgba(255,255,255,0.04)" }}>
+                      style={{ border: "1px solid var(--ghost-border)" }}>
                       <Wand2 size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                       <div className="flex-1 min-w-0">
                         <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{name}</span>
@@ -283,7 +283,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
             {(mode === "paste" ? PASTE_STEPS : DESIGN_STEPS).map(({ step, label, desc }) => (
               <div key={step} className="flex gap-3">
                 <span className="text-[11px] font-mono font-semibold shrink-0 w-5 h-5 rounded flex items-center justify-center"
-                  style={{ background: "rgba(91,181,162,0.1)", color: "var(--accent)" }}>{step}</span>
+                  style={{ background: "color-mix(in oklch, var(--accent), transparent 90%)", color: "var(--accent)" }}>{step}</span>
                 <div>
                   <span className="text-[13px] font-medium block" style={{ color: "var(--text-primary)" }}>{label}</span>
                   <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{desc}</span>
