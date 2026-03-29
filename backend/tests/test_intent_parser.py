@@ -1,7 +1,7 @@
 import pytest
-from backend.models.domain import TissueSpec, DesignSpec
+from models.domain import TissueSpec, DesignSpec
 import asyncio
-from backend.pipeline.intent_parser import parse_intent
+from pipeline.intent_parser import parse_intent
 
 
 class TestTissueSpec:
