@@ -171,7 +171,9 @@ export function createInitialState(apiBase = "http://localhost:8000"): PipelineS
     isSubmittingFollowup: false,
     isSubmittingAgent: false,
     selectedPosition: null,
-    editFeedback: ""
+    editFeedback: "",
+    agentIterations: 0,
+    agentReasoningSteps: []
   };
 }
 
@@ -496,6 +498,12 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
       }
       if (action.response.comparison) {
         next.candidateComparison = action.response.comparison;
+      }
+      if (typeof action.response.iterations === "number") {
+        next.agentIterations = action.response.iterations;
+      }
+      if (Array.isArray(action.response.reasoning_steps)) {
+        next.agentReasoningSteps = action.response.reasoning_steps;
       }
 
       return recomputeLaymanSummary(next);

@@ -282,10 +282,10 @@ export default function App() {
           <AutoplayRibbon pipelineStatus={state.pipelineStatus} summary={state.laymanSummary} />
 
           <section className="workspace-meta">
-            <div>Session: {state.sessionId || "--"}</div>
-            <div>Requested: {state.requestedCandidates}</div>
-            <div>Ready: {completedCount}</div>
-            <div>Failed: {failedCount}</div>
+            <div>Session: {state.sessionId ? state.sessionId.slice(0, 8) + "..." : "--"}</div>
+            <div>Candidates: {completedCount}/{state.requestedCandidates} ready</div>
+            <div>Evo2 Context: 1,048,576 bp</div>
+            <div>Model: Evo2-7B (GX10)</div>
           </section>
 
           <section className="workspace-grid">
@@ -366,6 +366,8 @@ export default function App() {
                   candidateComparison={state.candidateComparison}
                   onSubmitAgent={handleAgentMessage}
                   isSubmitting={state.isSubmittingAgent || state.isSubmittingFollowup}
+                  agentIterations={state.agentIterations}
+                  reasoningSteps={state.agentReasoningSteps}
                 />
               </div>
             </aside>

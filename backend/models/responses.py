@@ -65,6 +65,8 @@ class AgentChatResponse(BaseModel):
     tool_calls: list[AgentToolCallResponse]
     candidate_update: AgentCandidateUpdateResponse | None = None
     comparison: list[dict[str, object]] | None = None
+    iterations: int = 1
+    reasoning_steps: list[str] | None = None
 
 
 class StructureResponse(BaseModel):

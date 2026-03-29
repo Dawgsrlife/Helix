@@ -81,6 +81,8 @@ export interface PipelineState {
   isSubmittingAgent: boolean;
   selectedPosition: number | null;
   editFeedback: string;
+  agentIterations: number;
+  agentReasoningSteps: string[];
 }
 
 export type PipelineEvent =
@@ -213,4 +215,6 @@ export interface AgentChatResponse {
     off_target: number;
     novelty: number;
   }> | null;
+  iterations?: number;
+  reasoning_steps?: string[] | null;
 }

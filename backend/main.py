@@ -312,6 +312,8 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
         tool_calls=[AgentToolCallResponse(**tool.to_dict()) for tool in result.tool_calls],
         candidate_update=candidate_update,
         comparison=result.comparison,
+        iterations=result.iterations,
+        reasoning_steps=result.reasoning_steps,
     )
 
 

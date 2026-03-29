@@ -49,3 +49,5 @@ materials/
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+mock_frontend
+mock_backend

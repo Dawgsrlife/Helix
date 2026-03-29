@@ -174,6 +174,21 @@ def build_mock_pdb_from_dna(
             cb_vec = _add(_add(ca_vec, _scale(normal, 1.44)), _scale(binormal, 0.26))
             atoms.append(("CB", cb_vec[0], cb_vec[1], cb_vec[2], "C"))
 
+            # Extended sidechains for larger residues (richer surface rendering)
+            large_residues = {"ARG", "LYS", "GLU", "GLN", "MET", "LEU", "ILE", "PHE", "TRP", "TYR", "HIS", "PRO"}
+            if residue_name in large_residues:
+                cg_vec = _add(cb_vec, _scale(normal, 1.38))
+                atoms.append(("CG", cg_vec[0], cg_vec[1], cg_vec[2], "C"))
+                aromatic = {"PHE", "TRP", "TYR", "HIS"}
+                if residue_name in aromatic:
+                    cd1_vec = _add(cg_vec, _scale(binormal, 1.22))
+                    cd2_vec = _add(cg_vec, _scale(binormal, -1.22))
+                    atoms.append(("CD1", cd1_vec[0], cd1_vec[1], cd1_vec[2], "C"))
+                    atoms.append(("CD2", cd2_vec[0], cd2_vec[1], cd2_vec[2], "C"))
+                elif residue_name in {"ARG", "LYS", "GLU", "GLN", "MET"}:
+                    cd_vec = _add(cg_vec, _scale(normal, 1.34))
+                    atoms.append(("CD", cd_vec[0], cd_vec[1], cd_vec[2], "C"))
+
         for atom_name, atom_x, atom_y, atom_z, element in atoms:
             lines.append(
                 _atom_line(

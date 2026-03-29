@@ -23,6 +23,7 @@ BASES = ("A", "T", "C", "G")
 MAX_VARIANTS_TO_EVAL = 48
 MAX_OPTIMIZE_CONCURRENCY = 8
 VARIANT_SCORE_TIMEOUT_SECONDS = 6.0
+MAX_AGENT_ITERATIONS = 3  # Max plan→execute→reflect loops
 EDIT_RE = re.compile(
     r"(?:position|pos|base|bp)\s*(\d+)\D+(?:to|with|as|=)\s*([ATCG])\b",
     flags=re.IGNORECASE,
@@ -74,6 +75,10 @@ class CopilotState(TypedDict, total=False):
     comparison: list[dict[str, Any]] | None
     execution_notes: list[str]
     assistant_message: str
+    # Agentic loop fields
+    iteration: int
+    should_continue: bool
+    reasoning_steps: list[str]
 
 
 @dataclass(frozen=True)
@@ -125,6 +130,8 @@ class AgentChatResult:
     tool_calls: list[AgentToolCall]
     candidate_update: AgentCandidateUpdate | None = None
     comparison: list[dict[str, object]] | None = None
+    iterations: int = 1
+    reasoning_steps: list[str] | None = None
 
 
 @dataclass
@@ -162,6 +169,9 @@ class AgenticCopilot:
             "comparison": None,
             "execution_notes": [],
             "assistant_message": "",
+            "iteration": 0,
+            "should_continue": True,
+            "reasoning_steps": [],
         }
         final = await self._graph.ainvoke(state)
 
@@ -185,18 +195,32 @@ class AgenticCopilot:
             tool_calls=[AgentToolCall(**entry) for entry in final.get("tool_calls", [])],
             candidate_update=candidate_update,
             comparison=final.get("comparison"),
+            iterations=int(final.get("iteration", 1)),
+            reasoning_steps=final.get("reasoning_steps"),
         )
 
     def _build_graph(self):
         graph = StateGraph(CopilotState)
         graph.add_node("plan", self._plan_node)
         graph.add_node("execute", self._execute_node)
+        graph.add_node("reflect", self._reflect_node)
         graph.add_node("respond", self._respond_node)
         graph.add_edge(START, "plan")
         graph.add_edge("plan", "execute")
-        graph.add_edge("execute", "respond")
+        graph.add_edge("execute", "reflect")
+        graph.add_conditional_edges(
+            "reflect",
+            self._should_continue,
+            {"continue": "plan", "finish": "respond"},
+        )
         graph.add_edge("respond", END)
         return graph.compile()
+
+    @staticmethod
+    def _should_continue(state: CopilotState) -> str:
+        if state.get("should_continue") and state.get("iteration", 0) < MAX_AGENT_ITERATIONS:
+            return "continue"
+        return "finish"
 
     def _build_llm(self, *, planner: bool):
         # Prefer Gemini when key is available.
@@ -225,21 +249,37 @@ class AgenticCopilot:
         return None
 
     async def _plan_node(self, state: CopilotState) -> dict[str, object]:
+        iteration = state.get("iteration", 0)
+        reasoning = list(state.get("reasoning_steps", []))
         message = state.get("message", "")
+
         if not message:
-            return {"actions": [{"tool": "explain_candidate", "args": {}}]}
+            reasoning.append(f"[iter {iteration}] No message provided, defaulting to explain_candidate")
+            return {
+                "actions": [{"tool": "explain_candidate", "args": {}}],
+                "iteration": iteration,
+                "reasoning_steps": reasoning,
+            }
+
+        reasoning.append(f"[iter {iteration}] Planning actions for: {message[:80]}...")
 
         # Deterministic intent parsing is the primary path for edit-like commands.
         # This keeps side-panel behavior reliable for demo-critical prompts
         # (e.g., "make all Ts", explicit base edits, ranking requests).
         deterministic = self._fallback_plan(message)
         if not _is_default_explain_plan(deterministic):
-            return {"actions": deterministic}
+            tool_names = [a["tool"] for a in deterministic]
+            reasoning.append(f"[iter {iteration}] Deterministic plan: {', '.join(tool_names)}")
+            return {"actions": deterministic, "reasoning_steps": reasoning}
 
         llm_actions = await self._plan_actions_with_llm(message)
         if llm_actions:
-            return {"actions": llm_actions}
-        return {"actions": deterministic}
+            tool_names = [a["tool"] for a in llm_actions]
+            reasoning.append(f"[iter {iteration}] LLM plan: {', '.join(tool_names)}")
+            return {"actions": llm_actions, "reasoning_steps": reasoning}
+
+        reasoning.append(f"[iter {iteration}] Fallback plan: explain_candidate")
+        return {"actions": deterministic, "reasoning_steps": reasoning}
 
     async def _execute_node(self, state: CopilotState) -> dict[str, object]:
         session_id = str(state["session_id"])
@@ -341,10 +381,73 @@ class AgenticCopilot:
             "comparison": comparison,
         }
 
+    async def _reflect_node(self, state: CopilotState) -> dict[str, object]:
+        """Evaluate execution results and decide whether to iterate."""
+        iteration = state.get("iteration", 0) + 1
+        reasoning = list(state.get("reasoning_steps", []))
+        notes = state.get("execution_notes", [])
+        tool_calls = state.get("tool_calls", [])
+
+        # Check if any tools failed
+        failed_tools = [tc for tc in tool_calls if tc.get("status") == "failed"]
+        has_failures = len(failed_tools) > 0
+
+        # Check if we have a candidate update with scores
+        update = state.get("candidate_update")
+        combined_score = None
+        if update and isinstance(update, dict):
+            scores = update.get("scores", {})
+            combined_score = scores.get("combined")
+
+        # Decide whether to continue iterating
+        should_continue = False
+
+        if has_failures and iteration < MAX_AGENT_ITERATIONS:
+            reasoning.append(
+                f"[reflect iter {iteration}] {len(failed_tools)} tool(s) failed. "
+                f"Re-planning to recover."
+            )
+            should_continue = True
+        elif combined_score is not None and combined_score < 0.4 and iteration < MAX_AGENT_ITERATIONS:
+            # Score is weak - try to improve by optimizing
+            reasoning.append(
+                f"[reflect iter {iteration}] Combined score {combined_score:.3f} is weak (<0.4). "
+                f"Attempting optimization pass."
+            )
+            should_continue = True
+            # Override the message to trigger optimization on next plan
+            message = state.get("message", "")
+            if "optimize" not in message.lower() and "safer" not in message.lower():
+                return {
+                    "iteration": iteration,
+                    "should_continue": should_continue,
+                    "reasoning_steps": reasoning,
+                    "message": f"{message} (auto-optimize: improve combined score)",
+                }
+        else:
+            reasoning.append(
+                f"[reflect iter {iteration}] "
+                + (f"Score {combined_score:.3f}. " if combined_score is not None else "")
+                + f"Satisfied after {iteration} iteration(s)."
+            )
+            should_continue = False
+
+        return {
+            "iteration": iteration,
+            "should_continue": should_continue,
+            "reasoning_steps": reasoning,
+        }
+
     async def _respond_node(self, state: CopilotState) -> dict[str, str]:
         notes = state.get("execution_notes", [])
+        reasoning = state.get("reasoning_steps", [])
+        iteration = state.get("iteration", 1)
+
         if not notes:
             return {"assistant_message": "No actions were executed."}
+
+        # Build context including reasoning trace
+        reasoning_summary = " | ".join(reasoning[-4:]) if reasoning else ""
 
         # LLM summary when available; deterministic fallback otherwise.
         if self._responder_llm is not None:
@@ -354,6 +457,8 @@ class AgenticCopilot:
                         "user_message": state.get("message", ""),
                         "tool_calls": state.get("tool_calls", []),
                         "execution_notes": notes,
+                        "iterations": iteration,
+                        "reasoning_trace": reasoning,
                     },
                     indent=2,
                 )
@@ -364,11 +469,16 @@ class AgenticCopilot:
                 response = await asyncio.wait_for(self._responder_llm.ainvoke(messages), timeout=8.0)
                 text = _message_to_text(response.content).strip()
                 if text:
-                    return {"assistant_message": text}
+                    iteration_note = f" [{iteration} iteration(s)]" if iteration > 1 else ""
+                    return {"assistant_message": f"{text}{iteration_note}"}
             except Exception:
                 pass
 
-        return {"assistant_message": notes[-1]}
+        # Deterministic fallback: include iteration count
+        base_msg = notes[-1]
+        if iteration > 1:
+            base_msg = f"{base_msg} (completed in {iteration} agent iterations)"
+        return {"assistant_message": base_msg}
 
     async def _tool_explain(self, *, candidate_id: int, sequence: str) -> _ToolExecution:
         scores, per_position = await score_candidate(self._service, sequence)
