@@ -945,7 +945,7 @@ function AnalyzePageInner() {
                 <div className="flex items-center gap-2">
                   <button onClick={saveVersion} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Save version</button>
-                  <button onClick={revertVersion} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                  <button onClick={() => { revertVersion(); setClickedResidue(null); }} className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Revert</button>
                   <button onClick={() => setViewMode("compare")}
                     className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"

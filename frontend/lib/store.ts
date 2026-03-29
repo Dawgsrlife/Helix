@@ -285,8 +285,10 @@ export const useHelixStore = create<HelixState>((set, get) => ({
         rawSequence: snap.sequence,
         bases: newBases,
         editHistory: snap.editHistory,
-        activePdb: snap.pdb ?? get().activePdb,
+        activePdb: snap.pdb ?? get().originalPdb ?? get().activePdb,
         mutationEffect: null,
+        highlightResidues: [],
+        selectedPosition: null,
       });
     }
   },
