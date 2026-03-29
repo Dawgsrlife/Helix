@@ -568,6 +568,31 @@ async def run_followup_pipeline(
         ).to_json(),
     )
     await tracker.set("scoring", "done", 1.0)
+    await tracker.set("structure", "active", 0.2)
+
+    pdb_data: str | None = None
+    confidence: float | None = None
+    if settings.structure_mode == StructureMode.ESMFOLD:
+        result = await predict_structure(base)
+        if result is not None:
+            pdb_data = result.pdb_data
+            confidence = result.confidence
+    if pdb_data is None:
+        pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
+
+    await manager.send_event(
+        session_id,
+        StructureReadyEvent(
+            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
+        ).to_json(),
+    )
+    await manager.send_event(
+        session_id,
+        CandidateStatusEvent(
+            data=CandidateStatusData(candidate_id=candidate_id, status="structured")
+        ).to_json(),
+    )
+    await tracker.set("structure", "done", 1.0)
     await tracker.set("explanation", "active", 0.2)
 
     await manager.send_event(
@@ -597,11 +622,11 @@ async def run_followup_pipeline(
                 candidates=[
                     {
                         "id": candidate_id,
-                        "status": "scored",
+                        "status": "structured",
                         "sequence": base,
                         "scores": scores.to_dict(),
-                        "pdb_data": None,
-                        "confidence": None,
+                        "pdb_data": pdb_data,
+                        "confidence": confidence,
                         "error": None,
                     },
                 ]

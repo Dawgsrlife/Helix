@@ -49,6 +49,12 @@ from services.session_store import (
 from services.structure import predict_structure
 from services.translation import find_orfs
 from ws.manager import WebSocketManager
+from ws.events import (
+    CandidateStatusData,
+    CandidateStatusEvent,
+    StructureReadyData,
+    StructureReadyEvent,
+)
 
 app = FastAPI(title="Helix Backend", version="0.1.0")
 app.add_middleware(
@@ -214,12 +220,46 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
     candidate_update = None
     if result.candidate_update is not None:
         update = result.candidate_update
+        pdb_data = update.pdb_data
+        confidence = update.confidence
+        structure_model = update.structure_model
+        if pdb_data is None:
+            try:
+                pdb_data, confidence, structure_model = await _predict_structure_snapshot(
+                    sequence=update.sequence,
+                    candidate_id=update.candidate_id,
+                )
+                update.pdb_data = pdb_data
+                update.confidence = confidence
+                update.structure_model = structure_model
+                await ws_manager.send_event(
+                    request.session_id,
+                    StructureReadyEvent(
+                        data=StructureReadyData(
+                            candidate_id=update.candidate_id,
+                            pdb_data=pdb_data,
+                            confidence=confidence,
+                        )
+                    ).to_json(),
+                )
+                await ws_manager.send_event(
+                    request.session_id,
+                    CandidateStatusEvent(
+                        data=CandidateStatusData(candidate_id=update.candidate_id, status="structured")
+                    ).to_json(),
+                )
+            except Exception:
+                # Keep chat endpoint resilient even if structure refresh fails.
+                pass
         candidate_update = AgentCandidateUpdateResponse(
             candidate_id=update.candidate_id,
             sequence=update.sequence,
             scores=CandidateScoresResponse(**update.scores),
             mutation=update.mutation,
             per_position_scores=update.per_position_scores,
+            pdb_data=update.pdb_data,
+            confidence=update.confidence,
+            structure_model=update.structure_model,
         )
 
     return AgentChatResponse(
@@ -250,14 +290,9 @@ async def structure(request: StructureRequest) -> StructureResponse:
     if request.region_start < 0 or request.region_end > len(sequence) or request.region_start >= request.region_end:
         raise HTTPException(status_code=422, detail="invalid structure region")
 
-    if settings.structure_mode == StructureMode.ESMFOLD:
-        result = await predict_structure(sequence, request.region_start, request.region_end)
-        if result is not None:
-            return StructureResponse(pdb_data=result.pdb_data, model=result.model, confidence=result.confidence)
-
-    # Fallback to mock
-    pdb, confidence = build_mock_pdb_from_dna(sequence[request.region_start:request.region_end], candidate_id=0)
-    return StructureResponse(pdb_data=pdb, model="mock", confidence=confidence)
+    region = sequence[request.region_start:request.region_end]
+    pdb_data, confidence, model = await _predict_structure_snapshot(sequence=region, candidate_id=0)
+    return StructureResponse(pdb_data=pdb_data, model=model, confidence=confidence)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -279,6 +314,15 @@ async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(session_id)
+
+
+async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tuple[str, float, str]:
+    if settings.structure_mode == StructureMode.ESMFOLD:
+        result = await predict_structure(sequence)
+        if result is not None:
+            return result.pdb_data, result.confidence, result.model
+    pdb, confidence = build_mock_pdb_from_dna(sequence, candidate_id=candidate_id)
+    return pdb, confidence, "mock"
 
 def _build_ws_url(http_request: Request, session_id: str) -> str:
     ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"

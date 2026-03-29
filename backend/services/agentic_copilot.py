@@ -44,10 +44,11 @@ args: {"objective": "safety|tissue_specificity|functional|novelty"}
 args: {}
 
 5) transform_sequence
-args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement"}
+args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement|replace_base", "from_base": "A|T|C|G (only for replace_base)", "to_base": "A|T|C|G (only for replace_base)"}
 
 Rules:
 - If user asks for global sequence rewrite like "all Ts", use transform_sequence.
+- If user asks to replace one base globally (e.g., "change all Gs to Cs"), use mode "replace_base".
 - If user asks to compare or rank, include compare_candidates.
 - If user asks specific base mutation, include edit_base.
 - You may chain multiple actions in order.
@@ -90,6 +91,9 @@ class AgentCandidateUpdate:
     scores: dict[str, float]
     mutation: dict[str, object] | None = None
     per_position_scores: list[dict[str, float | int]] | None = None
+    pdb_data: str | None = None
+    confidence: float | None = None
+    structure_model: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -101,6 +105,12 @@ class AgentCandidateUpdate:
             payload["mutation"] = self.mutation
         if self.per_position_scores is not None:
             payload["per_position_scores"] = self.per_position_scores
+        if self.pdb_data is not None:
+            payload["pdb_data"] = self.pdb_data
+        if self.confidence is not None:
+            payload["confidence"] = self.confidence
+        if self.structure_model is not None:
+            payload["structure_model"] = self.structure_model
         return payload
 
 
@@ -159,6 +169,9 @@ class AgenticCopilot:
                 scores=dict(update_payload["scores"]),
                 mutation=update_payload.get("mutation"),
                 per_position_scores=update_payload.get("per_position_scores"),
+                pdb_data=update_payload.get("pdb_data"),
+                confidence=update_payload.get("confidence"),
+                structure_model=update_payload.get("structure_model"),
             )
 
         return AgentChatResult(
@@ -262,6 +275,8 @@ class AgenticCopilot:
                         candidate_id=candidate_id,
                         sequence=sequence,
                         mode=str(args.get("mode", "all_t")),
+                        from_base=str(args.get("from_base", "")).upper() or None,
+                        to_base=str(args.get("to_base", "")).upper() or None,
                     )
                 else:
                     result = await self._tool_explain(candidate_id=candidate_id, sequence=sequence)
@@ -493,8 +508,10 @@ class AgenticCopilot:
         candidate_id: int,
         sequence: str,
         mode: str,
+        from_base: str | None = None,
+        to_base: str | None = None,
     ) -> _ToolExecution:
-        transformed = _apply_transform(sequence, mode)
+        transformed = _apply_transform(sequence, mode, from_base=from_base, to_base=to_base)
         if transformed == sequence:
             note = f"Requested transform '{mode}' produced no sequence change."
         else:
@@ -547,9 +564,21 @@ class AgenticCopilot:
             if "explain" in text or "impact" in text:
                 actions.append({"tool": "explain_candidate", "args": {}})
 
-        transform_mode = _parse_transform_mode(text)
-        if transform_mode is not None:
-            actions.append({"tool": "transform_sequence", "args": {"mode": transform_mode}})
+        replacement = _parse_base_replacement(text)
+        if replacement is not None:
+            from_base, to_base = replacement
+            actions.append(
+                {
+                    "tool": "transform_sequence",
+                    "args": {"mode": "replace_base", "from_base": from_base, "to_base": to_base},
+                }
+            )
+            if "explain" in text or "impact" in text:
+                actions.append({"tool": "explain_candidate", "args": {}})
+        else:
+            transform_mode = _parse_transform_mode(text)
+            if transform_mode is not None:
+                actions.append({"tool": "transform_sequence", "args": {"mode": transform_mode}})
 
         if any(token in text for token in ("compare", "rank", "best candidate", "which candidate")):
             actions.append({"tool": "compare_candidates", "args": {}})
@@ -604,6 +633,12 @@ def _merge_candidate_updates(
         return current
     if current.mutation is None and previous.mutation is not None:
         current.mutation = previous.mutation
+    if current.pdb_data is None and previous.pdb_data is not None:
+        current.pdb_data = previous.pdb_data
+    if current.confidence is None and previous.confidence is not None:
+        current.confidence = previous.confidence
+    if current.structure_model is None and previous.structure_model is not None:
+        current.structure_model = previous.structure_model
     return current
 
 
@@ -651,7 +686,28 @@ def _parse_transform_mode(text: str) -> str | None:
     return None
 
 
-def _apply_transform(sequence: str, mode: str) -> str:
+def _parse_base_replacement(text: str) -> tuple[str, str] | None:
+    match = re.search(
+        r"(?:change|replace|convert|swap|turn)\s+all\s+([atcg])(?:'s|s)?\s+(?:to|with|into)\s+([atcg])(?:'s|s)?",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    from_base = match.group(1).upper()
+    to_base = match.group(2).upper()
+    if from_base == to_base:
+        return None
+    return from_base, to_base
+
+
+def _apply_transform(
+    sequence: str,
+    mode: str,
+    *,
+    from_base: str | None = None,
+    to_base: str | None = None,
+) -> str:
     mode = mode.strip().lower()
     if mode == "all_t":
         return "T" * len(sequence)
@@ -663,6 +719,12 @@ def _apply_transform(sequence: str, mode: str) -> str:
         return "G" * len(sequence)
     if mode == "reverse_complement":
         return reverse_complement(sequence)
+    if mode == "replace_base":
+        if from_base not in BASES or to_base not in BASES:
+            return sequence
+        if from_base == to_base:
+            return sequence
+        return sequence.replace(from_base, to_base)
     return sequence
 
 

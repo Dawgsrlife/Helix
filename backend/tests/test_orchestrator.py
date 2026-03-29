@@ -114,7 +114,10 @@ async def test_followup_pipeline_returns_steps_and_emits_complete() -> None:
     )
 
     assert steps == ["intent_parse", "evo2_generation", "evo2_scoring"]
+    events = [e["event"] for e in ws.sent]
+    assert "structure_ready" in events
     assert ws.sent[-1]["event"] == "pipeline_complete"
+    assert ws.sent[-1]["data"]["candidates"][0]["status"] == "structured"
 
 
 @pytest.mark.asyncio

@@ -424,7 +424,13 @@ export function pipelineReducer(state: PipelineState, action: PipelineAction): P
         const candidate = ensureCandidate(next, update.candidate_id);
         candidate.sequence = update.sequence;
         candidate.scores = update.scores;
-        candidate.status = candidate.status === "structured" ? "structured" : "scored";
+        if (typeof update.pdb_data === "string" && update.pdb_data.length > 0) {
+          candidate.pdbData = update.pdb_data;
+          candidate.confidence = typeof update.confidence === "number" ? update.confidence : candidate.confidence;
+          candidate.status = "structured";
+        } else {
+          candidate.status = candidate.status === "structured" ? "structured" : "scored";
+        }
         candidate.perPositionScores = Object.fromEntries(
           (update.per_position_scores ?? []).map((row) => [row.position, Number(row.score)])
         );

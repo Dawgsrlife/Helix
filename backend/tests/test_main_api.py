@@ -218,6 +218,8 @@ def test_agent_chat_transform_all_ts_persists_sequence() -> None:
     transformed_sequence = body["candidate_update"]["sequence"]
     assert transformed_sequence
     assert set(transformed_sequence) == {"T"}
+    assert isinstance(body["candidate_update"]["pdb_data"], str)
+    assert body["candidate_update"]["pdb_data"].startswith("HEADER")
 
     # Verify transformed sequence persisted in session store.
     verify = client.post(
@@ -226,6 +228,39 @@ def test_agent_chat_transform_all_ts_persists_sequence() -> None:
     )
     assert verify.status_code == 200
     assert verify.json()["reference_base"] == "T"
+
+
+def test_agent_chat_replace_all_g_to_c_only_replaces_g() -> None:
+    client = TestClient(app)
+    session_id = "agent-replace-gc"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    baseline = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "explain this candidate"},
+    )
+    assert baseline.status_code == 200
+    original_sequence = baseline.json()["candidate_update"]["sequence"]
+
+    transform = client.post(
+        "/api/agent/chat",
+        json={
+            "session_id": session_id,
+            "candidate_id": 0,
+            "message": "change all Gs to Cs",
+        },
+    )
+    assert transform.status_code == 200
+    body = transform.json()
+    assert any(call["tool"] == "transform_sequence" for call in body["tool_calls"])
+    transformed_sequence = body["candidate_update"]["sequence"]
+
+    assert len(transformed_sequence) == len(original_sequence)
+    for before, after in zip(original_sequence, transformed_sequence, strict=True):
+        if before == "G":
+            assert after == "C"
+        else:
+            assert after == before
 
 
 def test_design_accepts_run_profile() -> None:

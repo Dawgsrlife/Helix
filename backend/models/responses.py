@@ -54,6 +54,9 @@ class AgentCandidateUpdateResponse(BaseModel):
     scores: CandidateScoresResponse
     mutation: dict[str, object] | None = None
     per_position_scores: list[dict[str, float | int]] | None = None
+    pdb_data: str | None = None
+    confidence: float | None = None
+    structure_model: str | None = None
 
 
 class AgentChatResponse(BaseModel):

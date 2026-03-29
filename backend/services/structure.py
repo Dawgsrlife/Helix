@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import httpx
 
-from services.translation import translate
+from services.translation import find_orfs, translate
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,33 @@ def _has_backbone_atoms(pdb_text: str) -> bool:
     return {"N", "CA", "C", "O"}.issubset(atom_names)
 
 
+def _select_protein_for_folding(dna_sequence: str) -> str:
+    """Extract the most foldable protein-like segment from DNA.
+
+    Priority:
+    1) Longest ORF protein.
+    2) Longest stop-free frame segment.
+    """
+    cleaned_dna = dna_sequence.upper().replace("N", "A")
+    if len(cleaned_dna) < 9:
+        return ""
+
+    orfs = find_orfs(cleaned_dna, min_length=45)
+    if orfs:
+        best_orf = max(orfs, key=lambda o: len(o.protein))
+        if best_orf.protein:
+            return best_orf.protein
+
+    best = ""
+    for frame in range(3):
+        translated = translate(cleaned_dna[frame:], to_stop=False)
+        for segment in translated.split("*"):
+            candidate = "".join(aa for aa in segment if aa.isalpha() and aa != "X")
+            if len(candidate) > len(best):
+                best = candidate
+    return best
+
+
 async def predict_structure(
     dna_sequence: str,
     region_start: int = 0,
@@ -112,7 +139,7 @@ async def predict_structure(
     Returns None on API failure (caller handles gracefully).
     """
     region = dna_sequence[region_start:region_end]
-    protein = translate(region, to_stop=True)
+    protein = _select_protein_for_folding(region)
 
     if len(protein) < MIN_PROTEIN_LENGTH:
         logger.warning(

@@ -149,6 +149,9 @@ export interface AgentCandidateUpdate {
   candidate_id: number;
   sequence: string;
   scores: CandidateScores;
+  pdb_data?: string | null;
+  confidence?: number | null;
+  structure_model?: string | null;
   mutation?: {
     position: number;
     reference_base: string;
