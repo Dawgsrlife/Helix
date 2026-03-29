@@ -81,7 +81,7 @@ export default function ChatPanel() {
 
   return (
     <div className="w-[340px] shrink-0 flex flex-col h-full"
-      style={{ background: "var(--surface-raised)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+      style={{ background: "var(--surface-raised)" }}>
 
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 shrink-0"
@@ -110,7 +110,7 @@ export default function ChatPanel() {
               {prompts.map((q) => (
                 <button key={q} onClick={() => handleSend(q)}
                   className="block w-full text-left text-[12px] px-3 py-2.5 rounded-lg transition-colors hover:bg-white/[0.04]"
-                  style={{ color: "var(--text-secondary)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ color: "var(--text-secondary)" }}>
                   {q}
                 </button>
               ))}
@@ -146,7 +146,7 @@ export default function ChatPanel() {
 
       {/* Input */}
       <div className="px-4 py-3 shrink-0" style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}>
-        <div className="flex gap-2 items-center rounded-lg px-3 py-2" style={{ background: "var(--surface-base)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex gap-2 items-center rounded-lg px-3 py-2" style={{ background: "var(--surface-base)" }}>
           <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder={viewMode === "ide" ? "Ask about your edits..." : "Ask about this analysis..."}

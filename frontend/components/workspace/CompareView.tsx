@@ -67,7 +67,7 @@ export default function CompareView() {
         </div>
 
         {/* ── SPLIT-PANE SEQUENCE DIFF ── */}
-        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
           {/* Candidate headers */}
           <div className="grid grid-cols-[1fr_80px_1fr]" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
             <div className="px-5 py-3 flex items-center gap-3">
@@ -75,7 +75,7 @@ export default function CompareView() {
               <span className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{candA.id.toString().padStart(3, "0")}</span>
               <span className="text-[11px] font-mono" style={{ color: "var(--text-muted)" }}>Overall: {candA.overall.toFixed(1)}</span>
             </div>
-            <div className="flex items-center justify-center" style={{ borderLeft: "1px solid rgba(255,255,255,0.04)", borderRight: "1px solid rgba(255,255,255,0.04)" }}>
+            <div className="flex items-center justify-center" style={{ borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
               <span className="text-[10px] uppercase tracking-wider font-medium" style={{ color: "var(--text-muted)" }}>Diff</span>
             </div>
             <div className="px-5 py-3 flex items-center gap-3">
@@ -112,7 +112,7 @@ export default function CompareView() {
 
             {/* Center: diff markers */}
             <div className="py-4 flex flex-col items-center gap-0.5"
-              style={{ borderLeft: "1px solid rgba(255,255,255,0.04)", borderRight: "1px solid rgba(255,255,255,0.04)", background: "var(--surface-base)" }}>
+              style={{ background: "var(--surface-base)" }}>
               {diffs.filter(d => d.position >= seqStart && d.position < seqEnd).map((d) => (
                 <div key={d.position} className="text-[9px] font-mono leading-tight text-center" style={{ color: "var(--text-muted)" }}>
                   {d.position}
@@ -157,7 +157,7 @@ export default function CompareView() {
                 ))}
               </div>
             </div>
-            <div style={{ borderLeft: "1px solid rgba(255,255,255,0.04)", borderRight: "1px solid rgba(255,255,255,0.04)" }} />
+            <div style={{ borderLeft: "1px solid rgba(255,255,255,0.04)" }} />
             <div className="px-5 py-2">
               <div className="flex gap-px h-2 rounded overflow-hidden">
                 {regions.slice(0, 4).map((r, i) => (
@@ -173,7 +173,7 @@ export default function CompareView() {
         {/* ── SCORE COMPARISON ── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           {/* Score deltas */}
-          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)" }}>
             <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--text-muted)" }}>Score comparison</span>
             <div className="space-y-3">
               {[
@@ -218,7 +218,7 @@ export default function CompareView() {
           </div>
 
           {/* Position-level diffs */}
-          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="rounded-xl p-5" style={{ background: "var(--surface-raised)" }}>
             <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--text-muted)" }}>
               Sequence differences ({diffs.length})
             </span>

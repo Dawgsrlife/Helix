@@ -117,7 +117,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
           {/* Mode toggle */}
           {onDesign && (
-            <div className="flex rounded-lg overflow-hidden mb-6" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div className="flex rounded-lg overflow-hidden mb-6" style={{ background: "var(--surface-raised)" }}>
               <button onClick={() => { setMode("paste"); setValidationError(null); }}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-[12px] font-medium transition-colors"
                 style={{
@@ -131,7 +131,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
                 style={{
                   background: mode === "design" ? "rgba(91,181,162,0.1)" : "transparent",
                   color: mode === "design" ? "var(--accent)" : "var(--text-muted)",
-                  borderLeft: "1px solid rgba(255,255,255,0.06)",
+                  borderLeft: "1px solid var(--ghost-border)",
                 }}>
                 <Wand2 size={14} /> Design New
               </button>
@@ -141,7 +141,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
           {mode === "paste" ? (
             <>
               {/* Input surface */}
-              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
                 <div className="flex items-center justify-between px-4 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                   <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Sequence Editor</span>
                   <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
           ) : (
             <>
               {/* Design goal input */}
-              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              <div className="rounded-xl overflow-hidden mb-4" style={{ background: "var(--surface-raised)" }}>
                 <div className="flex items-center px-4 py-2" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                   <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Design Goal</span>
                 </div>
@@ -272,7 +272,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
 
       {/* ── SECONDARY: Context panel ── */}
       <div className="w-[300px] shrink-0 overflow-y-auto px-6 py-10"
-        style={{ background: "var(--surface-raised)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+        style={{ background: "var(--surface-raised)" }}>
 
         {/* What happens next */}
         <div className="mb-8">
@@ -313,7 +313,7 @@ export default function SequenceInput({ onSubmit, onDesign, isLoading, error }: 
         {/* Model status */}
         <div className="mb-8">
           <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Model status</span>
-          <div className="p-4 rounded-lg" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
+          <div className="p-4 rounded-lg" style={{ background: "var(--surface-elevated)" }}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Evo 2 (40B)</span>
               <div className="flex items-center gap-1.5">

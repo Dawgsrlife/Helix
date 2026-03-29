@@ -4,29 +4,33 @@
 @custom-variant dark (&:is(.dark *));
 
 /* ========================================
-   HELIX DESIGN SYSTEM: OBSIDIAN PROTOCOL
+   HELIX DESIGN SYSTEM — OBSIDIAN AURA
+   Principles: tonal layering, no hard borders,
+   clinical precision meets organic mystery.
    ======================================== */
 
 :root {
-  /* Surface hierarchy (tonal layering, OKLCH) */
-  --surface-void: oklch(0.09 0.005 260);
-  --surface-base: oklch(0.12 0.005 260);
-  --surface-raised: oklch(0.16 0.005 260);
-  --surface-elevated: oklch(0.19 0.005 260);
-  --surface-overlay: oklch(0.22 0.005 260);
+  /* Surface hierarchy (tonal layering, neutral OKLCH) */
+  --surface-void: oklch(0.065 0 0);
+  --surface-base: oklch(0.085 0.003 280);
+  --surface-raised: oklch(0.105 0.003 280);
+  --surface-elevated: oklch(0.128 0.003 280);
+  --surface-overlay: oklch(0.148 0.003 280);
+  --surface-highest: oklch(0.170 0.003 280);
 
   /* Text hierarchy */
-  --text-primary: oklch(0.95 0 0);
-  --text-secondary: oklch(0.82 0 0);
+  --text-primary: oklch(0.97 0.003 300);
+  --text-secondary: oklch(0.80 0 0);
   --text-muted: oklch(0.62 0 0);
-  --text-faint: oklch(0.38 0 0);
+  --text-faint: oklch(0.40 0 0);
 
-  /* Accent: muted teal (bioluminescent signal) */
-  --accent: oklch(0.72 0.12 180);
-  --accent-dim: oklch(0.56 0.08 178);
-  --accent-glow: oklch(0.82 0.1 175);
+  /* Accent: bioluminescent teal */
+  --accent: oklch(0.72 0.12 175);
+  --accent-bright: oklch(0.87 0.11 175);
+  --accent-dim: oklch(0.56 0.08 175);
+  --accent-glow: 0 0 8px oklch(0.72 0.12 175 / 0.4);
 
-  /* Nucleotide colors (muted, not neon) */
+  /* Nucleotide colors */
   --base-a: oklch(0.72 0.14 152);
   --base-t: oklch(0.64 0.12 22);
   --base-c: oklch(0.68 0.1 248);
@@ -35,52 +39,52 @@
 
   /* Annotation region colors */
   --annotation-exon: oklch(0.55 0.15 295);
-  --annotation-intron: oklch(0.30 0.005 260);
-  --annotation-orf: oklch(0.72 0.12 180);
+  --annotation-intron: oklch(0.30 0.003 280);
+  --annotation-orf: oklch(0.72 0.12 175);
   --annotation-prophage: oklch(0.58 0.12 22);
   --annotation-trna: oklch(0.72 0.14 152);
   --annotation-rrna: oklch(0.73 0.12 85);
-  --annotation-intergenic: oklch(0.22 0.005 260);
-  --annotation-unknown: oklch(0.38 0 0);
+  --annotation-intergenic: oklch(0.148 0.003 280);
+  --annotation-unknown: oklch(0.40 0 0);
 
   /* Impact colors */
   --impact-benign: oklch(0.72 0.14 152);
   --impact-moderate: oklch(0.73 0.12 85);
   --impact-deleterious: oklch(0.64 0.12 22);
 
-  /* Ghost border (when accessibility requires it) */
-  --ghost-border: oklch(0.62 0 0 / 0.12);
+  /* Ghost border — 0.5px, felt not seen */
+  --ghost-border: oklch(1 0 0 / 0.06);
 
-  /* ShadCN mappings (dark mode is our only mode) */
-  --background: oklch(0.09 0.005 260);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.16 0.005 260);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.19 0.005 260);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.72 0.12 180);
-  --primary-foreground: oklch(0.09 0.005 260);
-  --secondary: oklch(0.16 0.005 260);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.19 0.005 260);
+  /* ShadCN mappings */
+  --background: oklch(0.065 0 0);
+  --foreground: oklch(0.97 0.003 300);
+  --card: oklch(0.105 0.003 280);
+  --card-foreground: oklch(0.97 0.003 300);
+  --popover: oklch(0.128 0.003 280);
+  --popover-foreground: oklch(0.97 0.003 300);
+  --primary: oklch(0.72 0.12 175);
+  --primary-foreground: oklch(0.065 0 0);
+  --secondary: oklch(0.105 0.003 280);
+  --secondary-foreground: oklch(0.97 0.003 300);
+  --muted: oklch(0.128 0.003 280);
   --muted-foreground: oklch(0.62 0 0);
-  --accent: oklch(0.72 0.12 180);
-  --accent-foreground: oklch(0.09 0.005 260);
+  --accent: oklch(0.72 0.12 175);
+  --accent-foreground: oklch(0.065 0 0);
   --destructive: oklch(0.64 0.12 22);
-  --border: oklch(0.62 0 0 / 0.12);
-  --input: oklch(0.16 0.005 260);
-  --ring: oklch(0.72 0.12 180);
-  --radius: 0.375rem;
+  --border: oklch(1 0 0 / 0.06);
+  --input: oklch(0.105 0.003 280);
+  --ring: oklch(0.72 0.12 175);
+  --radius: 0.5rem;
 
   /* Sidebar */
-  --sidebar: oklch(0.12 0.005 260);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.72 0.12 180);
-  --sidebar-primary-foreground: oklch(0.09 0.005 260);
-  --sidebar-accent: oklch(0.16 0.005 260);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.62 0 0 / 0.08);
-  --sidebar-ring: oklch(0.72 0.12 180);
+  --sidebar: oklch(0.065 0 0);
+  --sidebar-foreground: oklch(0.97 0.003 300);
+  --sidebar-primary: oklch(0.72 0.12 175);
+  --sidebar-primary-foreground: oklch(0.065 0 0);
+  --sidebar-accent: oklch(0.105 0.003 280);
+  --sidebar-accent-foreground: oklch(0.97 0.003 300);
+  --sidebar-border: oklch(1 0 0 / 0.06);
+  --sidebar-ring: oklch(0.72 0.12 175);
 }
 
 /* ========================================
@@ -100,7 +104,7 @@ body {
 }
 
 ::selection {
-  background: oklch(0.72 0.12 180 / 0.25);
+  background: oklch(0.72 0.12 175 / 0.25);
   color: var(--text-primary);
 }
 
@@ -108,23 +112,10 @@ body {
    SCROLLBAR (thin, invisible-ish)
    ======================================== */
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--text-faint);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: oklch(1 0 0 / 0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: oklch(1 0 0 / 0.15); }
 
 /* ========================================
    ANIMATIONS
@@ -136,25 +127,13 @@ body {
 }
 
 @keyframes fade-in-up {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes fade-in-down {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes pulse-soft {
@@ -167,21 +146,15 @@ body {
   100% { background-position: 200% 0; }
 }
 
-.animate-fade-in {
-  animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
-.animate-fade-in-up {
-  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-fade-in-down {
-  animation: fade-in-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.animate-pulse-soft {
-  animation: pulse-soft 2s ease-in-out infinite;
-}
+.animate-fade-in { animation: fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in-up { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-fade-in-down { animation: fade-in-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
 
 /* Stagger utility */
 .stagger-1 { animation-delay: 30ms; }
@@ -193,63 +166,86 @@ body {
 
 /* Skeleton loader */
 .skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--surface-raised) 25%,
-    var(--surface-elevated) 50%,
-    var(--surface-raised) 75%
-  );
+  background: linear-gradient(90deg, var(--surface-raised) 25%, var(--surface-elevated) 50%, var(--surface-raised) 75%);
   background-size: 200% 100%;
   animation: shimmer 2s ease-in-out infinite;
 }
 
 /* ========================================
-   TYPOGRAPHY UTILITIES
+   TYPOGRAPHY
    ======================================== */
 
 .font-mono {
   font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', ui-monospace, monospace;
 }
 
-/* HELIX wordmark style */
+/* Label font (Space Grotesk — technical precision) */
+.font-label {
+  font-family: var(--font-label, 'Space Grotesk', 'Inter', system-ui, sans-serif);
+}
+
+/* HELIX wordmark */
 .wordmark {
+  font-family: var(--font-label, 'Space Grotesk', sans-serif);
   font-weight: 700;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
-/* Label style (technical metadata) */
+/* Label caps (section headers, metadata) */
 .label-caps {
-  font-size: 11px;
+  font-family: var(--font-label, 'Space Grotesk', sans-serif);
+  font-size: 10px;
   font-weight: 500;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 /* ========================================
-   SPACING & LAYOUT TOKENS
+   LAYOUT PATTERNS
    ======================================== */
 
-/* Ghost divider (used between panel sections) */
-.divider {
-  height: 1px;
-  background: rgba(255, 255, 255, 0.04);
+/* Panel — the fundamental surface unit. No borders, tonal shift only. */
+.panel {
+  background: var(--surface-raised);
+  border-radius: 4px;
 }
 
-/* Panel section (consistent padding inside side panels) */
-.panel-section {
-  padding: 20px;
+/* Panel header bar */
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: oklch(0 0 0 / 0.15);
 }
 
-/* Section label (consistent across all views) */
-.section-label {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  display: block;
-  margin-bottom: 12px;
+/* Grain overlay — 2% opacity noise for anti-banding */
+.grain::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Active nav indicator — gradient left border */
+.nav-active {
+  background: linear-gradient(to right, oklch(0.72 0.12 175 / 0.1), transparent);
+  border-left: 2px solid var(--accent);
+}
+
+/* Status pulse with glow */
+.status-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse-glow 2s ease-in-out infinite;
+  box-shadow: var(--accent-glow);
 }
 
 /* ========================================
@@ -285,11 +281,11 @@ body {
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
 }
 
 @layer base {
@@ -300,28 +296,13 @@ body {
     @apply bg-background text-foreground;
   }
 
-  /* Global interactive cursors */
-  button, a, [role="button"], input[type="submit"] {
-    cursor: pointer;
-  }
+  button, a, [role="button"], input[type="submit"] { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
 
-  button:disabled {
-    cursor: not-allowed;
-  }
-
-  /* Remove number input spinners for cleaner look */
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
-  input[type="number"] {
-    -moz-appearance: textfield;
-  }
-
-  /* Scrollbar for webkit */
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+  input[type="number"] { -moz-appearance: textfield; }
 }

@@ -25,9 +25,9 @@ export default function CandidateLeaderboard() {
         </div>
 
         {/* Ranking table */}
-        <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
           <div className="flex items-center gap-3 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
-            style={{ color: "var(--text-muted)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+            style={{ color: "var(--text-muted)" }}>
             <span className="w-10">Rank</span>
             <span className="flex-1">Candidate</span>
             <span className="w-20 text-right">Functional</span>

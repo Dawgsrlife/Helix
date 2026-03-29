@@ -83,44 +83,56 @@ export default function AnalyzePage() {
   }, [rawSequence, simulate, addEditEntry]);
 
   return (
-    <div className="h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
+    <div className="grain h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
 
-      {/* Sidebar */}
-      <aside className="w-14 shrink-0 flex flex-col items-center py-4 gap-1.5"
-        style={{ background: "var(--surface-void)", borderRight: "1px solid rgba(255,255,255,0.04)" }}>
-        <button onClick={() => setViewMode("input")} title="Home"
-          className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 transition-colors hover:bg-white/5"
-          style={{
-            color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent)" : "var(--text-faint)",
-            background: viewMode === "input" || viewMode === "pipeline" ? "oklch(0.72 0.12 180 / 0.08)" : "transparent",
-          }}>
-          <Home size={18} />
-        </button>
-        {SIDEBAR_ITEMS.map(({ icon: Icon, label, viewMode: target }) => {
-          const isActive = viewMode === target || (target === "ide" && viewMode === "compare");
-          return (
-            <button key={target} title={label}
-              onClick={() => analysisResult ? setViewMode(target) : setViewMode("input")}
-              className="w-10 h-10 rounded-lg flex items-center justify-center transition-colors hover:bg-white/5"
-              style={{
-                color: isActive ? "var(--accent)" : "var(--text-faint)",
-                background: isActive ? "oklch(0.72 0.12 180 / 0.08)" : "transparent",
-              }}>
-              <Icon size={18} />
-            </button>
-          );
-        })}
+      {/* ── SIDEBAR ── */}
+      <aside className="w-[220px] shrink-0 flex flex-col h-full"
+        style={{ background: "var(--surface-void)" }}>
+        {/* Wordmark */}
+        <div className="px-6 h-14 flex items-center">
+          <span className="wordmark text-sm" style={{ color: "var(--accent-bright)" }}>Helix</span>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 px-3 space-y-0.5 mt-2">
+          <button onClick={() => setViewMode("input")}
+            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-all ${
+              viewMode === "input" || viewMode === "pipeline" ? "nav-active" : "hover:bg-white/[0.03]"
+            }`}>
+            <Home size={16} style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-faint)" }} />
+            <span className="label-caps" style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-muted)" }}>Home</span>
+          </button>
+          {SIDEBAR_ITEMS.map(({ icon: Icon, label, viewMode: target }) => {
+            const isActive = viewMode === target || (target === "ide" && viewMode === "compare");
+            return (
+              <button key={target}
+                onClick={() => analysisResult ? setViewMode(target) : setViewMode("input")}
+                className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-all ${
+                  isActive ? "nav-active" : "hover:bg-white/[0.03]"
+                }`}>
+                <Icon size={16} style={{ color: isActive ? "var(--accent-bright)" : "var(--text-faint)" }} />
+                <span className="label-caps" style={{ color: isActive ? "var(--accent-bright)" : "var(--text-muted)" }}>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Status footer */}
+        <div className="px-6 py-5">
+          <div className="flex items-center gap-2.5">
+            <div className="status-pulse" />
+            <span className="label-caps" style={{ fontSize: "9px" }}>Evo 2 · Ready</span>
+          </div>
+        </div>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="h-12 shrink-0 flex items-center justify-between px-5"
-          style={{ background: "var(--surface-base)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-          <div className="flex items-center gap-2">
-            <HelixLogo size="sm" className="text-[var(--accent)]" />
+        {/* ── HEADER (glassmorphic) ── */}
+        <header className="h-14 shrink-0 flex items-center justify-between px-6"
+          style={{ background: "oklch(0.085 0.003 280 / 0.6)", backdropFilter: "blur(20px) saturate(1.8)", borderBottom: "0.5px solid var(--ghost-border)" }}>
+          <div className="flex items-center gap-3">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
-                <ChevronRight size={14} style={{ color: "var(--text-faint)" }} />
                 <span className="text-[13px]" style={{ color: "var(--text-secondary)" }}>{VIEW_LABELS[viewMode]}</span>
               </>
             )}
@@ -128,26 +140,25 @@ export default function AnalyzePage() {
           <div className="flex items-center gap-3">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
-                <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="flex gap-1">
                   {(["analyze", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
                     <button key={m} onClick={() => setViewMode(m)}
-                      className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider transition-colors"
-                      style={{ background: viewMode === m ? "rgba(91,181,162,0.1)" : "transparent", color: viewMode === m ? "var(--accent)" : "var(--text-muted)" }}>
+                      className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
+                      style={{
+                        background: viewMode === m ? "oklch(0.72 0.12 175 / 0.1)" : "transparent",
+                        color: viewMode === m ? "var(--accent-bright)" : "var(--text-faint)",
+                      }}>
                       {VIEW_LABELS[m]}
                     </button>
                   ))}
                 </div>
                 <button onClick={toggleChat}
-                  className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider rounded-lg transition-colors"
-                  style={{ border: "1px solid rgba(255,255,255,0.06)", color: chatOpen ? "var(--accent)" : "var(--text-muted)" }}>
+                  className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
+                  style={{ color: chatOpen ? "var(--accent-bright)" : "var(--text-faint)" }}>
                   Copilot
                 </button>
               </>
             )}
-            <div className="flex items-center gap-1.5">
-              <span className="text-[11px] font-mono" style={{ color: "var(--text-faint)" }}>Evo 2</span>
-              <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
-            </div>
           </div>
         </header>
 
@@ -178,7 +189,7 @@ export default function AnalyzePage() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
               {/* Summary strip */}
-              <div className="px-8 py-6" style={{ background: "var(--surface-raised)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+              <div className="px-8 py-6" style={{ background: "var(--surface-raised)" }}>
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
@@ -209,10 +220,10 @@ export default function AnalyzePage() {
                       <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Identified regions</h3>
                       <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{regions.length} total</span>
                     </div>
-                    <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)" }}>
                       {/* Table header */}
                       <div className="flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
-                        style={{ color: "var(--text-muted)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                        style={{ color: "var(--text-muted)" }}>
                         <span className="w-6">#</span>
                         <span className="flex-1">Region</span>
                         <span className="w-20 text-right">Type</span>
@@ -249,7 +260,7 @@ export default function AnalyzePage() {
                   <div className="space-y-4">
                     {/* Top candidate */}
                     {topRegion && (
-                      <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(91,181,162,0.15)" }}>
+                      <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
                         <div className="flex items-center gap-2 mb-3">
                           <Target size={14} style={{ color: "var(--accent)" }} />
                           <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>Top region</span>
@@ -265,7 +276,7 @@ export default function AnalyzePage() {
                     )}
 
                     {/* Quick stats */}
-                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Summary</span>
                       <div className="mt-3 space-y-3">
                         {[
@@ -283,7 +294,7 @@ export default function AnalyzePage() {
                     </div>
 
                     {/* Model note */}
-                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                    <div className="p-5 rounded-xl" style={{ background: "var(--surface-elevated)" }}>
                       <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--text-muted)" }}>Model</span>
                       <p className="text-xs mt-2 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
                         Scored by Evo 2 (40B parameters, 9T base pairs). Per-position log-likelihood indicates functional constraint. Lower absolute scores suggest higher evolutionary conservation.
@@ -337,7 +348,7 @@ export default function AnalyzePage() {
                 </div>
                 {/* Inspector panel: context-sensitive, read-only details */}
                 <div className="w-[320px] shrink-0 flex flex-col overflow-y-auto"
-                  style={{ background: "var(--surface-elevated)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ background: "var(--surface-elevated)" }}>
                   {/* Region info (when position selected) */}
                   <div className="p-5 pb-4">
                     <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>Inspector</span>
@@ -419,7 +430,7 @@ export default function AnalyzePage() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               {/* IDE toolbar: controls, status, actions */}
               <div className="h-10 shrink-0 flex items-center justify-between px-5"
-                style={{ background: "var(--surface-raised)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                style={{ background: "var(--surface-raised)" }}>
                 <div className="flex items-center gap-4">
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "var(--accent)" }}>LIVE EDITING</span>
                   <span className="text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
@@ -428,16 +439,16 @@ export default function AnalyzePage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
-                    style={{ color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    style={{ color: "var(--text-muted)" }}>
                     Save version
                   </button>
                   <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
-                    style={{ color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    style={{ color: "var(--text-muted)" }}>
                     Revert
                   </button>
                   <button onClick={() => setViewMode("compare")}
                     className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
-                    style={{ color: "var(--text-muted)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    style={{ color: "var(--text-muted)" }}>
                     Compare
                   </button>
                   <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors"
@@ -463,7 +474,7 @@ export default function AnalyzePage() {
                 </div>
                 {/* IDE right panel: mutation + scoring + structure + history */}
                 <div className="w-[380px] shrink-0 flex flex-col overflow-y-auto"
-                  style={{ background: "var(--surface-elevated)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  style={{ background: "var(--surface-elevated)" }}>
                   {/* Mutation editor (primary tool in IDE) */}
                   <div className="p-5">
                     <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>Mutation Editor</span>
