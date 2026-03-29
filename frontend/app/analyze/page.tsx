@@ -138,7 +138,7 @@ export default function AnalyzePage() {
         <AnimatePresence mode="wait">
           {/* ═══ INPUT ═══ */}
           {viewMode === "input" && (
-            <motion.div key="input" className="flex-1 flex items-center justify-center overflow-auto py-12 px-6"
+            <motion.div key="input" className="flex-1 flex overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               <SequenceInput onSubmit={handleSequenceSubmit} isLoading={isLoading} error={error} />
             </motion.div>
