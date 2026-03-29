@@ -15,12 +15,13 @@ type PipelineStatus = "idle" | "input" | "analyzing" | "complete" | "error";
  * - input: paste a sequence
  * - pipeline: analysis running, live streaming
  * - analyze: candidate overview (understand)
+ * - structure: 3D protein structure centerpiece
  * - leaderboard: candidate ranking/triage
  * - explorer: sequence inspection (inspect)
  * - ide: full editing (manipulate)
  * - compare: diff/compare view
  */
-type ViewMode = "input" | "pipeline" | "analyze" | "leaderboard" | "explorer" | "ide" | "compare";
+type ViewMode = "input" | "pipeline" | "analyze" | "structure" | "leaderboard" | "explorer" | "ide" | "compare";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -82,6 +83,10 @@ interface HelixState {
   retrievalStatuses: RetrievalStatus[];
   generationTokenCount: number;
   completedStages: string[];
+
+  // Connection
+  wsStatus: "disconnected" | "connecting" | "connected";
+  setWsStatus: (status: "disconnected" | "connecting" | "connected") => void;
 
   // Theme
   theme: "dark" | "light";
@@ -149,6 +154,7 @@ const initialState = {
   retrievalStatuses: [] as RetrievalStatus[],
   generationTokenCount: 0,
   completedStages: [] as string[],
+  wsStatus: "disconnected" as "disconnected" | "connecting" | "connected",
   theme: "dark" as "dark" | "light",
   savedSnapshot: null as { sequence: string; editHistory: EditEntry[] } | null,
   user: null as { id: string; name: string; email: string } | null,
@@ -236,6 +242,7 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   setCandidates: (candidates) => set({ candidates }),
   setActiveCandidateId: (id) => set({ activeCandidateId: id }),
   setSessionId: (id) => set({ sessionId: id }),
+  setWsStatus: (status) => set({ wsStatus: status }),
   appendGeneratingToken: (token) => set((s) => ({
     generatingSequence: s.generatingSequence + token,
     generationTokenCount: s.generationTokenCount + 1,

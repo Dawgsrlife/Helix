@@ -93,7 +93,7 @@ export default function PipelineStatus() {
         </p>
 
         {/* Progress bar */}
-        <div className="h-1 rounded-full mb-8 overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+        <div className="h-1 rounded-full mb-8 overflow-hidden" style={{ background: "var(--ghost-border)" }}>
           <motion.div className="h-full rounded-full" style={{ background: "var(--accent)" }}
             animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
         </div>
@@ -114,10 +114,15 @@ export default function PipelineStatus() {
             return (
               <div key={stage.id}>
                 <div className="flex items-center gap-3 py-2 px-3 rounded-lg transition-colors"
-                  style={{ background: isActive ? "rgba(91,181,162,0.05)" : "transparent" }}>
+                  style={{ background: isActive ? "color-mix(in oklch, var(--accent), transparent 95%)" : "transparent" }}>
                   <div className="w-5 h-5 flex items-center justify-center">
                     {isComplete ? (
-                      <Check size={14} style={{ color: "var(--accent)" }} />
+                      <motion.div
+                        initial={{ scale: 0, rotate: -45 }}
+                        animate={{ scale: 1, rotate: 0 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 15 }}>
+                        <Check size={14} style={{ color: "var(--accent)" }} />
+                      </motion.div>
                     ) : isActive ? (
                       <Loader2 size={14} className="animate-spin" style={{ color: "var(--accent)" }} />
                     ) : (
@@ -150,7 +155,7 @@ export default function PipelineStatus() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className="mt-6 flex items-center gap-3 px-3 py-3 rounded-lg"
-            style={{ background: "rgba(91,181,162,0.08)" }}>
+            style={{ background: "color-mix(in oklch, var(--accent), transparent 92%)" }}>
             <Check size={16} style={{ color: "var(--accent)" }} />
             <span className="text-[13px] font-medium" style={{ color: "var(--accent)" }}>
               Pipeline complete — loading results

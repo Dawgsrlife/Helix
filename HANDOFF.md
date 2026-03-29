@@ -1,129 +1,128 @@
-# Helix Frontend Handoff
+# Helix Frontend Handoff — Session 3
 
 > State as of March 29 2026. Branch: `frontend`. All committed and pushed.
+> PR: Dawgsrlife/Helix#2 (frontend → main)
 
-## Quick Start (Demo)
+## Quick Start
 
 ```bash
-cd frontend
-npm run build       # Production build (~6s)
-npm start           # Serves on http://localhost:3000
+cd frontend && npm run dev          # http://localhost:3000
+# OR with mock backend:
+cd mock-backend && npm install && node server.js  # port 8000
+cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
 
-To connect to the real backend (GPU inference):
-```bash
-NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000 npm run build && npm start
+## What Changed in Session 3
+
+### 1. 3D Protein Structure Viewer — Centerpiece
+- **ProteinViewer.tsx** (655 lines) completely rewritten
+- **Hover tooltips** via drei `Html`: shows residue name, number, pLDDT score + confidence label
+- **Click-to-highlight**: clicking a 3D residue highlights the corresponding DNA bases in the sequence viewer (bidirectional 3D ↔ sequence linking via codon mapping)
+- **Fullscreen toggle** with camera distance adjustment
+- **Theme-aware lighting**: brighter ambient in light mode, teal accent fill in dark mode
+- **Auto-rotate pauses** on hover or OrbitControls interaction
+- New **"Structure" view mode** added to store + sidebar — full-height 3D viewer as the app's centerpiece
+- Structure view always renders (loads sample PDB if no analysis has run yet)
+
+### 2. Tutorial / Onboarding — Coach Marks
+- **TutorialOverlay.tsx** redesigned as **positioned floating coach marks** (no dark overlay/backdrop)
+- Non-blocking: UI remains fully interactive during tutorial
+- Teal highlight ring around anchor elements (e.g., sequence input area)
+- 8-step walkthrough: Welcome → Input → Pipeline → Analyze → Structure → Explorer → Studio → Copilot
+- Arrow pointer when anchored to elements
+- Keyboard navigation (arrows, Enter, Escape)
+- localStorage persistence (`helix-tutorial-completed`)
+- Skip button + progress dots
+- Accessible from sidebar "Tutorial" button
+
+### 3. Science Tooltips
+- **ScienceTooltip.tsx** — 28-term dictionary of plain English explanations
+- Terms: pLDDT, functional plausibility, off-target risk, DNA bases (A/T/C/G), exon, intron, ORF, mutations, Evo 2, ESMFold, AlphaFold, log-likelihood, GC content, residue, etc.
+- `ScienceTooltip` component wraps content with dashed underline hint, shows tooltip on hover
+- `ScienceInfo` inline "ⓘ" icon variant
+- Integrated across all views: analyze overview, explorer inspector, leaderboard headers, IDE score bars, structure panel
+
+### 4. Fluid Motion Design
+- Spring-physics sidebar nav (scale on hover/tap via Framer Motion)
+- Staggered card/row entrances in analyze regions and leaderboard candidates
+- Animated score bars (width grows from 0% with staggered delay)
+- Pipeline stage checkmarks bounce in with spring animation
+- Slide-in-right side panels
+- Fade+slide view transitions with configurable direction
+- Floating copilot button springs in from bottom
+
+### 5. Light Mode Polish
+- `::selection` color adapts to light backgrounds
+- Scrollbar thumb adapts (dark in light mode)
+- LikelihoodGraph canvas colors are theme-aware (dark bars + highlight for light mode)
+- SequenceViewer hover uses `color-mix(in oklch)` instead of hardcoded rgba
+- PipelineStatus/CandidateLeaderboard backgrounds use `color-mix` with accent
+- All `rgba(255,255,255,0.04)` borders replaced with `var(--ghost-border)`
+- ProteinViewer backbone tube color and lighting adapt per theme
+
+### 6. Mock Frontend Flow Integration
+- WebSocket connection status badge in sidebar (connected/connecting indicator)
+- `useDesignPipeline.ts` now updates `wsStatus` in store on WS open/close
+- `editBase` and `editFollowup` API functions already wired in `lib/api.ts`
+- Store has `wsStatus` state for connection badge
+
+## Architecture Changes
+
+### New Files
+```
+frontend/components/ui/ScienceTooltip.tsx  — Science term dictionary + tooltip components
+frontend/components/ui/TutorialOverlay.tsx — Coach mark tutorial system
 ```
 
-Without NEXT_PUBLIC_API_URL, the app uses local Next.js mock API routes.
-
-## Demo Script
-
-1. **Open** `http://localhost:3000/analyze`
-2. **Choose mode**: "Paste Sequence" (existing DNA) or "Design New" (NL goal)
-3. **Submit**: Click an example or paste/type, then submit
-4. **Pipeline animates** (~6s): 6-stage progress with real-time indicators
-5. **Analyze view**: Region table, annotation track, top region card, stats
-6. **Inspect**: Click a region row → Explorer with sequence viewer, inspector panel
-7. **Edit**: Click "Open in Design Studio" → click a base → run mutation simulation
-8. **Compare**: Click "Compare" in IDE toolbar → split-pane sequence diff
-9. **Copilot**: Click "Copilot" button → contextual chat panel with suggested prompts
-
-## What Exists
-
-### Landing Page (`app/page.tsx`)
-- GSAP ScrollTrigger cinematic scroll story (6 pinned scenes)
-- Hero with Instrument Serif italic accent
-- 3 product render images, scoring console, floating ATCG particles
-- Helix brand mark (arc SVG) + wordmark, SVG grain overlay
-
-### Analyze Page (`app/analyze/page.tsx`)
-Seven view modes in one unified corridor:
-1. **Input**: Two-column intake with Paste/Design mode toggle
-2. **Pipeline**: 6-stage progress (real WS events or simulation fallback)
-3. **Analyze**: Region table, annotation track, top region, stats, model note
-4. **Leaderboard**: Ranked candidate table with 4D scores
-5. **Explorer**: Sequence viewer, inspector panel, structure preview, likelihood graph
-6. **IDE/Studio**: Mutation editor, scoring bars, structure, edit history, toolbar
-7. **Compare**: Split-pane colored sequence diff, score deltas, position-level diffs
-
-### Copilot (`components/workspace/ChatPanel.tsx`)
-- Workspace-integrated side panel, screen-specific suggested prompts
-- Context-aware mock responses referencing actual candidate data
-
-### WebSocket Streaming (`hooks/useDesignPipeline.ts`)
-- POST /api/design → WebSocket streaming pipeline
-- Handles 7 event types: intent_parsed, retrieval_progress, generation_token,
-  candidate_scored, structure_ready, explanation_chunk, pipeline_complete
-- PipelineStatus reactive to real events with simulation fallback
-
-### Design System
-- OKLCH color system (globals.css): surfaces, text, accent, nucleotide, annotation colors
-- All components use CSS custom properties (var(--surface-*), var(--text-*), etc.)
-- Three.js/Canvas contexts retain hex (CSS vars not supported there)
-- Inter + JetBrains Mono + Instrument Serif (landing hero only)
-- 8px spacing grid, consistent typography scale
-
-### Infrastructure
-- Zustand store with full state: viewMode, candidates, chatMessages, editHistory,
-  pipeline status, streaming state (sessionId, generatingSequence, explanation, etc.)
-- Mock API routes (`app/api/*`) for analyze, mutations, structure, health
-- `lib/api.ts` with all endpoints (analyze, mutations, structure, design, edit/base,
-  edit/followup, health)
-
-## Completed Phases
-
-| Phase | Description | Commit |
-|-------|-------------|--------|
-| B | Sidebar nav wiring + OKLCH color unification | `e97cde9` |
-| C | Spacing, typography, surface elevation polish | `cc97812` |
-| D | WebSocket streaming integration | `80c3209` |
-| E | Demo flow hardening (pipeline view, nav guards) | `7491abc` |
-| F | Video recording prep (prod build, metadata) | current |
-
-## Key Design Decisions
-- **No serif fonts in product UI** (only Instrument Serif italic in landing hero)
-- **Single teal accent** used sparingly via var(--accent)
-- **Explorer vs Studio are materially different**: Explorer is read-only, Studio has editing
-- **Compare is genomic-aware**: split-pane colored sequence diff
-- **Copilot is screen-contextual**: different prompts per view mode
-- **Pipeline has dual modes**: real WS streaming (when backend connected) or simulation
-
-## File Map
+### Modified Files
 ```
-frontend/
-  app/
-    page.tsx              # Landing (GSAP scroll story)
-    layout.tsx            # Root (fonts, metadata, OG tags)
-    analyze/
-      page.tsx            # 7-mode product corridor
-      layout.tsx          # Page title metadata
-    api/                  # Mock API routes
-  components/
-    brand/HelixLogo.tsx   # Logo system (3 sizes, 3 variants)
-    sequence/             # SequenceViewer, BaseToken, SequenceInput, RegionHighlight
-    annotation/           # AnnotationTrack, AnnotationLegend, LikelihoodGraph
-    mutation/             # MutationPanel, MutationDiff
-    structure/            # ProteinViewer (Three.js), StructureControls
-    workspace/            # CandidateLeaderboard, ChatPanel, CompareView, PipelineStatus
-    ui/                   # ShadCN + LoadingState
-  hooks/
-    useSequenceAnalysis   # Non-streaming /api/analyze path
-    useDesignPipeline     # Streaming /api/design + WS path
-    useMutationSim        # Mutation simulation
-    useAnnotations        # Annotation processing
-  lib/
-    store.ts              # Zustand (viewMode, candidates, streaming state, etc.)
-    api.ts                # All backend API functions
-    sequenceUtils.ts      # Parsing, validation, GC content
-    colorMap.ts, utils.ts
-  types/                  # sequence, analysis, structure domain types
-  public/assets/          # Product images, favicon
+frontend/lib/store.ts                     — Added "structure" ViewMode + wsStatus state
+frontend/app/analyze/page.tsx             — Structure view, tutorial, tooltips, animations
+frontend/components/structure/ProteinViewer.tsx — Full rewrite with raycasting + tooltips
+frontend/components/annotation/LikelihoodGraph.tsx — Theme-aware canvas colors
+frontend/components/sequence/SequenceViewer.tsx — Theme-aware hover
+frontend/components/workspace/CandidateLeaderboard.tsx — Animations + tooltips
+frontend/components/workspace/PipelineStatus.tsx — Bouncing checkmarks + theme fixes
+frontend/hooks/useDesignPipeline.ts       — WS status updates
+frontend/app/globals.css                  — Light mode selection + scrollbar
 ```
 
-## Integration Checklist
-- [ ] Set `NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000`
-- [ ] Verify `GET /api/health` returns 200
-- [ ] Test "Design New" mode → should stream real WS events
-- [ ] Test "Paste Sequence" → should hit real /api/analyze
-- [ ] Test base editing in IDE → should hit real /api/mutations
+### Store Shape (additions)
+```typescript
+{
+  // New view mode
+  viewMode: "..." | "structure",
+
+  // New connection state
+  wsStatus: "disconnected" | "connecting" | "connected",
+  setWsStatus: (status) => void,
+}
+```
+
+## What the Next Session Must Do
+
+### 1. Backend Integration
+- Set `NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000` to connect to real backend
+- Test full pipeline: design goal → WebSocket streaming → 3D structure
+- The frontend already handles all backend events (intent_parsed, retrieval_progress, generation_token, candidate_scored, structure_ready, explanation_chunk, pipeline_complete)
+
+### 2. Real PDB Data
+- When backend returns `structure_ready` event with real PDB data, the 3D viewer will render it automatically
+- ESMFold PDB files use B-factor column for pLDDT scores (already parsed)
+- Test with real protein predictions from the backend
+
+### 3. Base Editing API Integration
+- `editBase()` and `editFollowup()` functions exist in `lib/api.ts`
+- Wire into MutationPanel: when user edits a base, call the backend to re-score
+- Show delta likelihood + predicted impact from backend response
+
+### 4. Landing Page Polish
+- The landing page at `app/page.tsx` still uses GSAP ScrollTrigger
+- Consider adding protein structure preview to the "Structure" section of the landing scroll
+
+## Key Decisions
+- Tutorial is non-blocking coach marks (no backdrop), not a modal
+- Structure view accessible from sidebar even without analysis (loads sample PDB)
+- 3D viewer always renders — uses `/assets/sample-structure.pdb` as fallback
+- All science terms have plain-English tooltips for non-bio users
+- Connection status badge only appears when WS is active (not when disconnected)
