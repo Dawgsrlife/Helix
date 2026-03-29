@@ -129,61 +129,132 @@ export default function AnalyzePage() {
           )}
 
           {/* ═══ ANALYZE: understand ═══ */}
-          {viewMode === "analyze" && analysisResult && (
-            <motion.div key="analyze" className="flex-1 overflow-auto px-8 py-8"
+          {viewMode === "analyze" && analysisResult && (() => {
+            const topRegion = regions.reduce((best, r) => (r.score && (!best.score || Math.abs(r.score) < Math.abs(best.score))) ? r : best, regions[0]);
+            const codingRegions = regions.filter(r => r.type === "exon" || r.type === "orf");
+            const avgScore = scores.length > 0 ? (scores.reduce((a, s) => a + Math.abs(s.score), 0) / scores.length) : 0;
+            return (
+            <motion.div key="analyze" className="flex-1 overflow-auto"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="max-w-5xl mx-auto">
-                <h2 className="text-2xl font-semibold tracking-tight mb-2">Analysis Complete</h2>
-                <p className="text-[15px] mb-8" style={{ color: "#888" }}>
-                  {rawSequence.length} bp analyzed. {regions.length} regions identified. {analysisResult.predictedProteins.length} protein structure{analysisResult.predictedProteins.length !== 1 ? "s" : ""} predicted.
-                </p>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-                  {[
-                    { icon: Target, label: "Regions", value: String(regions.length), color: "#5bb5a2" },
-                    { icon: Sparkles, label: "Mean score", value: (scores.reduce((a, s) => a + Math.abs(s.score), 0) / Math.max(scores.length, 1)).toFixed(2), color: "#6b9fd4" },
-                    { icon: Shield, label: "Proteins", value: String(analysisResult.predictedProteins.length), color: "#c9a855" },
-                    { icon: Clock, label: "Length", value: `${rawSequence.length} bp`, color: "#d47a7a" },
-                  ].map(({ icon: Icon, label, value, color }) => (
-                    <div key={label} className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
-                      <Icon size={18} style={{ color, marginBottom: 8 }} />
-                      <div className="text-2xl font-semibold tracking-tight mb-1">{value}</div>
-                      <div className="text-[13px]" style={{ color: "#888" }}>{label}</div>
-                    </div>
-                  ))}
+              {/* Summary strip */}
+              <div className="px-8 py-5" style={{ background: "#131311", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div className="max-w-6xl mx-auto flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
+                    <p className="text-[13px]" style={{ color: "#D1D0CC" }}>
+                      {rawSequence.length} bp analyzed across {regions.length} regions. {codingRegions.length} coding region{codingRegions.length !== 1 ? "s" : ""} identified.
+                    </p>
+                  </div>
+                  <button onClick={() => setViewMode("explorer")}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
+                    style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
+                    Open Explorer <ArrowRight size={15} />
+                  </button>
                 </div>
+              </div>
 
-                <div className="mb-8">
-                  <h3 className="text-base font-semibold mb-3">Annotation track</h3>
+              <div className="px-8 py-6 max-w-6xl mx-auto">
+                {/* Annotation track full-width */}
+                <div className="mb-6">
                   <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                   <AnnotationLegend regions={regions} />
                 </div>
 
-                <div className="mb-10">
-                  <h3 className="text-base font-semibold mb-3">Regions</h3>
-                  <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
-                    {regions.slice(0, 8).map((r, i) => (
-                      <button key={i} onClick={() => { setSelectedPosition(r.start); setViewMode("explorer"); }}
-                        className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.02]"
-                        style={{ borderBottom: i < Math.min(regions.length, 8) - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
-                        <span className="text-xs font-mono w-6" style={{ color: "#555" }}>#{i + 1}</span>
-                        <span className="text-sm font-medium flex-1">{r.label ?? r.type}</span>
-                        <span className="text-xs font-mono" style={{ color: "#888" }}>{r.start}-{r.end}</span>
-                        <span className="text-xs font-mono" style={{ color: "#555" }}>{r.end - r.start} bp</span>
-                        <ChevronRight size={14} style={{ color: "#555" }} />
-                      </button>
-                    ))}
+                {/* Two-column: regions + insights */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left 2/3: Region list */}
+                  <div className="lg:col-span-2">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold" style={{ color: "#F0EFED" }}>Identified regions</h3>
+                      <span className="text-xs font-mono" style={{ color: "#888" }}>{regions.length} total</span>
+                    </div>
+                    <div className="rounded-xl overflow-hidden" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      {/* Table header */}
+                      <div className="flex items-center gap-4 px-5 py-2 text-[11px] font-medium uppercase tracking-wider"
+                        style={{ color: "#666", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                        <span className="w-6">#</span>
+                        <span className="flex-1">Region</span>
+                        <span className="w-20 text-right">Type</span>
+                        <span className="w-24 text-right">Position</span>
+                        <span className="w-16 text-right">Length</span>
+                        <span className="w-16 text-right">Score</span>
+                        <span className="w-8" />
+                      </div>
+                      {regions.slice(0, 10).map((r, i) => (
+                        <button key={i} onClick={() => { setSelectedPosition(r.start); setViewMode("explorer"); }}
+                          className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.03]"
+                          style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
+                          <span className="text-xs font-mono w-6" style={{ color: "#666" }}>{i + 1}</span>
+                          <span className="text-[13px] font-medium flex-1" style={{ color: "#F0EFED" }}>{r.label ?? `${r.type} ${i + 1}`}</span>
+                          <span className="text-[11px] font-mono w-20 text-right px-1.5 py-0.5 rounded"
+                            style={{
+                              color: r.type === "exon" || r.type === "orf" ? "#5bb5a2" : "#888",
+                              background: r.type === "exon" || r.type === "orf" ? "rgba(91,181,162,0.08)" : "transparent",
+                            }}>
+                            {r.type}
+                          </span>
+                          <span className="text-xs font-mono w-24 text-right" style={{ color: "#D1D0CC" }}>{r.start}-{r.end}</span>
+                          <span className="text-xs font-mono w-16 text-right" style={{ color: "#888" }}>{r.end - r.start} bp</span>
+                          <span className="text-xs font-mono w-16 text-right" style={{ color: r.score && Math.abs(r.score) < 2 ? "#5bb5a2" : "#d47a7a" }}>
+                            {r.score?.toFixed(1) ?? "-"}
+                          </span>
+                          <ChevronRight size={14} className="w-8 shrink-0" style={{ color: "#555" }} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right 1/3: Insights */}
+                  <div className="space-y-4">
+                    {/* Top candidate */}
+                    {topRegion && (
+                      <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(91,181,162,0.15)" }}>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Target size={14} style={{ color: "#5bb5a2" }} />
+                          <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#5bb5a2" }}>Top region</span>
+                        </div>
+                        <div className="text-base font-semibold mb-1">{topRegion.label ?? topRegion.type}</div>
+                        <div className="text-xs font-mono mb-3" style={{ color: "#D1D0CC" }}>{topRegion.start}-{topRegion.end} ({topRegion.end - topRegion.start} bp)</div>
+                        <button onClick={() => { setSelectedPosition(topRegion.start); setViewMode("explorer"); }}
+                          className="text-xs font-medium flex items-center gap-1 transition-colors hover:text-white"
+                          style={{ color: "#5bb5a2" }}>
+                          Inspect this region <ArrowRight size={12} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick stats */}
+                    <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>Summary</span>
+                      <div className="mt-3 space-y-3">
+                        {[
+                          { label: "Coding regions", value: String(codingRegions.length), color: "#5bb5a2" },
+                          { label: "Mean confidence", value: avgScore.toFixed(2), color: "#6b9fd4" },
+                          { label: "Proteins predicted", value: String(analysisResult.predictedProteins.length), color: "#c9a855" },
+                          { label: "Sequence length", value: `${rawSequence.length} bp`, color: "#D1D0CC" },
+                        ].map(({ label, value, color }) => (
+                          <div key={label} className="flex items-center justify-between">
+                            <span className="text-xs" style={{ color: "#888" }}>{label}</span>
+                            <span className="text-sm font-semibold font-mono" style={{ color }}>{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Model note */}
+                    <div className="p-5 rounded-xl" style={{ background: "#1A1917", border: "1px solid rgba(255,255,255,0.04)" }}>
+                      <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>Model</span>
+                      <p className="text-xs mt-2 leading-relaxed" style={{ color: "#D1D0CC" }}>
+                        Scored by Evo 2 (40B parameters, 9T base pairs). Per-position log-likelihood indicates functional constraint. Lower absolute scores suggest higher evolutionary conservation.
+                      </p>
+                    </div>
                   </div>
                 </div>
-
-                <button onClick={() => setViewMode("explorer")}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
-                  style={{ background: "#5bb5a2", color: "#0F0F0F" }}>
-                  Inspect in Sequence Explorer <ArrowRight size={16} />
-                </button>
               </div>
             </motion.div>
-          )}
+            );
+          })()}
 
           {/* ═══ EXPLORER: inspect ═══ */}
           {viewMode === "explorer" && analysisResult && (
