@@ -174,41 +174,75 @@ export default function Home() {
       {/* ═══ SCENE 3: SCORING CONSOLE ═══ */}
       <section className="scene-score min-h-screen flex items-center justify-center px-6 md:px-16"
         style={{ background: "var(--surface-base)" }}>
-        <div className="max-w-4xl mx-auto w-full text-center">
-          <p className="score-label opacity-0 text-sm font-medium tracking-widest uppercase mb-16" style={{ color: "var(--accent)" }}>
-            Multi-dimensional scoring
-          </p>
-          <div className="score-console opacity-0 rounded-2xl overflow-hidden"
-            style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.06)", boxShadow: "0 16px 50px rgba(0,0,0,0.3)" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-              <div className="flex items-center gap-3">
-                <span className="text-[15px] font-semibold">BDNF_reg_v4</span>
-                <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Candidate #001</span>
+        <div className="max-w-3xl mx-auto w-full">
+          {/* Section header */}
+          <div className="score-label opacity-0 text-center mb-20">
+            <p className="text-sm font-medium tracking-widest uppercase mb-3" style={{ color: "var(--accent)" }}>
+              Multi-dimensional scoring
+            </p>
+            <p className="text-[15px] max-w-md mx-auto" style={{ color: "var(--text-faint)" }}>
+              Every candidate is evaluated across four orthogonal dimensions in real time.
+            </p>
+          </div>
+
+          <div className="score-console opacity-0">
+            {/* Composite score hero */}
+            <div className="flex flex-col items-center mb-14">
+              <div className="relative flex items-center justify-center mb-4">
+                {/* Arc ring */}
+                <svg width="140" height="140" viewBox="0 0 140 140" className="absolute">
+                  <circle cx="70" cy="70" r="62" fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="3" />
+                  <circle cx="70" cy="70" r="62" fill="none" stroke="var(--accent)" strokeWidth="3"
+                    strokeDasharray={`${0.942 * 2 * Math.PI * 62} ${2 * Math.PI * 62}`}
+                    strokeLinecap="round" transform="rotate(-90 70 70)" opacity="0.6" />
+                </svg>
+                <span className="text-5xl font-bold font-mono tracking-tight" style={{ color: "var(--text-primary)" }}>94.2</span>
               </div>
-              <span className="text-sm font-mono font-semibold" style={{ color: "var(--accent)" }}>94.2</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>BDNF_reg_v4</span>
+                <span className="text-xs font-mono px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "var(--accent)" }}>Candidate #001</span>
+              </div>
             </div>
-            {/* Score rows with inline SVG bars */}
-            {[
-              { name: "Functional plausibility", val: "94%", delta: "+2.1", color: "var(--accent)", conf: "High", w: 94 },
-              { name: "Tissue specificity", val: "82%", delta: "+0.8", color: "var(--base-c)", conf: "Moderate", w: 82 },
-              { name: "Off-target risk", val: "0.04%", delta: "-0.01", color: "var(--base-t)", conf: "Low risk", w: 4 },
-              { name: "Novelty index", val: "67%", delta: "+5.2", color: "var(--base-g)", conf: "Acceptable", w: 67 },
-            ].map((r) => (
-              <div key={r.name} className="flex items-center gap-5 px-6 py-4"
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <span className="text-sm w-44 shrink-0 text-left" style={{ color: "var(--text-secondary)" }}>{r.name}</span>
-                <div className="flex-1">
-                  <svg viewBox="0 0 400 6" className="w-full h-1.5" preserveAspectRatio="none">
-                    <rect x="0" y="0" width="400" height="6" rx="3" fill="rgba(255,255,255,0.04)" />
-                    <rect x="0" y="0" width={r.w * 4} height="6" rx="3" fill={r.color} opacity="0.6" />
-                  </svg>
+
+            {/* 4D score grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { name: "Functional", desc: "Sequence plausibility", val: 94, delta: "+2.1", color: "var(--accent)", conf: "High" },
+                { name: "Tissue", desc: "Expression specificity", val: 82, delta: "+0.8", color: "var(--base-c)", conf: "Moderate" },
+                { name: "Off-target", desc: "Unwanted activity risk", val: 4, delta: "-0.01", color: "var(--base-t)", conf: "Low risk", invert: true },
+                { name: "Novelty", desc: "Sequence originality", val: 67, delta: "+5.2", color: "var(--base-g)", conf: "Acceptable" },
+              ].map((r) => (
+                <div key={r.name} className="rounded-xl p-5"
+                  style={{ background: "var(--surface-raised)", border: "1px solid rgba(255,255,255,0.04)" }}>
+                  {/* Top row: name + value */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: r.color, opacity: 0.8 }} />
+                        <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{r.name}</span>
+                      </div>
+                      <span className="text-[11px] ml-4" style={{ color: "var(--text-faint)" }}>{r.desc}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-bold font-mono" style={{ color: r.color }}>
+                        {r.invert ? "0.04" : r.val}
+                      </span>
+                      <span className="text-sm font-mono" style={{ color: r.color }}>{r.invert ? "%" : "%"}</span>
+                    </div>
+                  </div>
+                  {/* Bar */}
+                  <div className="h-2 rounded-full overflow-hidden mb-3" style={{ background: "rgba(255,255,255,0.04)" }}>
+                    <div className="h-full rounded-full transition-all" style={{ width: `${r.val}%`, background: r.color, opacity: 0.7 }} />
+                  </div>
+                  {/* Footer: delta + confidence */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-mono" style={{ color: r.delta.startsWith("-") ? "var(--base-t)" : "var(--accent)" }}>{r.delta}</span>
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                      style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-muted)" }}>{r.conf}</span>
+                  </div>
                 </div>
-                <span className="text-base font-semibold font-mono w-14 text-right" style={{ color: r.color }}>{r.val}</span>
-                <span className="text-xs font-mono w-12 text-right" style={{ color: r.delta.startsWith("-") ? "var(--base-t)" : "var(--accent)" }}>{r.delta}</span>
-                <span className="text-xs w-20 text-right" style={{ color: "var(--text-muted)" }}>{r.conf}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </section>
