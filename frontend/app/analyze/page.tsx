@@ -18,6 +18,10 @@ import AnnotationTrack from "@/components/annotation/AnnotationTrack";
 import AnnotationLegend from "@/components/annotation/AnnotationLegend";
 import LikelihoodGraph from "@/components/annotation/LikelihoodGraph";
 import MutationPanel from "@/components/mutation/MutationPanel";
+import CandidateLeaderboard from "@/components/workspace/CandidateLeaderboard";
+import ChatPanel from "@/components/workspace/ChatPanel";
+import PipelineStatus from "@/components/workspace/PipelineStatus";
+import CompareView from "@/components/workspace/CompareView";
 import MutationDiff from "@/components/mutation/MutationDiff";
 import StructureControls from "@/components/structure/StructureControls";
 
@@ -30,7 +34,10 @@ const SIDEBAR_ITEMS = [
   { icon: BarChart3, label: "Analysis", id: "analysis" },
 ];
 
-const VIEW_LABELS = { input: "New Analysis", analyze: "Candidates", explorer: "Sequence Explorer", ide: "Design Studio" } as const;
+const VIEW_LABELS = {
+  input: "New Analysis", pipeline: "Running", analyze: "Overview",
+  leaderboard: "Candidates", explorer: "Explorer", ide: "Design Studio", compare: "Compare",
+} as const;
 
 export default function AnalyzePage() {
   const viewMode = useHelixStore((s) => s.viewMode);
@@ -49,7 +56,9 @@ export default function AnalyzePage() {
   const setSelectedPosition = useHelixStore((s) => s.setSelectedPosition);
   const setActivePdb = useHelixStore((s) => s.setActivePdb);
   const setHighlightResidues = useHelixStore((s) => s.setHighlightResidues);
-  const addEditHistoryEntry = useHelixStore((s) => s.addEditHistoryEntry);
+  const addEditEntry = useHelixStore((s) => s.addEditEntry);
+  const chatOpen = useHelixStore((s) => s.chatOpen);
+  const toggleChat = useHelixStore((s) => s.toggleChat);
 
   const { isLoading, error, analyze } = useSequenceAnalysis();
   const { simulate } = useMutationSim();
@@ -65,9 +74,9 @@ export default function AnalyzePage() {
   const handleMutationSubmit = useCallback((pos: number, alt: string) => {
     if (rawSequence) {
       simulate(rawSequence, pos, alt);
-      addEditHistoryEntry({ position: pos, from: rawSequence[pos], to: alt, delta: 0 });
+      addEditEntry({ position: pos, from: rawSequence[pos], to: alt, delta: 0 });
     }
-  }, [rawSequence, simulate, addEditHistoryEntry]);
+  }, [rawSequence, simulate, addEditEntry]);
 
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: "#0F0F0F", color: "#F0EFED" }}>
@@ -102,15 +111,22 @@ export default function AnalyzePage() {
           </div>
           <div className="flex items-center gap-3">
             {viewMode !== "input" && (
-              <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
-                {(["analyze", "explorer", "ide"] as const).map((m) => (
-                  <button key={m} onClick={() => setViewMode(m)}
-                    className="px-3 py-1 text-[11px] font-medium uppercase tracking-wider transition-colors"
-                    style={{ background: viewMode === m ? "rgba(91,181,162,0.1)" : "transparent", color: viewMode === m ? "#5bb5a2" : "#666" }}>
-                    {m === "analyze" ? "Overview" : m === "explorer" ? "Explorer" : "IDE"}
-                  </button>
-                ))}
-              </div>
+              <>
+                <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
+                  {(["analyze", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
+                    <button key={m} onClick={() => setViewMode(m)}
+                      className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors"
+                      style={{ background: viewMode === m ? "rgba(91,181,162,0.1)" : "transparent", color: viewMode === m ? "#5bb5a2" : "#666" }}>
+                      {VIEW_LABELS[m]}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={toggleChat}
+                  className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider rounded-lg transition-colors"
+                  style={{ border: "1px solid rgba(255,255,255,0.06)", color: chatOpen ? "#5bb5a2" : "#666" }}>
+                  Copilot
+                </button>
+              </>
             )}
             <div className="flex items-center gap-1.5">
               <span className="text-[11px] font-mono" style={{ color: "#555" }}>Evo 2</span>
@@ -125,6 +141,14 @@ export default function AnalyzePage() {
             <motion.div key="input" className="flex-1 flex items-center justify-center overflow-auto py-12 px-6"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               <SequenceInput onSubmit={handleSequenceSubmit} isLoading={isLoading} error={error} />
+            </motion.div>
+          )}
+
+          {/* ═══ PIPELINE: running ═══ */}
+          {viewMode === "pipeline" && (
+            <motion.div key="pipeline" className="flex-1"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <PipelineStatus />
             </motion.div>
           )}
 
@@ -255,6 +279,24 @@ export default function AnalyzePage() {
             </motion.div>
             );
           })()}
+
+          {/* ═══ LEADERBOARD: rank/triage ═══ */}
+          {viewMode === "leaderboard" && analysisResult && (
+            <motion.div key="leaderboard" className="flex-1 flex overflow-hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <CandidateLeaderboard />
+              {chatOpen && <ChatPanel />}
+            </motion.div>
+          )}
+
+          {/* ═══ COMPARE: diff ═══ */}
+          {viewMode === "compare" && analysisResult && (
+            <motion.div key="compare" className="flex-1 flex overflow-hidden"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <CompareView />
+              {chatOpen && <ChatPanel />}
+            </motion.div>
+          )}
 
           {/* ═══ EXPLORER: inspect ═══ */}
           {viewMode === "explorer" && analysisResult && (

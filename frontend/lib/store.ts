@@ -12,42 +12,63 @@ type PipelineStatus = "idle" | "input" | "analyzing" | "complete" | "error";
 
 /**
  * Product view states within /analyze:
- * - input: paste a sequence (empty state)
- * - analyze: candidate overview, scores, regions (understand)
- * - explorer: sequence inspection, annotations, mutation sim (inspect)
- * - ide: full editing environment with diffs and re-scoring (manipulate)
+ * - input: paste a sequence
+ * - pipeline: analysis running, live streaming
+ * - analyze: candidate overview (understand)
+ * - leaderboard: candidate ranking/triage
+ * - explorer: sequence inspection (inspect)
+ * - ide: full editing (manipulate)
+ * - compare: diff/compare view
  */
-type ViewMode = "input" | "analyze" | "explorer" | "ide";
+type ViewMode = "input" | "pipeline" | "analyze" | "leaderboard" | "explorer" | "ide" | "compare";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
+
+interface EditEntry {
+  position: number;
+  from: string;
+  to: string;
+  delta: number;
+  timestamp: number;
+}
+
+interface Candidate {
+  id: number;
+  sequence: string;
+  scores: { functional: number; tissue: number; offTarget: number; novelty: number };
+  overall: number;
+  status: string;
+}
 
 interface HelixState {
-  // View
   viewMode: ViewMode;
-
-  // Pipeline
   pipelineStatus: PipelineStatus;
+  pipelineStage: string;
   error: string | null;
 
-  // Sequence data
   rawSequence: string;
   bases: Base[];
   regions: SequenceRegion[];
   scores: LikelihoodScore[];
-
-  // Analysis result
   analysisResult: AnalysisResult | null;
 
-  // Interaction
   selectedPosition: number | null;
   selectedRegionIndex: number | null;
   activePdb: string | null;
   highlightResidues: number[];
 
-  // Mutation
   mutationEffect: MutationEffect | null;
   mutationLoading: boolean;
 
-  // Edit history (for IDE)
-  editHistory: Array<{ position: number; from: string; to: string; delta: number; timestamp: number }>;
+  editHistory: EditEntry[];
+  chatMessages: ChatMessage[];
+  chatOpen: boolean;
+  candidates: Candidate[];
+  activeCandidateId: number | null;
 
   // Actions
   setViewMode: (mode: ViewMode) => void;
@@ -60,15 +81,21 @@ interface HelixState {
   setMutationEffect: (effect: MutationEffect | null) => void;
   setMutationLoading: (loading: boolean) => void;
   setPipelineStatus: (status: PipelineStatus) => void;
+  setPipelineStage: (stage: string) => void;
   setError: (error: string | null) => void;
-  addEditHistoryEntry: (entry: { position: number; from: string; to: string; delta: number }) => void;
+  addEditEntry: (entry: Omit<EditEntry, "timestamp">) => void;
+  addChatMessage: (msg: Omit<ChatMessage, "timestamp">) => void;
+  toggleChat: () => void;
+  setCandidates: (candidates: Candidate[]) => void;
+  setActiveCandidateId: (id: number | null) => void;
   reset: () => void;
 }
 
 const initialState = {
   viewMode: "input" as ViewMode,
   pipelineStatus: "idle" as PipelineStatus,
-  error: null,
+  pipelineStage: "",
+  error: null as string | null,
   rawSequence: "",
   bases: [] as Base[],
   regions: [] as SequenceRegion[],
@@ -80,14 +107,17 @@ const initialState = {
   highlightResidues: [] as number[],
   mutationEffect: null as MutationEffect | null,
   mutationLoading: false,
-  editHistory: [] as HelixState["editHistory"],
+  editHistory: [] as EditEntry[],
+  chatMessages: [] as ChatMessage[],
+  chatOpen: false,
+  candidates: [] as Candidate[],
+  activeCandidateId: null as number | null,
 };
 
 export const useHelixStore = create<HelixState>((set, get) => ({
   ...initialState,
 
   setViewMode: (mode) => set({ viewMode: mode }),
-
   setSequence: (seq) => set({ rawSequence: seq }),
 
   setAnalysisResult: (result) => {
@@ -96,14 +126,49 @@ export const useHelixStore = create<HelixState>((set, get) => ({
       ...base,
       likelihoodScore: result.perPositionScores[i]?.score,
     }));
+    // Generate mock candidates from analysis
+    const candidates: Candidate[] = [{
+      id: 0,
+      sequence: result.rawSequence,
+      scores: {
+        functional: 0.85 + Math.random() * 0.12,
+        tissue: 0.70 + Math.random() * 0.20,
+        offTarget: Math.random() * 0.05,
+        novelty: 0.50 + Math.random() * 0.30,
+      },
+      overall: 0,
+      status: "scored",
+    }];
+    candidates[0].overall = (candidates[0].scores.functional * 0.35 + candidates[0].scores.tissue * 0.30 + (1 - candidates[0].scores.offTarget) * 0.20 + candidates[0].scores.novelty * 0.15) * 100;
+
+    // Add 2-3 more mock candidates
+    for (let i = 1; i <= 3; i++) {
+      const c: Candidate = {
+        id: i,
+        sequence: result.rawSequence,
+        scores: {
+          functional: 0.60 + Math.random() * 0.30,
+          tissue: 0.50 + Math.random() * 0.35,
+          offTarget: Math.random() * 0.08,
+          novelty: 0.40 + Math.random() * 0.40,
+        },
+        overall: 0,
+        status: "scored",
+      };
+      c.overall = (c.scores.functional * 0.35 + c.scores.tissue * 0.30 + (1 - c.scores.offTarget) * 0.20 + c.scores.novelty * 0.15) * 100;
+      candidates.push(c);
+    }
+    candidates.sort((a, b) => b.overall - a.overall);
+
     set({
       analysisResult: result,
       rawSequence: result.rawSequence,
-      regions,
-      bases,
+      regions, bases,
       scores: result.perPositionScores,
       pipelineStatus: "complete",
       viewMode: "analyze",
+      candidates,
+      activeCandidateId: candidates[0].id,
       error: null,
     });
   },
@@ -115,10 +180,12 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   setMutationEffect: (effect) => set({ mutationEffect: effect }),
   setMutationLoading: (loading) => set({ mutationLoading: loading }),
   setPipelineStatus: (status) => set({ pipelineStatus: status }),
+  setPipelineStage: (stage) => set({ pipelineStage: stage }),
   setError: (error) => set({ error, pipelineStatus: "error" }),
-
-  addEditHistoryEntry: (entry) =>
-    set({ editHistory: [...get().editHistory, { ...entry, timestamp: Date.now() }] }),
-
+  addEditEntry: (entry) => set({ editHistory: [...get().editHistory, { ...entry, timestamp: Date.now() }] }),
+  addChatMessage: (msg) => set({ chatMessages: [...get().chatMessages, { ...msg, timestamp: Date.now() }] }),
+  toggleChat: () => set({ chatOpen: !get().chatOpen }),
+  setCandidates: (candidates) => set({ candidates }),
+  setActiveCandidateId: (id) => set({ activeCandidateId: id }),
   reset: () => set(initialState),
 }));
