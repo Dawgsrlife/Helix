@@ -197,6 +197,18 @@ function AnalyzePageInner() {
     }
   }, [rawSequence, simulate, addEditEntry]);
 
+  // Rescore: re-analyze the current sequence with the backend
+  const [rescoring, setRescoring] = useState(false);
+  const handleRescore = useCallback(async () => {
+    if (!rawSequence || rescoring) return;
+    setRescoring(true);
+    try {
+      const result = await import("@/lib/api").then(m => m.analyzeSequence(rawSequence));
+      useHelixStore.getState().setAnalysisResult(result);
+    } catch { /* keep current data */ }
+    setRescoring(false);
+  }, [rawSequence, rescoring]);
+
   // 3D ↔ sequence linking: clicking residue in 3D highlights in sequence
   const handleResidueClick = useCallback((residueSeq: number) => {
     // Map residue index to approximate base position (3 bases per residue)
@@ -933,8 +945,11 @@ function AnalyzePageInner() {
                   <button onClick={() => setViewMode("compare")}
                     className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
                     style={{ color: "var(--text-muted)" }}>Compare</button>
-                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors"
-                    style={{ background: "var(--accent)", color: "var(--surface-base)" }}>Rescore</button>
+                  <button onClick={handleRescore} disabled={rescoring}
+                    className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors disabled:opacity-50"
+                    style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
+                    {rescoring ? "Rescoring..." : "Rescore"}
+                  </button>
                 </div>
               </motion.div>
               <div className="flex-1 flex overflow-hidden min-h-0">

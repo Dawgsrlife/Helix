@@ -182,44 +182,37 @@ function getTooltipStyle(
 ): React.CSSProperties {
   if (!triggerRect) return { opacity: 0, pointerEvents: "none" };
 
-  const gap = 8; // px between trigger and tooltip
+  const gap = 8;
+  const margin = 12; // min distance from viewport edge
+  const tooltipW = 280;
+  const tooltipH = 80; // estimated
 
   const base: React.CSSProperties = {
     position: "fixed",
     zIndex: 9999,
-    maxWidth: 280,
+    maxWidth: tooltipW,
     pointerEvents: "none",
   };
 
-  switch (side) {
+  // Auto-flip if tooltip would go off-screen
+  let effectiveSide = side;
+  if (side === "top" && triggerRect.top < tooltipH + margin) effectiveSide = "bottom";
+  if (side === "bottom" && triggerRect.bottom + tooltipH + gap > window.innerHeight - margin) effectiveSide = "top";
+  if (side === "left" && triggerRect.left < tooltipW + margin) effectiveSide = "right";
+  if (side === "right" && triggerRect.right + tooltipW + gap > window.innerWidth - margin) effectiveSide = "left";
+
+  // Clamp horizontal center to keep tooltip in viewport
+  const centerX = Math.max(tooltipW / 2 + margin, Math.min(triggerRect.left + triggerRect.width / 2, window.innerWidth - tooltipW / 2 - margin));
+
+  switch (effectiveSide) {
     case "top":
-      return {
-        ...base,
-        left: triggerRect.left + triggerRect.width / 2,
-        top: triggerRect.top - gap,
-        transform: "translate(-50%, -100%)",
-      };
+      return { ...base, left: centerX, top: triggerRect.top - gap, transform: "translate(-50%, -100%)" };
     case "bottom":
-      return {
-        ...base,
-        left: triggerRect.left + triggerRect.width / 2,
-        top: triggerRect.bottom + gap,
-        transform: "translate(-50%, 0)",
-      };
+      return { ...base, left: centerX, top: triggerRect.bottom + gap, transform: "translate(-50%, 0)" };
     case "left":
-      return {
-        ...base,
-        left: triggerRect.left - gap,
-        top: triggerRect.top + triggerRect.height / 2,
-        transform: "translate(-100%, -50%)",
-      };
+      return { ...base, left: triggerRect.left - gap, top: triggerRect.top + triggerRect.height / 2, transform: "translate(-100%, -50%)" };
     case "right":
-      return {
-        ...base,
-        left: triggerRect.right + gap,
-        top: triggerRect.top + triggerRect.height / 2,
-        transform: "translate(0, -50%)",
-      };
+      return { ...base, left: triggerRect.right + gap, top: triggerRect.top + triggerRect.height / 2, transform: "translate(0, -50%)" };
   }
 }
 
