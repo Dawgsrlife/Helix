@@ -10,6 +10,7 @@ from uuid import uuid4
 from models.domain import DesignSpec
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
+from pipeline.retrieval import retrieve_context
 from services.evo2 import Evo2Service
 from services.structure import predict_structure
 from config import settings, StructureMode
@@ -188,20 +189,34 @@ async def _emit_intent(manager: WebSocketManager, session_id: str, goal: str) ->
 
 
 async def _emit_retrieval(manager: WebSocketManager, session_id: str, spec: DesignSpec) -> None:
-    target = spec.target_gene or "unknown_target"
-    sources = (
-        ("ncbi", {"target_gene": target, "variants": []}),
-        ("pubmed", {"papers": [{"title": f"{target} regulatory context"}]}),
-        ("clinvar", {"pathogenic_variants": []}),
-    )
-    for source, result in sources:
+    import dataclasses
+
+    result = await retrieve_context(spec)
+
+    sources = [
+        ("ncbi", result.ncbi),
+        ("pubmed", result.pubmed),
+        ("clinvar", result.clinvar),
+    ]
+    for source_name, source_result in sources:
+        if source_result is not None:
+            if hasattr(source_result, "__dataclass_fields__"):
+                result_dict = dataclasses.asdict(source_result)
+            elif hasattr(source_result, "model_dump"):
+                result_dict = source_result.model_dump()
+            else:
+                result_dict = {}
+            status = "complete"
+        else:
+            result_dict = {}
+            status = "failed"
+
         await manager.send_event(
             session_id,
             RetrievalProgressEvent(
-                data=RetrievalProgressData(source=source, status="complete", result=result)
+                data=RetrievalProgressData(source=source_name, status=status, result=result_dict)
             ).to_json(),
         )
-        await asyncio.sleep(0.03)
 
 
 def _simple_mutate(sequence: str, position: int, new_base: str) -> str:
