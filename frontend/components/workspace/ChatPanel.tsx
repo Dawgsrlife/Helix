@@ -103,8 +103,10 @@ Rules:
         const data = await res.json();
         addChatMessage({ role: "assistant", content: data.assistant_message ?? "I couldn't process that." });
 
-        // Apply candidate updates from the agent (mutations, rescoring, structure)
-        const update = data.candidate_update;
+        // Only apply candidate updates if the user asked for an action
+        const actionWords = /mutate|change|edit|swap|optimize|improve|rescore|refold|fold|fix|modify|update|make/i;
+        const userRequestedAction = actionWords.test(msg);
+        const update = userRequestedAction ? data.candidate_update : null;
         if (update) {
           const s = useHelixStore.getState();
 
