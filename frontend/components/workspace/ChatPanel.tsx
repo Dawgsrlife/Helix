@@ -85,15 +85,92 @@ Rules:
 - pLDDT scores: >90 very confident, 70-90 confident, 50-70 uncertain, <50 unreliable
 - Scoring dimensions: functional (does it make a working protein), tissue (targets right cells), off-target (unintended effects, lower=safer), novelty (how unique)`;
 
-    const store = useHelixStore.getState();
+    const s = useHelixStore.getState();
+    const lc = msg.toLowerCase();
+
+    // ── LOCAL ACTIONS: handle these directly, never send to backend agent ──
+
+    // RESCORE: just re-analyze, no mutations
+    if (/\brescore\b|\bre-score\b|\bre-analyze\b|\bscore.+again\b/i.test(lc)) {
+      if (s.rawSequence) {
+        try {
+          const { analyzeSequence } = await import("@/lib/api");
+          const result = await analyzeSequence(s.rawSequence);
+          useHelixStore.getState().setAnalysisResult(result);
+          addChatMessage({ role: "assistant", content: `Rescored ${result.perPositionScores.length} positions. ${result.predictedProteins.length} protein(s) predicted. Check the Overview for updated results.` });
+        } catch {
+          addChatMessage({ role: "assistant", content: "Couldn't rescore — backend may be unavailable." });
+        }
+      } else {
+        addChatMessage({ role: "assistant", content: "No sequence loaded. Submit a sequence first." });
+      }
+      setIsTyping(false);
+      return;
+    }
+
+    // REFOLD: just re-predict structure, no mutations
+    if (/\brefold\b|\bre-fold\b|\bpredict structure\b|\bfold again\b/i.test(lc)) {
+      if (s.rawSequence) {
+        try {
+          const { fetchStructure } = await import("@/lib/api");
+          const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
+          useHelixStore.getState().setActivePdb(pdb);
+          addChatMessage({ role: "assistant", content: "Structure re-folded with ESMFold. Check the 3D Structure view." });
+        } catch {
+          addChatMessage({ role: "assistant", content: "Structure prediction failed." });
+        }
+      } else {
+        addChatMessage({ role: "assistant", content: "No sequence to fold." });
+      }
+      setIsTyping(false);
+      return;
+    }
+
+    // MUTATE: parse "mutate position X to Y" locally
+    const mutateMatch = lc.match(/(?:mutate|change|edit|swap)\s+(?:position\s+)?(\d+)\s+(?:to\s+)?([atcg])/i);
+    if (mutateMatch && s.rawSequence) {
+      const pos = parseInt(mutateMatch[1]);
+      const base = mutateMatch[2].toUpperCase();
+      if (pos >= 0 && pos < s.rawSequence.length) {
+        const oldBase = s.rawSequence[pos];
+        const mutated = s.rawSequence.slice(0, pos) + base + s.rawSequence.slice(pos + 1);
+        s.setSequence(mutated);
+        const { parseSequence } = await import("@/lib/sequenceUtils");
+        const newBases = parseSequence(mutated, s.regions).map((b: any, i: number) => ({ ...b, likelihoodScore: s.scores[i]?.score })) as typeof s.bases;
+        useHelixStore.setState({ bases: newBases });
+        s.addEditEntry({ position: pos, from: oldBase, to: base, delta: 0 });
+
+        let response = `Changed position ${pos}: ${oldBase} → ${base}.`;
+        try {
+          const { predictMutation } = await import("@/lib/api");
+          const effect = await predictMutation(s.rawSequence, pos, base);
+          s.setMutationEffect(effect);
+          response += ` ΔLL: ${effect.deltaLikelihood.toFixed(4)} (${effect.predictedImpact}).`;
+        } catch { /* scoring optional */ }
+        try {
+          const { fetchStructure } = await import("@/lib/api");
+          const pdb = await fetchStructure(0, mutated.length, mutated);
+          useHelixStore.getState().setActivePdb(pdb);
+          response += " Structure re-folded.";
+        } catch { /* folding optional */ }
+
+        addChatMessage({ role: "assistant", content: response });
+      } else {
+        addChatMessage({ role: "assistant", content: `Position ${pos} is out of range (0-${s.rawSequence.length - 1}).` });
+      }
+      setIsTyping(false);
+      return;
+    }
+
+    // ── INFORMATIONAL: try backend agent chat (read-only, never apply mutations) ──
+
     try {
-      // Try calling the backend's agentic chat endpoint
       const res = await fetch(`${API_BASE}/api/agent/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: store.sessionId ?? "local",
-          candidate_id: store.activeCandidateId ?? 0,
+          session_id: s.sessionId ?? "local",
+          candidate_id: s.activeCandidateId ?? 0,
           message: msg,
           history: chatMessages.slice(-6).map(m => ({ role: m.role, content: m.content })),
         }),
@@ -101,159 +178,53 @@ Rules:
 
       if (res.ok) {
         const data = await res.json();
+        // Only show the message — never apply candidate_update for informational queries
         addChatMessage({ role: "assistant", content: data.assistant_message ?? "I couldn't process that." });
-
-        // Only apply candidate updates if the user asked for an action
-        const actionWords = /mutate|change|edit|swap|optimize|improve|rescore|refold|fold|fix|modify|update|make/i;
-        const userRequestedAction = actionWords.test(msg);
-        const update = userRequestedAction ? data.candidate_update : null;
-        if (update) {
-          const s = useHelixStore.getState();
-
-          // Update sequence if the agent mutated it
-          if (update.sequence && update.sequence !== s.rawSequence) {
-            s.setSequence(update.sequence);
-            const { parseSequence } = await import("@/lib/sequenceUtils");
-            const newBases = parseSequence(update.sequence, s.regions).map((b: any, i: number) => ({
-              ...b, likelihoodScore: s.scores[i]?.score,
-            })) as typeof s.bases;
-            useHelixStore.setState({ bases: newBases });
-          }
-
-          // Update scores
-          if (update.scores) {
-            const scores = update.scores;
-            const updated = s.candidates.map(c =>
-              c.id === (s.activeCandidateId ?? 0)
-                ? { ...c, scores: { functional: scores.functional, tissue: scores.tissue_specificity, offTarget: scores.off_target, novelty: scores.novelty }, overall: (scores.combined ?? 0) * 100 }
-                : c
-            );
-            useHelixStore.getState().setCandidates(updated);
-          }
-
-          // Update 3D structure if agent re-folded it
-          if (update.pdb_data) {
-            useHelixStore.getState().setActivePdb(update.pdb_data);
-          }
-
-          // Log mutation if one was applied
-          if (update.mutation) {
-            const m = update.mutation;
-            useHelixStore.getState().addEditEntry({
-              position: m.position ?? 0,
-              from: m.original_base ?? "?",
-              to: m.new_base ?? "?",
-              delta: 0,
-            });
-          }
-        }
-
         setIsTyping(false);
         return;
       }
-    } catch (err) {
-      console.debug("[Helio] Backend agent chat unavailable, using local responses:", err);
+    } catch {
+      // Backend unavailable
     }
 
-    // Fallback: local responses with action capability
-    const doFallback = async () => {
-      const s = useHelixStore.getState();
-      const lc = msg.toLowerCase();
-      let response: string;
+    // Fallback: informational responses only (actions already handled above)
+    const st = useHelixStore.getState();
+    let response: string;
 
-      // ACTION: Mutate a specific position
-      const mutateMatch = lc.match(/(?:mutate|change|edit|swap)\s+(?:position\s+)?(\d+)\s+(?:to\s+)?([atcg])/i);
-      if (mutateMatch && s.rawSequence) {
-        const pos = parseInt(mutateMatch[1]);
-        const base = mutateMatch[2].toUpperCase();
-        if (pos >= 0 && pos < s.rawSequence.length) {
-          const oldBase = s.rawSequence[pos];
-          const mutated = s.rawSequence.slice(0, pos) + base + s.rawSequence.slice(pos + 1);
-          s.setSequence(mutated);
-          const { parseSequence } = await import("@/lib/sequenceUtils");
-          const newBases = parseSequence(mutated, s.regions).map((b: any, i: number) => ({ ...b, likelihoodScore: s.scores[i]?.score })) as typeof s.bases;
-          useHelixStore.setState({ bases: newBases });
-          s.addEditEntry({ position: pos, from: oldBase, to: base, delta: 0 });
+    if (/plddt|confidence/i.test(lc)) {
+      response = "pLDDT is the AI's confidence score (0-100) for each part of a predicted protein structure. Above 90 = very reliable. 70-90 = confident. Below 50 = uncertain.";
+    } else if (/off.?target|risk|safety/i.test(lc)) {
+      response = `Off-target risk: ${((st.candidates[0]?.scores.offTarget ?? 0) * 100).toFixed(1)}%. ${(st.candidates[0]?.scores.offTarget ?? 0) < 0.03 ? "Excellent — well below safety threshold." : "Moderate — consider reviewing."}`;
+    } else if (/functional|plausibility/i.test(lc)) {
+      response = `Functional plausibility measures how likely this DNA produces a working protein. Your top candidate: ${((st.candidates[0]?.scores.functional ?? 0) * 100).toFixed(0)}%.`;
+    } else if (/tissue/i.test(lc)) {
+      response = `Tissue specificity measures how well the sequence targets a specific cell type. Score: ${((st.candidates[0]?.scores.tissue ?? 0) * 100).toFixed(0)}%.`;
+    } else if (/novelty/i.test(lc)) {
+      response = `Novelty measures how different this sequence is from known natural sequences. Score: ${((st.candidates[0]?.scores.novelty ?? 0) * 100).toFixed(0)}%.`;
+    } else if (/score|mean|what.*do/i.test(lc)) {
+      const c = st.candidates[0];
+      response = c
+        ? `Your top candidate: Functional ${(c.scores.functional*100).toFixed(0)}%, Tissue ${(c.scores.tissue*100).toFixed(0)}%, Off-target ${(c.scores.offTarget*100).toFixed(1)}%, Novelty ${(c.scores.novelty*100).toFixed(0)}%. Overall: ${c.overall.toFixed(1)}.`
+        : "No candidates scored yet. Run an analysis first.";
+    } else if (/suggest|recommend|what.*try/i.test(lc)) {
+      response = "Try: \"mutate position 12 to C\" — I'll apply the edit, score it, and re-fold the protein. Say \"rescore\" to re-analyze or \"refold\" to re-predict the structure.";
+    } else if (/help|what can you/i.test(lc)) {
+      response = "I can: mutate bases (\"mutate position 15 to G\"), rescore the sequence (\"rescore\"), refold the protein (\"refold\"), or explain any metric (ask about pLDDT, functional, off-target, etc).";
+    } else if (/compare|difference|candidate/i.test(lc)) {
+      const c1 = st.candidates[0], c2 = st.candidates[1];
+      response = c1 && c2
+        ? `#1: ${c1.overall.toFixed(1)} vs #2: ${c2.overall.toFixed(1)}. Main gap: functional (${(c1.scores.functional*100).toFixed(0)}% vs ${(c2.scores.functional*100).toFixed(0)}%).`
+        : "Need at least 2 candidates to compare.";
+    } else if (/likelihood|log.?lik/i.test(lc)) {
+      response = "Log-likelihood measures how 'natural' each DNA position looks to Evo 2. Values closer to 0 = more expected. Very negative = unusual (could be functionally important or an error).";
+    } else {
+      response = st.rawSequence
+        ? `Sequence: ${st.rawSequence.length} bp, ${st.candidates.length} candidates. Top score: ${st.candidates[0]?.overall.toFixed(1) ?? "N/A"}. Ask me to explain metrics, mutate bases, rescore, or refold.`
+        : "No sequence loaded yet. Submit a sequence from the Home page to get started.";
+    }
 
-          // Try to predict mutation effect
-          try {
-            const { predictMutation } = await import("@/lib/api");
-            const effect = await predictMutation(s.rawSequence, pos, base);
-            s.setMutationEffect(effect);
-            response = `Done. Changed position ${pos} from ${oldBase} to ${base}. Delta log-likelihood: ${effect.deltaLikelihood.toFixed(4)} (${effect.predictedImpact}). The sequence is updated — check the viewer.`;
-          } catch {
-            response = `Done. Changed position ${pos} from ${oldBase} to ${base}. Sequence updated. I couldn't score the impact — try running Rescore in Design Studio.`;
-          }
-
-          // Re-fold in background
-          try {
-            const { fetchStructure } = await import("@/lib/api");
-            const pdb = await fetchStructure(0, mutated.length, mutated);
-            useHelixStore.getState().setActivePdb(pdb);
-            response += " The 3D structure has been re-folded with the new sequence.";
-          } catch { /* keep old structure */ }
-
-          addChatMessage({ role: "assistant", content: response });
-          setIsTyping(false);
-          return;
-        }
-      }
-
-      // ACTION: Rescore the sequence
-      if (lc.includes("rescore") || lc.includes("re-score") || lc.includes("re-analyze") || (lc.includes("score") && lc.includes("again"))) {
-        if (s.rawSequence) {
-          try {
-            const { analyzeSequence } = await import("@/lib/api");
-            const result = await analyzeSequence(s.rawSequence);
-            useHelixStore.getState().setAnalysisResult(result);
-            response = `Rescored. The sequence now has ${result.perPositionScores.length} per-position scores. ${result.predictedProteins.length} protein(s) predicted. Check the Overview for updated results.`;
-          } catch {
-            response = "I couldn't rescore — the backend might be unavailable. Try the Rescore button in Design Studio.";
-          }
-        } else {
-          response = "No sequence loaded to rescore. Submit a sequence first.";
-        }
-        addChatMessage({ role: "assistant", content: response });
-        setIsTyping(false);
-        return;
-      }
-
-      // ACTION: Re-fold structure
-      if (lc.includes("refold") || lc.includes("re-fold") || lc.includes("predict structure") || lc.includes("fold again")) {
-        if (s.rawSequence) {
-          try {
-            const { fetchStructure } = await import("@/lib/api");
-            const pdb = await fetchStructure(0, s.rawSequence.length, s.rawSequence);
-            useHelixStore.getState().setActivePdb(pdb);
-            response = "Structure re-folded with ESMFold. Check the 3D Structure view for the updated protein.";
-          } catch {
-            response = "Structure prediction failed — ESMFold may be unavailable.";
-          }
-        } else {
-          response = "No sequence to fold. Submit a sequence first.";
-        }
-        addChatMessage({ role: "assistant", content: response });
-        setIsTyping(false);
-        return;
-      }
-
-      // INFORMATIONAL responses
-      if (lc.includes("what") && (lc.includes("plddt") || lc.includes("confidence"))) {
-        response = "pLDDT is the AI's confidence score (0-100) for each part of a protein structure prediction. Above 90 = very reliable. 70-90 = confident. Below 50 = uncertain shape.";
-      } else if (lc.includes("off-target") || lc.includes("risk") || lc.includes("safety")) {
-        response = `Off-target risk: ${((s.candidates[0]?.scores.offTarget ?? 0) * 100).toFixed(1)}%. ${(s.candidates[0]?.scores.offTarget ?? 0) < 0.03 ? "Excellent — well below safety threshold." : "Moderate — consider reviewing."}`;
-      } else if (lc.includes("suggest") || lc.includes("recommend")) {
-        response = "Try: \"mutate position 12 to C\" or \"mutate position 30 to G\". I'll apply the edit, score it, and re-fold the protein. You can also say \"rescore\" or \"refold\" anytime.";
-      } else if (lc.includes("help") || lc.includes("what can you do")) {
-        response = "I can: (1) mutate bases — say \"mutate position 15 to G\", (2) rescore — say \"rescore\", (3) refold — say \"refold\", (4) explain any metric — ask about pLDDT, functional, off-target, etc.";
-      } else {
-        response = `Sequence: ${s.rawSequence.length} bp, ${s.candidates.length} candidates. Top score: ${s.candidates[0]?.overall.toFixed(1) ?? "N/A"}. I can mutate bases, rescore, refold, or explain metrics — just ask.`;
-      }
-
-      addChatMessage({ role: "assistant", content: response });
-      setIsTyping(false);
-    };
-    doFallback();
+    addChatMessage({ role: "assistant", content: response });
+    setIsTyping(false);
   };
 
   return (
