@@ -83,7 +83,7 @@ export default function AnalyzePage() {
     <div className="h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
 
       {/* Sidebar */}
-      <aside className="w-14 shrink-0 flex flex-col items-center py-4 gap-1"
+      <aside className="w-14 shrink-0 flex flex-col items-center py-4 gap-1.5"
         style={{ background: "var(--surface-void)", borderRight: "1px solid rgba(255,255,255,0.04)" }}>
         <button onClick={() => setViewMode("input")} title="Home"
           className="w-10 h-10 rounded-lg flex items-center justify-center mb-4 transition-colors hover:bg-white/5"
@@ -127,14 +127,14 @@ export default function AnalyzePage() {
                 <div className="flex rounded-lg overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.06)" }}>
                   {(["analyze", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
                     <button key={m} onClick={() => setViewMode(m)}
-                      className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider transition-colors"
+                      className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider transition-colors"
                       style={{ background: viewMode === m ? "rgba(91,181,162,0.1)" : "transparent", color: viewMode === m ? "var(--accent)" : "var(--text-muted)" }}>
                       {VIEW_LABELS[m]}
                     </button>
                   ))}
                 </div>
                 <button onClick={toggleChat}
-                  className="px-2.5 py-1 text-[10px] font-medium uppercase tracking-wider rounded-lg transition-colors"
+                  className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider rounded-lg transition-colors"
                   style={{ border: "1px solid rgba(255,255,255,0.06)", color: chatOpen ? "var(--accent)" : "var(--text-muted)" }}>
                   Copilot
                 </button>
@@ -174,7 +174,7 @@ export default function AnalyzePage() {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
 
               {/* Summary strip */}
-              <div className="px-8 py-5" style={{ background: "var(--surface-raised)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+              <div className="px-8 py-6" style={{ background: "var(--surface-raised)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <div className="max-w-6xl mx-auto flex items-center justify-between">
                   <div>
                     <h2 className="text-xl font-semibold tracking-tight mb-1">Analysis Complete</h2>
@@ -207,7 +207,7 @@ export default function AnalyzePage() {
                     </div>
                     <div className="rounded-xl overflow-hidden" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
                       {/* Table header */}
-                      <div className="flex items-center gap-4 px-5 py-2 text-[11px] font-medium uppercase tracking-wider"
+                      <div className="flex items-center gap-4 px-5 py-2.5 text-[11px] font-medium uppercase tracking-wider"
                         style={{ color: "var(--text-muted)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                         <span className="w-6">#</span>
                         <span className="flex-1">Region</span>
@@ -219,8 +219,8 @@ export default function AnalyzePage() {
                       </div>
                       {regions.slice(0, 10).map((r, i) => (
                         <button key={i} onClick={() => { setSelectedPosition(r.start); setViewMode("explorer"); }}
-                          className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.03]"
-                          style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid rgba(255,255,255,0.03)" : "none" }}>
+                          className="w-full flex items-center gap-4 px-5 py-3 text-left transition-colors hover:bg-white/[0.04]"
+                          style={{ borderBottom: i < Math.min(regions.length, 10) - 1 ? "1px solid rgba(255,255,255,0.04)" : "none" }}>
                           <span className="text-xs font-mono w-6" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
                           <span className="text-[13px] font-medium flex-1" style={{ color: "var(--text-primary)" }}>{r.label ?? `${r.type} ${i + 1}`}</span>
                           <span className="text-[11px] font-mono w-20 text-right px-1.5 py-0.5 rounded"
@@ -315,7 +315,7 @@ export default function AnalyzePage() {
             <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               {/* Explorer has annotation track prominently */}
-              <div className="px-5 py-2 shrink-0" style={{ background: "var(--surface-raised)" }}>
+              <div className="px-5 py-3 shrink-0" style={{ background: "var(--surface-raised)" }}>
                 <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                 <AnnotationLegend regions={regions} />
               </div>
@@ -335,8 +335,8 @@ export default function AnalyzePage() {
                 <div className="w-[320px] shrink-0 flex flex-col overflow-y-auto"
                   style={{ background: "var(--surface-elevated)", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
                   {/* Region info (when position selected) */}
-                  <div className="p-5">
-                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--accent)" }}>Inspector</span>
+                  <div className="p-5 pb-4">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-4" style={{ color: "var(--accent)" }}>Inspector</span>
                     {selectedPosition !== null ? (
                       <div className="space-y-3">
                         <div>
@@ -375,7 +375,7 @@ export default function AnalyzePage() {
                     <div className="space-y-1 max-h-[200px] overflow-y-auto">
                       {regions.slice(0, 6).map((r, i) => (
                         <button key={i} onClick={() => setSelectedPosition(r.start)}
-                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors hover:bg-white/[0.03]"
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors hover:bg-white/[0.04]"
                           style={{ fontSize: "12px" }}>
                           <span style={{ color: "var(--text-muted)" }}>{r.type}</span>
                           <span className="flex-1" />
@@ -445,14 +445,14 @@ export default function AnalyzePage() {
               <div className="flex-1 flex overflow-hidden min-h-0">
                 {/* Editable workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-                  <div className="px-5 py-1.5 shrink-0" style={{ background: "var(--surface-raised)" }}>
+                  <div className="px-5 py-2 shrink-0" style={{ background: "var(--surface-raised)" }}>
                     <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                   </div>
                   <div className="flex-1 overflow-auto px-5 py-3">
                     <SequenceViewer bases={bases} regions={regions}
                       highlightedPosition={selectedPosition ?? undefined} onBaseClick={handleBaseClick} />
                   </div>
-                  <div className="h-36 shrink-0 px-5 py-2" style={{ background: "var(--surface-raised)" }}>
+                  <div className="h-36 shrink-0 px-5 py-3" style={{ background: "var(--surface-raised)" }}>
                     <LikelihoodGraph scores={scores}
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>

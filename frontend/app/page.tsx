@@ -193,7 +193,7 @@ export default function Home() {
               { cls: "score-row-3", name: "Novelty index", val: "67%", delta: "+5.2", color: "var(--base-g)", conf: "Acceptable", w: "67%" },
             ].map((r) => (
               <div key={r.name} className={`${r.cls} flex items-center gap-5 px-6 py-4 transition-colors duration-300`}
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
                 <span className="text-sm w-40 shrink-0" style={{ color: "var(--text-secondary)" }}>{r.name}</span>
                 <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
                   <div className="h-full rounded-full" style={{ width: r.w, background: r.color, opacity: 0.6 }} />

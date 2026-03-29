@@ -40,10 +40,10 @@ export default function CandidateLeaderboard() {
           {candidates.map((c, i) => (
             <button key={c.id}
               onClick={() => { setActiveCandidateId(c.id); setViewMode("explorer"); }}
-              className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.02]"
+              className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.04]"
               style={{
-                borderBottom: i < candidates.length - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
-                borderLeft: activeCandidateId === c.id ? "2px solid #5bb5a2" : "2px solid transparent",
+                borderBottom: i < candidates.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                borderLeft: activeCandidateId === c.id ? "2px solid var(--accent)" : "2px solid transparent",
               }}>
               <span className="text-base font-semibold w-10 font-mono" style={{ color: i === 0 ? "var(--accent)" : "var(--text-muted)" }}>
                 #{i + 1}

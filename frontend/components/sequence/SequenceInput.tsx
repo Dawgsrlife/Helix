@@ -63,12 +63,12 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-3">
               <Dna size={18} style={{ color: "var(--accent)" }} />
-              <span className="text-[12px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>New Analysis</span>
+              <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "var(--accent)" }}>New Analysis</span>
             </div>
             <h1 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: "var(--text-primary)" }}>
               Paste a sequence
             </h1>
-            <p className="text-[14px] leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+            <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
               Enter a DNA sequence to analyze with Evo 2. The model will annotate functional regions, compute per-position likelihood scores, and predict protein structures.
             </p>
           </div>
@@ -96,7 +96,7 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
               onKeyDown={handleKeyDown}
               placeholder=">sequence_id&#10;ATGGATTTATCTGCTCTTCGCGTT..."
               spellCheck={false}
-              className="w-full h-44 px-4 py-3 text-[13px] resize-none outline-none font-mono"
+              className="w-full h-48 px-4 py-3 text-[13px] resize-none outline-none font-mono"
               style={{ background: "transparent", color: "var(--text-primary)", lineHeight: "1.7" }}
             />
             {/* Status bar */}
@@ -120,7 +120,7 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
 
           {/* Submit */}
           <button onClick={handleSubmit} disabled={isLoading || charCount === 0}
-            className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[14px] font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
+            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.01]"
             style={{ background: charCount > 0 ? "var(--accent)" : "var(--surface-elevated)", color: charCount > 0 ? "var(--surface-base)" : "var(--text-faint)" }}>
             {isLoading ? (
               <><span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" /> Analyzing...</>
@@ -135,7 +135,7 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
             <div className="space-y-2">
               {EXAMPLES.map(({ name, desc, len, seq }) => (
                 <button key={name} onClick={() => { setInput(seq); setValidationError(null); }}
-                  className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.03]"
+                  className="w-full flex items-center gap-4 px-4 py-3 rounded-lg text-left transition-colors hover:bg-white/[0.04]"
                   style={{ border: "1px solid rgba(255,255,255,0.04)" }}>
                   <FileText size={16} style={{ color: "var(--text-faint)", flexShrink: 0 }} />
                   <div className="flex-1 min-w-0">
@@ -184,7 +184,7 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
             {["Raw ATCGN sequence", "FASTA format (headers auto-stripped)", "Single or multi-line input"].map((f) => (
               <div key={f} className="flex items-center gap-2">
                 <CheckCircle size={12} style={{ color: "var(--accent)" }} />
-                <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>{f}</span>
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{f}</span>
               </div>
             ))}
           </div>
@@ -195,14 +195,14 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
           <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Model status</span>
           <div className="p-4 rounded-lg" style={{ background: "var(--surface-elevated)", border: "1px solid rgba(255,255,255,0.04)" }}>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>Evo 2 (40B)</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Evo 2 (40B)</span>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
                 <span className="text-[11px]" style={{ color: "var(--accent)" }}>Ready</span>
               </div>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>AlphaFold 3</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>AlphaFold 3</span>
               <div className="flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-pulse" />
                 <span className="text-[11px]" style={{ color: "var(--accent)" }}>Ready</span>
@@ -216,7 +216,7 @@ export default function SequenceInput({ onSubmit, isLoading, error }: SequenceIn
           <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "var(--text-muted)" }}>Infrastructure</span>
           <div className="flex items-center gap-2 mb-2">
             <Cpu size={14} style={{ color: "var(--text-muted)" }} />
-            <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>ASUS Ascent GX10</span>
+            <span className="text-xs" style={{ color: "var(--text-secondary)" }}>ASUS Ascent GX10</span>
           </div>
           <span className="text-[11px]" style={{ color: "var(--text-faint)" }}>128 GB LPDDRX / Local inference / No rate limits</span>
         </div>

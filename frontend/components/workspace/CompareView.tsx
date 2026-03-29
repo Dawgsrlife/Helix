@@ -185,14 +185,14 @@ export default function CompareView() {
                 const delta = m.a - m.b;
                 return (
                   <div key={m.label} className="flex items-center gap-3">
-                    <span className="text-[12px] w-20 shrink-0" style={{ color: "var(--text-secondary)" }}>{m.label}</span>
+                    <span className="text-xs w-20 shrink-0" style={{ color: "var(--text-secondary)" }}>{m.label}</span>
                     <div className="flex-1 flex items-center gap-2">
-                      <span className="text-[12px] font-mono w-10" style={{ color: m.color }}>{(m.a * 100).toFixed(0)}%</span>
+                      <span className="text-xs font-mono w-10" style={{ color: m.color }}>{(m.a * 100).toFixed(0)}%</span>
                       <div className="flex-1 h-1 rounded-full relative overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
                         <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.a * 100}%`, background: m.color, opacity: 0.5 }} />
                         <div className="absolute left-0 top-0 h-full rounded-full" style={{ width: `${m.b * 100}%`, background: m.color, opacity: 0.25, borderRight: `1px solid ${m.color}` }} />
                       </div>
-                      <span className="text-[12px] font-mono w-10" style={{ color: "var(--text-muted)" }}>{(m.b * 100).toFixed(0)}%</span>
+                      <span className="text-xs font-mono w-10" style={{ color: "var(--text-muted)" }}>{(m.b * 100).toFixed(0)}%</span>
                     </div>
                     <div className="flex items-center gap-1 w-16 justify-end">
                       {delta > 0.01 ? <ArrowUpRight size={12} style={{ color: "var(--accent)" }} /> :
@@ -226,14 +226,14 @@ export default function CompareView() {
               {diffs.map((d, i) => {
                 const region = regions.find(r => d.position >= r.start && d.position < r.end);
                 return (
-                  <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded transition-colors hover:bg-white/[0.02]">
+                  <div key={i} className="flex items-center gap-3 py-1.5 px-2 rounded transition-colors hover:bg-white/[0.04]">
                     <span className="text-[11px] font-mono w-14" style={{ color: "var(--text-muted)" }}>pos {d.position}</span>
                     <span className="text-sm font-mono font-semibold" style={{ color: BC[d.baseA] ?? "var(--text-muted)" }}>{d.baseA}</span>
                     <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>&rarr;</span>
                     <span className="text-sm font-mono font-semibold" style={{ color: BC[d.baseB] ?? "var(--text-muted)" }}>{d.baseB}</span>
                     {region && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                        background: region.type === "exon" || region.type === "orf" ? "rgba(91,181,162,0.08)" : "rgba(255,255,255,0.03)",
+                        background: region.type === "exon" || region.type === "orf" ? "rgba(91,181,162,0.08)" : "rgba(255,255,255,0.04)",
                         color: region.type === "exon" || region.type === "orf" ? "var(--accent)" : "var(--text-muted)",
                       }}>{region.type}</span>
                     )}
