@@ -1,129 +1,215 @@
-# Helix Frontend Handoff
+# Helix Frontend Handoff — Session 2
 
-> State as of March 29 2026. Branch: `frontend`. All committed and pushed.
+> State as of March 29 2026, late evening. Branch: `frontend`. All committed and pushed.
+> PR: Dawgsrlife/Helix#2 (frontend → main)
 
-## Quick Start (Demo)
+## Quick Start
 
 ```bash
-cd frontend
-npm run build       # Production build (~6s)
-npm start           # Serves on http://localhost:3000
+cd frontend && npm run dev          # http://localhost:3000
+# OR with mock backend:
+cd mock-backend && npm install && node server.js  # port 8000
+cd frontend && NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
 
-To connect to the real backend (GPU inference):
-```bash
-NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000 npm run build && npm start
-```
+## What the Next Session Must Do
 
-Without NEXT_PUBLIC_API_URL, the app uses local Next.js mock API routes.
+### 1. PRIORITY: 3D Protein Structure Visualization
+**This is the selling point of the entire app.**
 
-## Demo Script
+The ProteinViewer (`components/structure/ProteinViewer.tsx`) exists but needs major upgrades:
+- Currently renders CA-alpha backbone + thin bond cylinders via React Three Fiber
+- Uses a real 114-residue PDB at `public/assets/sample-structure.pdb`
+- pLDDT confidence coloring works (teal >90, blue >70, amber >50, coral <50)
 
-1. **Open** `http://localhost:3000/analyze`
-2. **Choose mode**: "Paste Sequence" (existing DNA) or "Design New" (NL goal)
-3. **Submit**: Click an example or paste/type, then submit
-4. **Pipeline animates** (~6s): 6-stage progress with real-time indicators
-5. **Analyze view**: Region table, annotation track, top region card, stats
-6. **Inspect**: Click a region row → Explorer with sequence viewer, inspector panel
-7. **Edit**: Click "Open in Design Studio" → click a base → run mutation simulation
-8. **Compare**: Click "Compare" in IDE toolbar → split-pane sequence diff
-9. **Copilot**: Click "Copilot" button → contextual chat panel with suggested prompts
+**What's needed:**
+- Make the 3D viewer MUCH larger and prominent (currently tiny in side panels)
+- Add a dedicated "Structure" view mode or full-screen toggle
+- Add interactive tooltips on hover: show residue name, number, pLDDT score
+- Add click-to-highlight: clicking a residue in 3D highlights it in the sequence viewer and vice versa
+- Consider ribbon/cartoon representation instead of just spheres+tubes
+- The mock backend (`mock-backend/server.js`) returns PDB data — it's already wired
+- The real backend has ESMFold integration at `backend/services/structure.py` that hits Meta's API
+- **Main branch** has the backend with test PDB generation scripts — merge main into frontend to get those
 
-## What Exists
+### 2. Tutorial / Onboarding System
+Build a step-by-step tutorial overlay for first-time users:
+- Step 1: "Paste a DNA sequence or describe what you want to design" (input view)
+- Step 2: "Watch the pipeline analyze your sequence" (pipeline view)
+- Step 3: "Review the analysis — click any region to explore" (analyze view)
+- Step 4: "Inspect bases and their confidence scores" (explorer view)
+- Step 5: "Edit bases and see the effect on protein function" (studio view)
+- Step 6: "Compare candidates side by side" (compare view)
+- Step 7: "Ask Copilot to explain anything" (copilot)
 
-### Landing Page (`app/page.tsx`)
-- GSAP ScrollTrigger cinematic scroll story (6 pinned scenes)
-- Hero with Instrument Serif italic accent
-- 3 product render images, scoring console, floating ATCG particles
-- Helix brand mark (arc SVG) + wordmark, SVG grain overlay
+Implementation suggestion: Zustand `tutorialStep` state + overlay component with spotlight/mask on the relevant area. Skip button. Persist "tutorial completed" in localStorage.
 
-### Analyze Page (`app/analyze/page.tsx`)
-Seven view modes in one unified corridor:
-1. **Input**: Two-column intake with Paste/Design mode toggle
-2. **Pipeline**: 6-stage progress (real WS events or simulation fallback)
-3. **Analyze**: Region table, annotation track, top region, stats, model note
-4. **Leaderboard**: Ranked candidate table with 4D scores
-5. **Explorer**: Sequence viewer, inspector panel, structure preview, likelihood graph
-6. **IDE/Studio**: Mutation editor, scoring bars, structure, edit history, toolbar
-7. **Compare**: Split-pane colored sequence diff, score deltas, position-level diffs
+### 3. Tooltips on Everything
+Non-bio users can't understand the app without context:
+- Hover over "Functional plausibility" → "How likely this sequence produces a working protein"
+- Hover over "Off-target risk" → "Chance this sequence affects unintended genes"
+- Hover over "pLDDT" → "AI confidence score: higher = more reliable structure prediction"
+- Hover over colored bases (A/T/C/G) → "Adenine/Thymine/Cytosine/Guanine — the building blocks of DNA"
+- Hover over annotation regions → "This section of DNA codes for a protein (exon) / doesn't code (intron)"
+- Use shadcn Tooltip component (already installed)
 
-### Copilot (`components/workspace/ChatPanel.tsx`)
-- Workspace-integrated side panel, screen-specific suggested prompts
-- Context-aware mock responses referencing actual candidate data
+### 4. Fluid Motion Design
+Current state: basic Framer Motion opacity fades on view transitions. Needs:
+- Staggered card entrances (analyze view cards, leaderboard rows)
+- Smooth panel slide-ins (right panels in explorer/studio)
+- Sidebar items: hover scale(1.02), active spring animation
+- View transitions: slide left/right based on navigation direction
+- Score bars: animate width on mount (grow from 0%)
+- Sequence viewer: bases fade in staggered (already has GSAP for this)
+- Pipeline stages: check marks bounce in
+- CSS: `.transition-smooth`, `.hover-lift` utilities exist in globals.css
 
-### WebSocket Streaming (`hooks/useDesignPipeline.ts`)
-- POST /api/design → WebSocket streaming pipeline
-- Handles 7 event types: intent_parsed, retrieval_progress, generation_token,
-  candidate_scored, structure_ready, explanation_chunk, pipeline_complete
-- PipelineStatus reactive to real events with simulation fallback
+### 5. Design Polish (Lavoe-inspired)
+Reference: `C:\Users\33576\Helix\materials\inspiration\Lavoe\` — editor-style app with project list, heatmap visualization. Key patterns to adapt:
+- Project/sample list view (could be our "past analyses" or "saved sequences")
+- Heatmap visualization (could be our likelihood score heatmap)
+- Clean card-based layout with generous padding
+- Subtle shadows and rounded corners throughout
 
-### Design System
-- OKLCH color system (globals.css): surfaces, text, accent, nucleotide, annotation colors
-- All components use CSS custom properties (var(--surface-*), var(--text-*), etc.)
-- Three.js/Canvas contexts retain hex (CSS vars not supported there)
-- Inter + JetBrains Mono + Instrument Serif (landing hero only)
-- 8px spacing grid, consistent typography scale
+### 6. Light Mode Refinement
+Light mode works but needs polish:
+- All `rgba(91,181,162,...)` accent overlays need light-mode variants
+- The `::selection` color should adapt
+- Canvas-based components (LikelihoodGraph) use hardcoded colors — need theme detection
+- Three.js viewer lighting should adapt (brighter ambient in light mode)
 
-### Infrastructure
-- Zustand store with full state: viewMode, candidates, chatMessages, editHistory,
-  pipeline status, streaming state (sessionId, generatingSequence, explanation, etc.)
-- Mock API routes (`app/api/*`) for analyze, mutations, structure, health
-- `lib/api.ts` with all endpoints (analyze, mutations, structure, design, edit/base,
-  edit/followup, health)
+### 7. Route-Based Navigation
+URL sync is implemented (`/analyze?view=explorer`) but views should feel more like pages:
+- Consider actual nested routes (`/analyze/explorer`, `/analyze/studio`) for cleaner URLs
+- Browser back/forward already works via search params
+- Each view should have proper page title via document.title
 
-## Completed Phases
+## Architecture Map
 
-| Phase | Description | Commit |
-|-------|-------------|--------|
-| B | Sidebar nav wiring + OKLCH color unification | `e97cde9` |
-| C | Spacing, typography, surface elevation polish | `cc97812` |
-| D | WebSocket streaming integration | `80c3209` |
-| E | Demo flow hardening (pipeline view, nav guards) | `7491abc` |
-| F | Video recording prep (prod build, metadata) | current |
-
-## Key Design Decisions
-- **No serif fonts in product UI** (only Instrument Serif italic in landing hero)
-- **Single teal accent** used sparingly via var(--accent)
-- **Explorer vs Studio are materially different**: Explorer is read-only, Studio has editing
-- **Compare is genomic-aware**: split-pane colored sequence diff
-- **Copilot is screen-contextual**: different prompts per view mode
-- **Pipeline has dual modes**: real WS streaming (when backend connected) or simulation
-
-## File Map
 ```
 frontend/
   app/
-    page.tsx              # Landing (GSAP scroll story)
-    layout.tsx            # Root (fonts, metadata, OG tags)
+    page.tsx                    # Landing page (GSAP scroll story, always dark)
+    layout.tsx                  # Root (Inter, JetBrains Mono, Instrument Serif, Space Grotesk)
+    globals.css                 # Obsidian Aura design system (OKLCH, light/dark)
     analyze/
-      page.tsx            # 7-mode product corridor
-      layout.tsx          # Page title metadata
-    api/                  # Mock API routes
+      page.tsx                  # Main app — 7 view modes in one corridor
+      layout.tsx                # Page title metadata
+    api/                        # Next.js mock API routes (fallback when no backend)
   components/
-    brand/HelixLogo.tsx   # Logo system (3 sizes, 3 variants)
-    sequence/             # SequenceViewer, BaseToken, SequenceInput, RegionHighlight
-    annotation/           # AnnotationTrack, AnnotationLegend, LikelihoodGraph
-    mutation/             # MutationPanel, MutationDiff
-    structure/            # ProteinViewer (Three.js), StructureControls
-    workspace/            # CandidateLeaderboard, ChatPanel, CompareView, PipelineStatus
-    ui/                   # ShadCN + LoadingState
+    brand/HelixLogo.tsx         # Arc mark + wordmark (3 sizes, 3 variants)
+    sequence/
+      SequenceInput.tsx         # Two-mode input (Paste/Design) with examples
+      SequenceViewer.tsx        # DNA base display with GSAP stagger reveal
+      BaseToken.tsx             # Individual base with pLDDT coloring
+      RegionHighlight.tsx       # Annotation region overlay (color-mix for alpha)
+    annotation/
+      AnnotationTrack.tsx       # Full-width region bar
+      AnnotationLegend.tsx      # Region type color legend
+      LikelihoodGraph.tsx       # Canvas-based per-position score graph
+    mutation/
+      MutationPanel.tsx         # Position + base selector + simulation trigger
+      MutationDiff.tsx          # Delta score bar visualization
+    structure/
+      ProteinViewer.tsx         # THREE.js backbone + pLDDT spheres + bonds
+      StructureControls.tsx     # Reset/highlight/color mode buttons + pLDDT legend
+    workspace/
+      CandidateLeaderboard.tsx  # Ranked table with 4D scores
+      ChatPanel.tsx             # Copilot side panel with mock responses
+      CompareView.tsx           # Split-pane sequence diff + score deltas
+      PipelineStatus.tsx        # 6-stage progress (real WS or simulation fallback)
+    ui/                         # ShadCN: button, badge, tooltip, LoadingState
   hooks/
-    useSequenceAnalysis   # Non-streaming /api/analyze path
-    useDesignPipeline     # Streaming /api/design + WS path
-    useMutationSim        # Mutation simulation
-    useAnnotations        # Annotation processing
+    useSequenceAnalysis.ts      # Non-streaming /api/analyze (6.2s min animation)
+    useDesignPipeline.ts        # Streaming /api/design + WS (mock fallback built in)
+    useMutationSim.ts           # Mutation simulation via /api/mutations
   lib/
-    store.ts              # Zustand (viewMode, candidates, streaming state, etc.)
-    api.ts                # All backend API functions
-    sequenceUtils.ts      # Parsing, validation, GC content
-    colorMap.ts, utils.ts
-  types/                  # sequence, analysis, structure domain types
-  public/assets/          # Product images, favicon
+    store.ts                    # Zustand — viewMode, candidates, theme, auth, streaming, save/revert
+    api.ts                      # All backend API functions (analyze, design, mutations, structure, health, edit)
+    sequenceUtils.ts            # parseSequence, normalizeSequence, isValidSequence, gcContent
+  types/                        # sequence, analysis, structure domain types
+  public/assets/
+    hero-editor.jpg             # Molecule render (hero background)
+    sample-structure.pdb        # 114-residue protein (ESMFold-style)
+    favicon.svg
+
+mock-backend/                   # Standalone Express server (port 8000)
+  server.js                     # All endpoints mocked + WebSocket pipeline streaming
+  package.json                  # express, cors, express-ws, uuid
+
+materials/                      # Design references (don't ship, dev-only)
+  inspiration/Callio_Labs/      # Glassmorphism, sidebar, chat panel code
+  inspiration/Lavoe/            # Editor-style app, project list, heatmaps
+  best_inspo/                   # QClay design reference
+  prototypes/                   # HTML prototypes with Aura/Obsidian design systems
 ```
 
-## Integration Checklist
-- [ ] Set `NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000`
-- [ ] Verify `GET /api/health` returns 200
-- [ ] Test "Design New" mode → should stream real WS events
-- [ ] Test "Paste Sequence" → should hit real /api/analyze
-- [ ] Test base editing in IDE → should hit real /api/mutations
+## Design System (globals.css)
+
+**Surfaces** (dark mode, OKLCH):
+```
+void    → oklch(0.065 0 0)       # Sidebar, deepest
+base    → oklch(0.085 0.003 280) # Page background
+raised  → oklch(0.105 0.003 280) # Panels, strips
+elevated → oklch(0.128 0.003 280) # Cards, side panels
+overlay → oklch(0.148 0.003 280) # Modals, overlays
+```
+
+**Light mode**: `.light` class on `<html>` flips all surface/text/accent variables.
+
+**Accent**: `--accent` (functional teal), `--accent-bright` (display teal), `--accent-dim` (hover dark).
+
+**Typography**: Inter (body), JetBrains Mono (code), Space Grotesk (labels, `.label-caps`), Instrument Serif (landing hero italic).
+
+**Key CSS classes**: `.nav-active`, `.status-pulse`, `.grain`, `.panel`, `.label-caps`, `.wordmark`, `.hover-lift`, `.transition-smooth`.
+
+## Store Shape (lib/store.ts)
+
+```typescript
+{
+  // View
+  viewMode: "input" | "pipeline" | "analyze" | "leaderboard" | "explorer" | "ide" | "compare",
+  pipelineStatus: "idle" | "input" | "analyzing" | "complete" | "error",
+
+  // Data
+  rawSequence, bases, regions, scores, analysisResult,
+  candidates, activeCandidateId,
+  selectedPosition, activePdb, highlightResidues,
+  mutationEffect, mutationLoading,
+  editHistory, savedSnapshot,
+
+  // Streaming pipeline
+  sessionId, generatingSequence, explanation,
+  retrievalStatuses, generationTokenCount, completedStages,
+
+  // UI
+  chatOpen, chatMessages,
+  theme: "dark" | "light",
+  user: { id, name, email } | null,
+}
+```
+
+## Backend Integration
+
+**Without backend** (default): Uses Next.js API routes at `app/api/*` for mock data. Design New mode falls back to simulated pipeline.
+
+**With mock backend**: `cd mock-backend && node server.js`, set `NEXT_PUBLIC_API_URL=http://localhost:8000`. All endpoints + WebSocket streaming.
+
+**With real backend**: Set `NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000`. Backend repo has ESMFold, Evo2, and full pipeline.
+
+## Key Decisions
+- No 1px borders — tonal shifts only (Obsidian "no-line" rule)
+- Ghost borders: 0.5px oklch(1 0 0 / 0.06) where structural separation needed
+- Space Grotesk for all labels/buttons (tracked uppercase, 10px)
+- Landing page is always dark mode
+- 3D viewer loads PDB from static file (doesn't bloat JS bundle)
+- PipelineStatus has dual mode: real WS events or simulation fallback
+- Views sync to URL via `?view=` search params
+- Mock auth auto-signs in as "Demo User" on mount
+
+## PR Status
+- PR #2: frontend → main (open, ready for review)
+- Merge main into frontend first to get backend test scripts + real PDB data:
+  ```bash
+  git checkout frontend && git merge main
+  ```
