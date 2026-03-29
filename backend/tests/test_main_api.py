@@ -199,6 +199,28 @@ def test_agent_chat_explicit_edit_persists_sequence() -> None:
     assert verify.json()["reference_base"] == "G"
 
 
+def test_agent_chat_failed_edit_falls_back_to_scoring() -> None:
+    client = TestClient(app)
+    session_id = "agent-failed-edit-fallback"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    response = client.post(
+        "/api/agent/chat",
+        json={
+            "session_id": session_id,
+            "candidate_id": 0,
+            "message": "change base position 99999 to G and explain impact",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    tools = body["tool_calls"]
+    assert any(call["tool"] == "edit_base" and call["status"] == "failed" for call in tools)
+    assert any(call["tool"] == "score_candidate" and call["status"] == "ok" for call in tools)
+    assert body["candidate_update"] is not None
+    assert "combined" in body["candidate_update"]["scores"]
+
+
 def test_agent_chat_transform_all_ts_persists_sequence() -> None:
     client = TestClient(app)
     session_id = "agent-transform"

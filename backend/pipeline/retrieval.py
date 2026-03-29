@@ -17,7 +17,7 @@ from services.pubmed import PubMedResult, search_literature
 
 logger = logging.getLogger(__name__)
 
-RETRIEVAL_TIMEOUT = 15.0
+RETRIEVAL_TIMEOUT = 30.0
 
 
 @dataclass

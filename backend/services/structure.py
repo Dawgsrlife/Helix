@@ -17,7 +17,7 @@ from services.translation import find_orfs, translate
 logger = logging.getLogger(__name__)
 
 ESMFOLD_API_URL = "https://api.esmatlas.com/foldSequence/v1/pdb/"
-MIN_PROTEIN_LENGTH = 10
+MIN_PROTEIN_LENGTH = 40
 PDB_RECORD_PREFIXES = {
     "HEADER",
     "TITLE",
@@ -96,6 +96,7 @@ def _has_backbone_atoms(pdb_text: str) -> bool:
             continue
         atom_count += 1
         atom_names.add(line[12:16].strip())
+    # Require at least a minimal number of atoms plus full backbone markers.
     if atom_count < 20:
         return False
     return {"N", "CA", "C", "O"}.issubset(atom_names)

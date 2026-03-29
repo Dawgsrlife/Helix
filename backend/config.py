@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     # NCBI E-utilities
     ncbi_api_key: str = ""
+    ncbi_email: str = ""
+    ncbi_tool: str = "helix"
 
     # Intent parsing
     intent_llm: str = "claude"
@@ -73,3 +75,9 @@ if not GEMINI_API_KEY:
 NCBI_API_KEY = settings.ncbi_api_key
 if not NCBI_API_KEY:
     NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "")
+
+NCBI_EMAIL = settings.ncbi_email
+if not NCBI_EMAIL:
+    NCBI_EMAIL = os.environ.get("NCBI_EMAIL", "")
+
+NCBI_TOOL = settings.ncbi_tool or os.environ.get("NCBI_TOOL", "helix")

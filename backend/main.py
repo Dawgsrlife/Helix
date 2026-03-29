@@ -74,6 +74,7 @@ evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
+MAX_SESSION_CONTEXT_ENTRIES = 512
 
 
 @app.on_event("startup")
@@ -115,11 +116,14 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
     session_id = request.session_id or create_session_id()
     num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
     await session_store.initialize_session(session_id)
-    SESSION_CONTEXT[session_id] = {
-        "run_profile": request.run_profile,
-        "truth_mode": request.truth_mode,
-        "design_type": "regulatory_element",
-    }
+    _set_session_context(
+        session_id,
+        {
+            "run_profile": request.run_profile,
+            "truth_mode": request.truth_mode,
+            "design_type": "regulatory_element",
+        },
+    )
     asyncio.create_task(
         run_generation_pipeline(
             manager=ws_manager,
@@ -369,6 +373,15 @@ async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tu
 async def _set_session_design_type(session_id: str, design_type: str) -> None:
     context = SESSION_CONTEXT.setdefault(session_id, {})
     context["design_type"] = design_type
+
+
+def _set_session_context(session_id: str, context: dict[str, Any]) -> None:
+    # Reinsert to preserve recency ordering for bounded eviction.
+    SESSION_CONTEXT.pop(session_id, None)
+    SESSION_CONTEXT[session_id] = context
+    while len(SESSION_CONTEXT) > MAX_SESSION_CONTEXT_ENTRIES:
+        oldest_key = next(iter(SESSION_CONTEXT))
+        SESSION_CONTEXT.pop(oldest_key, None)
 
 
 def _design_uses_protein_structure(design_type: str | None) -> bool:

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 
 import httpx
 
-from config import NCBI_API_KEY
+from config import NCBI_API_KEY, NCBI_EMAIL, NCBI_TOOL
 
 logger = logging.getLogger(__name__)
 
@@ -48,25 +50,52 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, params: dict, max
     return resp
 
 
+def _eutils_params(params: dict[str, object]) -> dict[str, object]:
+    merged = dict(params)
+    if NCBI_API_KEY:
+        merged["api_key"] = NCBI_API_KEY
+    if NCBI_TOOL:
+        merged["tool"] = NCBI_TOOL
+    if NCBI_EMAIL:
+        merged["email"] = NCBI_EMAIL
+    return merged
+
+
+def _safe_json_response(response: httpx.Response) -> dict:
+    try:
+        parsed = response.json()
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        cleaned = re.sub(r"[\x00-\x1f]", "", response.text)
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            logger.warning("Failed to parse ClinVar JSON payload", exc_info=True)
+            return {}
+
+
 async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
     """Fetch pathogenic/likely-pathogenic ClinVar variants for a gene."""
     if not gene:
         return ClinVarResult(gene="")
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": "Helix/0.1 (genomic-design-ide)"},
+        ) as client:
             search_resp = await _get_with_retry(
                 client,
                 f"{EUTILS_BASE}/esearch.fcgi",
-                params={
+                params=_eutils_params({
                     "db": "clinvar",
                     "term": f"{gene}[gene] AND (pathogenic[clinsig] OR likely_pathogenic[clinsig])",
                     "retmax": max_results,
                     "retmode": "json",
-                    **({"api_key": NCBI_API_KEY} if NCBI_API_KEY else {}),
-                },
+                }),
             )
-            search_data = search_resp.json()
+            search_data = _safe_json_response(search_resp)
 
             id_list = search_data.get("esearchresult", {}).get("idlist", [])
             total_count = int(search_data.get("esearchresult", {}).get("count", 0))
@@ -79,14 +108,13 @@ async def lookup_variants(gene: str, max_results: int = 10) -> ClinVarResult:
             summary_resp = await _get_with_retry(
                 client,
                 f"{EUTILS_BASE}/esummary.fcgi",
-                params={
+                params=_eutils_params({
                     "db": "clinvar",
                     "id": ",".join(id_list),
                     "retmode": "json",
-                    **({"api_key": NCBI_API_KEY} if NCBI_API_KEY else {}),
-                },
+                }),
             )
-            summary_data = summary_resp.json()
+            summary_data = _safe_json_response(summary_resp)
 
             variants = []
             result_map = summary_data.get("result", {})

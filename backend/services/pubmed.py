@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 import httpx
 
-from config import NCBI_API_KEY
+from config import NCBI_API_KEY, NCBI_EMAIL, NCBI_TOOL
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +110,45 @@ def _parse_articles_xml(xml_text: str) -> list[PubMedArticle]:
     return articles
 
 
+def _eutils_params(params: dict[str, object]) -> dict[str, object]:
+    merged = dict(params)
+    if NCBI_API_KEY:
+        merged["api_key"] = NCBI_API_KEY
+    if NCBI_TOOL:
+        merged["tool"] = NCBI_TOOL
+    if NCBI_EMAIL:
+        merged["email"] = NCBI_EMAIL
+    return merged
+
+
+def _safe_json_response(response: httpx.Response) -> dict:
+    try:
+        parsed = response.json()
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        cleaned = re.sub(r"[\x00-\x1f]", "", response.text)
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            logger.warning("Failed to parse PubMed JSON payload", exc_info=True)
+            return {}
+
+
+async def _get_with_retry(client: httpx.AsyncClient, url: str, params: dict, max_retries: int = 3) -> httpx.Response:
+    for attempt in range(max_retries):
+        resp = await client.get(url, params=params)
+        if resp.status_code == 429:
+            wait = 0.8 * (2 ** attempt)
+            await asyncio.sleep(wait)
+            continue
+        resp.raise_for_status()
+        return resp
+    resp = await client.get(url, params=params)
+    resp.raise_for_status()
+    return resp
+
+
 async def search_literature(
     gene: str,
     therapeutic_context: str | None = None,
@@ -121,20 +162,22 @@ async def search_literature(
     query = _build_query(gene, therapeutic_context, design_type)
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            search_resp = await client.get(
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": "Helix/0.1 (genomic-design-ide)"},
+        ) as client:
+            search_resp = await _get_with_retry(
+                client,
                 f"{EUTILS_BASE}/esearch.fcgi",
-                params={
+                params=_eutils_params({
                     "db": "pubmed",
                     "term": query,
                     "retmax": max_results,
                     "sort": "relevance",
                     "retmode": "json",
-                    **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
-                },
+                }),
             )
-            search_resp.raise_for_status()
-            search_data = search_resp.json()
+            search_data = _safe_json_response(search_resp)
 
             pmid_list = search_data.get("esearchresult", {}).get("idlist", [])
             total_count = int(search_data.get("esearchresult", {}).get("count", 0))
@@ -144,27 +187,15 @@ async def search_literature(
 
             # Respect NCBI rate limit (3 req/s without API key) with a brief pause
             await asyncio.sleep(0.4)
-            fetch_resp = await client.get(
+            fetch_resp = await _get_with_retry(
+                client,
                 f"{EUTILS_BASE}/efetch.fcgi",
-                params={
+                params=_eutils_params({
                     "db": "pubmed",
                     "id": ",".join(pmid_list),
                     "rettype": "xml",
-                    **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
-                },
+                }),
             )
-            if fetch_resp.status_code == 429:
-                await asyncio.sleep(1.0)
-                fetch_resp = await client.get(
-                    f"{EUTILS_BASE}/efetch.fcgi",
-                    params={
-                        "db": "pubmed",
-                        "id": ",".join(pmid_list),
-                        "rettype": "xml",
-                        **(({"api_key": NCBI_API_KEY}) if NCBI_API_KEY else {}),
-                    },
-                )
-            fetch_resp.raise_for_status()
 
             articles = _parse_articles_xml(fetch_resp.text)
             return PubMedResult(query=query, articles=articles, total_count=total_count)

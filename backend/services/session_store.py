@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import redis.asyncio as redis
 
@@ -225,7 +225,10 @@ class RedisSessionStore(SessionStore):
         try:
             yield
         finally:
-            await lock.release()
+            # Lock ownership can expire mid-operation under high latency.
+            # Never let cleanup errors mask the original request outcome.
+            with suppress(Exception):
+                await lock.release()
 
     async def close(self) -> None:
         await self._client.aclose()
