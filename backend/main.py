@@ -26,9 +26,11 @@ from models.responses import (
     MutationResponse,
     StructureResponse,
 )
+from config import StructureMode, settings
 from pipeline.evo2_score import rescore_mutation, score_candidate
 from pipeline.orchestrator import create_session_id, run_followup_pipeline, run_generation_pipeline
 from services.evo2 import create_evo2_service
+from services.structure import predict_structure
 from services.translation import find_orfs
 from ws.manager import WebSocketManager
 
@@ -151,6 +153,13 @@ async def structure(request: StructureRequest) -> StructureResponse:
     sequence = request.sequence
     if request.region_start < 0 or request.region_end > len(sequence) or request.region_start >= request.region_end:
         raise HTTPException(status_code=422, detail="invalid structure region")
+
+    if settings.structure_mode == StructureMode.ESMFOLD:
+        result = await predict_structure(sequence, request.region_start, request.region_end)
+        if result is not None:
+            return StructureResponse(pdb_data=result.pdb_data, model=result.model, confidence=result.confidence)
+
+    # Fallback to mock
     pdb = _mock_pdb_from_sequence(sequence[request.region_start:request.region_end])
     return StructureResponse(pdb_data=pdb, model="mock", confidence=0.71)
 
