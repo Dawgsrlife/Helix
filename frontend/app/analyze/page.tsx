@@ -1,13 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Suspense, useCallback, useEffect, useState, useRef } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import {
   Dna, FlaskConical, BarChart3, Search, Home, Sun, Moon, LogOut,
-  ChevronRight, Pencil, ArrowRight, Clock, Shield, Sparkles, Target,
+  ChevronRight, Pencil, ArrowRight, Sparkles, Target,
   Box, Maximize2, Minimize2, HelpCircle, RotateCcw,
 } from "lucide-react";
 import { useHelixStore } from "@/lib/store";
@@ -26,7 +26,7 @@ import ChatPanel from "@/components/workspace/ChatPanel";
 import PipelineStatus from "@/components/workspace/PipelineStatus";
 import CompareView from "@/components/workspace/CompareView";
 import MutationDiff from "@/components/mutation/MutationDiff";
-import StructureControls from "@/components/structure/StructureControls";
+
 import { ScienceTooltip, ScienceInfo } from "@/components/ui/ScienceTooltip";
 import TutorialOverlay, { isTutorialCompleted } from "@/components/ui/TutorialOverlay";
 
@@ -449,9 +449,12 @@ function AnalyzePageInner() {
                           </span>
                         </div>
                       </div>
-                      <div className="h-[220px] cursor-pointer" onClick={() => setViewMode("structure")}
+                      <div className="h-[220px] cursor-pointer flex items-center justify-center" onClick={() => setViewMode("structure")}
                         style={{ background: "var(--surface-base)" }}>
-                        <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues} theme={theme} />
+                        <div className="text-center">
+                          <Box size={40} style={{ color: "var(--accent)", margin: "0 auto 8px", opacity: 0.5 }} />
+                          <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Click to view 3D structure</span>
+                        </div>
                       </div>
                       <div className="p-3">
                         <button onClick={() => setViewMode("structure")}
@@ -891,9 +894,12 @@ function AnalyzePageInner() {
                         Expand <Maximize2 size={10} className="inline ml-0.5" />
                       </button>
                     </div>
-                    <div className="rounded-lg overflow-hidden h-[160px] cursor-pointer" style={{ background: "var(--surface-base)" }}
+                    <div className="rounded-lg overflow-hidden h-[100px] cursor-pointer flex items-center justify-center" style={{ background: "var(--surface-base)" }}
                       onClick={() => setViewMode("structure")}>
-                      <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues} theme={theme} />
+                      <div className="text-center">
+                        <Box size={28} style={{ color: "var(--accent)", margin: "0 auto 4px", opacity: 0.4 }} />
+                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>View 3D</span>
+                      </div>
                     </div>
                   </div>
                   <div className="flex-1" />
@@ -1001,13 +1007,13 @@ function AnalyzePageInner() {
                         Expand <Maximize2 size={10} className="inline ml-0.5" />
                       </button>
                     </div>
-                    <div className="rounded-lg overflow-hidden h-[180px] cursor-pointer" style={{ background: "var(--surface-base)" }}
+                    <div className="rounded-lg overflow-hidden h-[100px] cursor-pointer flex items-center justify-center" style={{ background: "var(--surface-base)" }}
                       onClick={() => setViewMode("structure")}>
-                      <ProteinViewer pdbData={activePdb || undefined} highlightResidues={highlightResidues}
-                        onResidueClick={handleResidueClick} theme={theme} />
+                      <div className="text-center">
+                        <Box size={28} style={{ color: "var(--accent)", margin: "0 auto 4px", opacity: 0.4 }} />
+                        <span className="text-[10px]" style={{ color: "var(--text-faint)" }}>View 3D</span>
+                      </div>
                     </div>
-                    <StructureControls onReset={() => setHighlightResidues([])}
-                      onHighlight={() => selectedPosition !== null ? setHighlightResidues([Math.floor(selectedPosition / 3) + 1]) : undefined} />
                   </div>
                   <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
                   {/* Edit history */}
