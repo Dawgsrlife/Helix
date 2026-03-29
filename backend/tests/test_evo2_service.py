@@ -292,6 +292,41 @@ class TestNIMService:
         assert len(tokens) == 4
 
     @pytest.mark.asyncio
+    async def test_generate_recovers_from_422(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """NIM API returns 422 for invalid params (e.g. temperature > 1.0).
+        The service must fall back to mock, never crash the pipeline."""
+        import httpx
+
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        req = httpx.Request("POST", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        resp = httpx.Response(422, request=req)
+
+        async def fake_post(_payload: dict[str, object]) -> dict[str, object]:
+            raise httpx.HTTPStatusError("unprocessable", request=req, response=resp)
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        tokens = []
+        async for tok in service.generate("ATG", n_tokens=4, temperature=1.5):
+            tokens.append(tok)
+        assert len(tokens) == 4, "422 should trigger mock fallback, not crash"
+
+    @pytest.mark.asyncio
+    async def test_generate_clamps_temperature_for_nim(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Temperature sent to NIM API must be clamped to [0.01, 1.0]."""
+        service = Evo2NIMService("k", "https://health.api.nvidia.com/v1/biology/arc/evo2-40b/generate")
+        captured: dict[str, object] = {}
+
+        async def fake_post(payload: dict[str, object]) -> dict[str, object]:
+            captured.update(payload)
+            return {"generated_sequence": "ATGCCG"}
+
+        monkeypatch.setattr(service, "_post", fake_post)
+        tokens = []
+        async for tok in service.generate("ATG", n_tokens=3, temperature=1.8):
+            tokens.append(tok)
+        assert captured["temperature"] == 1.0, f"Expected clamped temp 1.0, got {captured['temperature']}"
+
+    @pytest.mark.asyncio
     async def test_health_marks_degraded_on_429(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import httpx
 

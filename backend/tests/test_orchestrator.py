@@ -296,3 +296,113 @@ async def test_followup_pipeline_invokes_candidate_callback() -> None:
 
     assert seen["candidate_id"] == 2
     assert isinstance(seen["sequence"], str)
+
+
+@pytest.mark.asyncio
+async def test_ten_candidates_all_complete_in_demo_mode() -> None:
+    """All 10 candidates must reach structured status in demo mode with mock services."""
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-ten")
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=Evo2MockService(),
+        session_id="session-ten",
+        goal="Design a regulatory element for BDNF in hippocampal neurons",
+        n_tokens=5,
+        n_candidates=10,
+        run_profile="demo",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    data = complete["data"]
+    assert data["requested_candidates"] == 10
+    assert data["completed_candidates"] == 10
+    assert data["failed_candidates"] == 0
+    assert len(data["candidates"]) == 10
+    for candidate in data["candidates"]:
+        assert candidate["status"] == "structured"
+        assert candidate["pdb_data"]
+        assert candidate["sequence"]
+
+
+@pytest.mark.asyncio
+async def test_demo_profile_recovers_when_generation_service_raises() -> None:
+    """Even if upstream generation fails (e.g., NIM 422), demo mode must still complete all candidates."""
+
+    class _FailingGenerateService(Evo2MockService):
+        async def generate(self, seed: str, n_tokens: int, temperature: float = 1.0):
+            raise RuntimeError("simulated generation failure")
+            yield  # pragma: no cover
+
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-demo-recover-generate")
+
+    await run_generation_pipeline(
+        manager=manager,
+        service=_FailingGenerateService(),
+        session_id="session-demo-recover-generate",
+        goal="Design promoter",
+        n_tokens=4,
+        n_candidates=10,
+        run_profile="demo",
+    )
+
+    complete = ws.sent[-1]
+    assert complete["event"] == "pipeline_complete"
+    assert complete["data"]["requested_candidates"] == 10
+    assert complete["data"]["failed_candidates"] == 0
+    assert len(complete["data"]["candidates"]) == 10
+
+
+def test_mock_pdb_has_backbone_atoms_for_cartoon_rendering() -> None:
+    """Mock PDB must have N, CA, C, O atoms per residue so 3dmol cartoon works."""
+    from services.mock_pdb import build_mock_pdb_from_dna
+
+    pdb, _confidence = build_mock_pdb_from_dna("ATGGCTGATTCAGATCTTGCTACCAAAGCAGCTGCAATGGCTGATCTTGCTACCAAAGCATAA")
+    lines = [line for line in pdb.split("\n") if line.startswith("ATOM")]
+    assert len(lines) >= 60, f"Need at least 15 residues × 4 atoms; got {len(lines)} ATOM lines"
+
+    atom_names = {line[12:16].strip() for line in lines}
+    for required in ("N", "CA", "C", "O"):
+        assert required in atom_names, f"Missing backbone atom {required}"
+
+    residue_nums = {int(line[22:26]) for line in lines}
+    assert len(residue_nums) >= 15, f"Need at least 15 residues; got {len(residue_nums)}"
+
+
+@pytest.mark.asyncio
+async def test_candidate_temperature_stays_within_api_bounds() -> None:
+    """Temperature for all 10 candidates must stay in [0.0, 1.0] for NIM API compatibility."""
+    manager = WebSocketManager()
+    ws = _FakeWebSocket()
+    await manager.connect(ws, "session-temp")
+
+    captured_temps: list[float] = []
+    original_generate = Evo2MockService.generate
+
+    async def tracking_generate(self, seed, n_tokens=50, temperature=1.0):
+        captured_temps.append(temperature)
+        async for token in original_generate(self, seed, n_tokens=n_tokens, temperature=temperature):
+            yield token
+
+    Evo2MockService.generate = tracking_generate  # type: ignore[assignment]
+    try:
+        await run_generation_pipeline(
+            manager=manager,
+            service=Evo2MockService(),
+            session_id="session-temp",
+            goal="Design promoter",
+            n_tokens=2,
+            n_candidates=10,
+            run_profile="demo",
+        )
+    finally:
+        Evo2MockService.generate = original_generate  # type: ignore[assignment]
+
+    assert len(captured_temps) == 10
+    for temp in captured_temps:
+        assert 0.0 <= temp <= 1.0, f"Temperature {temp} exceeds API safe range [0.0, 1.0]"

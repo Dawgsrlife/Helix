@@ -34,6 +34,7 @@ from pipeline.orchestrator import (
     run_generation_pipeline,
 )
 from services.evo2 import create_evo2_service
+from services.mock_pdb import build_mock_pdb_from_dna
 from services.session_store import (
     CandidateNotFoundError,
     SessionLockTimeoutError,
@@ -213,8 +214,8 @@ async def structure(request: StructureRequest) -> StructureResponse:
             return StructureResponse(pdb_data=result.pdb_data, model=result.model, confidence=result.confidence)
 
     # Fallback to mock
-    pdb = _mock_pdb_from_sequence(sequence[request.region_start:request.region_end])
-    return StructureResponse(pdb_data=pdb, model="mock", confidence=0.71)
+    pdb, confidence = build_mock_pdb_from_dna(sequence[request.region_start:request.region_end], candidate_id=0)
+    return StructureResponse(pdb_data=pdb, model="mock", confidence=confidence)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -247,19 +248,3 @@ async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequen
     async with session_store.candidate_guard(session_id, candidate_id):
         await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
 
-
-def _mock_pdb_from_sequence(sequence: str) -> str:
-    lines = [
-        "HEADER    HELIX MOCK STRUCTURE",
-        "TITLE     MOCK PDB",
-        f"REMARK    LENGTH {len(sequence)}",
-    ]
-    for idx in range(1, min(len(sequence), 8) + 1):
-        x = 7.0 + idx * 1.1
-        y = 3.0 + idx * 0.8
-        z = 1.0 + idx * 0.5
-        lines.append(
-            f"ATOM  {idx:5d}  CA  ALA A{idx:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00 70.00           C"
-        )
-    lines.append("END")
-    return "\n".join(lines)

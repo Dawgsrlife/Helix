@@ -81,9 +81,25 @@ export default function App() {
   }
 
   async function handleBaseEdit(newBase: string): Promise<void> {
-    if (!activeCandidate || state.selectedPosition === null || !state.sessionId) return;
+    if (!state.sessionId) {
+      dispatch({ type: "BASE_EDIT_ERROR", message: "No active session. Run a design first." });
+      return;
+    }
+    if (!activeCandidate) {
+      dispatch({ type: "BASE_EDIT_ERROR", message: "Select a candidate lane first." });
+      return;
+    }
+    if (activeCandidate.status === "queued" || activeCandidate.status === "running") {
+      dispatch({ type: "BASE_EDIT_ERROR", message: "Candidate is still generating. Wait for it to finish." });
+      return;
+    }
+    if (state.selectedPosition === null) {
+      dispatch({ type: "BASE_EDIT_ERROR", message: "Click a base in the sequence first, then press A/T/C/G." });
+      return;
+    }
     const started = performance.now();
     const position = state.selectedPosition + (activeCandidate.streamOffset ?? 0);
+    dispatch({ type: "BASE_EDIT_ERROR", message: `Editing position ${position} → ${newBase}...` });
     try {
       const response = await postBaseEdit({
         apiBase,
@@ -99,7 +115,7 @@ export default function App() {
         elapsedMs: performance.now() - started
       });
     } catch (error) {
-      dispatch({ type: "BASE_EDIT_ERROR", message: String(error) });
+      dispatch({ type: "BASE_EDIT_ERROR", message: `Edit failed: ${String(error)}` });
     }
   }
 
@@ -160,9 +176,6 @@ export default function App() {
             <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
               {state.isSubmittingDesign ? "Launching..." : "Launch Helix IDE"}
             </button>
-            <button className="secondary" onClick={() => void submitDesign("live")} disabled={state.isSubmittingDesign}>
-              Launch Live Mode
-            </button>
           </div>
         </motion.section>
       </main>
@@ -170,111 +183,137 @@ export default function App() {
   }
 
   function renderIde(): JSX.Element {
+    const retrievalSources: Array<keyof typeof state.retrieval> = ["ncbi", "pubmed", "clinvar"];
+
     return (
-      <main className="app-shell">
-        <header className="hero">
-          <div>
-            <h1>Helix IDE</h1>
-            <p>Prompt to candidates to folded proteins, with direct nucleotide editing in one workspace.</p>
-          </div>
-          <div className="hero-controls">
-            <label>
-              API Base
-              <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} />
-            </label>
-            <div className={`ws-pill ${state.wsStatus}`}>WS: {state.wsStatus}</div>
-          </div>
-        </header>
+      <main className="cursor-shell">
+        <aside className="tool-rail">
+          <div className="rail-brand">Helix</div>
+          <button type="button" className="rail-item active">Workspace</button>
+          <button type="button" className="rail-item">Candidates</button>
+          <button type="button" className="rail-item">Structures</button>
+          <button type="button" className="rail-item">Protocols</button>
+          <div className="rail-spacer" />
+          <div className={`ws-pill ${state.wsStatus}`}>WS: {state.wsStatus}</div>
+        </aside>
 
-        <AutoplayRibbon pipelineStatus={state.pipelineStatus} summary={state.laymanSummary} />
+        <section className="workspace-shell">
+          <header className="workspace-topbar">
+            <div>
+              <h1>Helix // Cursor For Genomic Design</h1>
+              <p>Start from language, iterate at nucleotide-level, and refine with an agent in one living lab IDE.</p>
+            </div>
+            <div className="hero-controls">
+              <label>
+                API Base
+                <input value={apiBase} onChange={(event) => setApiBase(event.target.value)} />
+              </label>
+            </div>
+          </header>
 
-        <section className="ide-hero-grid">
-          <div className="card">
-            <h2>Protein Focus</h2>
-            <ProteinPanel candidate={activeCandidate} />
-          </div>
-          <div className="card">
-            <h2>Live Pipeline</h2>
-            <StageFlow stages={state.stages} />
-          </div>
-        </section>
+          <section className="prompt-strip">
+            <textarea value={goal} onChange={(event) => setGoal(event.target.value)} />
+            <div className="prompt-actions">
+              <label>
+                Candidate Count
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={candidateCount}
+                  onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
+                />
+              </label>
+              <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
+                {state.isSubmittingDesign ? "Starting..." : "Run Silent Demo"}
+              </button>
+            </div>
+          </section>
 
-        <section className="command-bar">
-          <textarea value={goal} onChange={(event) => setGoal(event.target.value)} />
-          <div className="command-actions">
-            <label>
-              Candidate Count
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={candidateCount}
-                onChange={(event) => setCandidateCount(Number(event.target.value || DEFAULT_CANDIDATES))}
-              />
-            </label>
-            <button onClick={() => void submitDesign("demo")} disabled={state.isSubmittingDesign}>
-              {state.isSubmittingDesign ? "Starting..." : "Run Silent Demo"}
-            </button>
-            <button onClick={() => void submitDesign("live")} className="secondary" disabled={state.isSubmittingDesign}>
-              Run Live Mode
-            </button>
-          </div>
-        </section>
+          <AutoplayRibbon pipelineStatus={state.pipelineStatus} summary={state.laymanSummary} />
 
-        <section className="metrics">
-          <div>Session: {state.sessionId || "--"}</div>
-          <div>Requested: {state.requestedCandidates}</div>
-          <div>Ready: {completedCount}</div>
-          <div>Failed: {failedCount}</div>
-        </section>
+          <section className="workspace-meta">
+            <div>Session: {state.sessionId || "--"}</div>
+            <div>Requested: {state.requestedCandidates}</div>
+            <div>Ready: {completedCount}</div>
+            <div>Failed: {failedCount}</div>
+          </section>
 
-        <section className="grid-two">
-          <div className="card">
-            <h2>Genome Lanes</h2>
-            <GenomeLanes
-              candidateOrder={state.candidateOrder}
-              candidates={state.candidates}
-              activeCandidateId={state.activeCandidateId}
-              selectedPosition={state.selectedPosition}
-              onSelectCandidate={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
-              onSelectPosition={(position) => dispatch({ type: "SELECT_POSITION", position })}
-            />
-            <div className="edit-row">
-              <span>{state.editFeedback || "Select a base to mutate and observe <2s rescoring."}</span>
-              <div className="base-buttons">
-                {["A", "T", "C", "G"].map((base) => (
-                  <button key={base} onClick={() => void handleBaseEdit(base)}>
-                    {base}
-                  </button>
-                ))}
+          <section className="workspace-grid">
+            <div className="workspace-left">
+              <div className="card">
+                <h2>Genome Editor + Heatmap</h2>
+                <GenomeLanes
+                  candidateOrder={state.candidateOrder}
+                  candidates={state.candidates}
+                  activeCandidateId={state.activeCandidateId}
+                  selectedPosition={state.selectedPosition}
+                  onSelectCandidate={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
+                  onSelectPosition={(position) => dispatch({ type: "SELECT_POSITION", position })}
+                />
+                <div className="edit-row">
+                  <span>{state.editFeedback || (state.selectedPosition !== null
+                    ? `Position ${state.selectedPosition} selected — click A/T/C/G to mutate`
+                    : "Click a base in any lane to select it for editing")}</span>
+                  <div className="base-buttons">
+                    {["A", "T", "C", "G"].map((base) => (
+                      <button
+                        key={base}
+                        className={`edit-base edit-base-${base.toLowerCase()}`}
+                        onClick={() => void handleBaseEdit(base)}
+                      >
+                        {base}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="card">
+                <h2>Candidate Race</h2>
+                <Leaderboard
+                  candidates={state.candidates}
+                  activeCandidateId={state.activeCandidateId}
+                  onSelect={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
+                />
               </div>
             </div>
-          </div>
-          <div className="card">
-            <h2>Candidate Race</h2>
-            <Leaderboard
-              candidates={state.candidates}
-              activeCandidateId={state.activeCandidateId}
-              onSelect={(candidateId) => dispatch({ type: "SELECT_CANDIDATE", candidateId })}
-            />
-          </div>
-        </section>
 
-        <section className="grid-two">
-          <div className="card">
-            <h2>Refine by Prompt</h2>
-            <ChatPanel
-              activeCandidate={activeCandidate}
-              chat={state.chat}
-              explanationByCandidate={state.explanationByCandidate}
-              onSubmitFollowup={handleFollowup}
-              isSubmitting={state.isSubmittingFollowup}
-            />
-          </div>
-          <div className="card">
-            <h2>Scientific Details</h2>
-            <ScientificDrawer open={drawerOpen} onToggle={() => setDrawerOpen((current) => !current)} state={state} />
-          </div>
+            <div className="workspace-center">
+              <div className="card protein-stage-card">
+                <h2>Folded Protein Studio</h2>
+                <ProteinPanel candidate={activeCandidate} />
+              </div>
+
+              <div className="card">
+                <h2>Pipeline Graph</h2>
+                <StageFlow stages={state.stages} />
+                <div className="retrieval-row">
+                  {retrievalSources.map((source) => (
+                    <div key={source} className={`retrieval-pill ${state.retrieval[source].status}`}>
+                      <strong>{source.toUpperCase()}</strong>
+                      <span>{state.retrieval[source].status}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <ScientificDrawer open={drawerOpen} onToggle={() => setDrawerOpen((current) => !current)} state={state} />
+            </div>
+
+            <aside className="workspace-right">
+              <div className="card agent-card">
+                <h2>Helix Side Agent</h2>
+                <ChatPanel
+                  activeCandidate={activeCandidate}
+                  chat={state.chat}
+                  explanationByCandidate={state.explanationByCandidate}
+                  onSubmitFollowup={handleFollowup}
+                  isSubmitting={state.isSubmittingFollowup}
+                />
+              </div>
+            </aside>
+          </section>
         </section>
       </main>
     );

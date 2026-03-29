@@ -9,3 +9,5 @@ createRoot(document.getElementById("root") as HTMLElement).render(
     <App />
   </React.StrictMode>
 );
+
+(window as unknown as { __helixMounted?: boolean }).__helixMounted = true;

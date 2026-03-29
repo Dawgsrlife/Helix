@@ -15,6 +15,7 @@ from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
 from pipeline.retrieval import retrieve_context
 from services.evo2 import Evo2MockService, Evo2Service
+from services.mock_pdb import build_mock_pdb_from_dna
 from services.structure import predict_structure
 from config import settings, StructureMode
 from ws.events import (
@@ -259,7 +260,9 @@ async def run_generation_pipeline(
         nonlocal finished_generation, finished_scoring, finished_structure
         async with semaphore:
             varied_seed = candidate_seeds[candidate_id]
-            temperature = 0.9 + (0.1 * candidate_id)
+            # Keep temperature in [0.7, 1.0] to stay within NIM API limits.
+            # Diversity comes from seed variation + temperature spread.
+            temperature = min(1.0, 0.7 + (0.03 * candidate_id))
             generated = varied_seed
             await manager.send_event(
                 session_id,
@@ -431,16 +434,18 @@ async def run_generation_pipeline(
                             pdb_data = result.pdb_data
                             confidence = result.confidence
                     elif settings.structure_mode == StructureMode.MOCK:
-                        pdb_data = _mock_pdb(candidate_id)
-                        confidence = 0.73
+                        pdb_data, confidence = build_mock_pdb_from_dna(
+                            generated, candidate_id=candidate_id
+                        )
             except TimeoutError:
                 structure_error = "structure_timeout"
             except Exception as exc:
                 structure_error = f"structure_error:{exc}"
 
             if pdb_data is None and profile.use_structure_fallback:
-                pdb_data = _mock_pdb(candidate_id)
-                confidence = 0.73
+                pdb_data, confidence = build_mock_pdb_from_dna(
+                    generated, candidate_id=candidate_id
+                )
                 structure_error = None
 
             if pdb_data is None:
@@ -719,25 +724,6 @@ def _vary_seed(sequence: str, candidate_id: int) -> str:
     bases = ["A", "T", "C", "G"]
     new_base = bases[candidate_id % len(bases)]
     return _simple_mutate(sequence, pos, new_base)
-
-
-def _mock_pdb(candidate_id: int) -> str:
-    chain = "A"
-    residue = "ALA"
-    lines = [
-        "HEADER    HELIX MOCK STRUCTURE",
-        "TITLE     MOCK PDB FOR HELIX DEMO",
-        f"REMARK    CANDIDATE {candidate_id}",
-    ]
-    for idx in range(1, 6):
-        x = 10.0 + idx
-        y = 5.0 + idx * 0.5
-        z = 2.0 + idx * 0.25
-        lines.append(
-            f"ATOM  {idx:5d}  CA  {residue} {chain}{idx:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00 70.00           C"
-        )
-    lines.append("END")
-    return "\n".join(lines)
 
 
 def create_session_id() -> str:

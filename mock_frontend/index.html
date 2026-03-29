@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Helix Demo Mode</title>
+    <script>
+      window.__helixMounted = false;
+      window.setTimeout(() => {
+        const root = document.getElementById("root");
+        if (!window.__helixMounted && root && root.childElementCount === 0) {
+          root.innerHTML = `
+            <div style="font-family: ui-sans-serif, system-ui; color: #e6eefc; background: #0b1220; border: 1px solid #33425d; border-radius: 12px; max-width: 920px; margin: 40px auto; padding: 16px; line-height: 1.5;">
+              <h2 style="margin:0 0 8px 0;">Helix Mock Frontend failed to boot</h2>
+              <p style="margin:0 0 8px 0;">This usually happens when source files are served directly instead of via Vite.</p>
+              <pre style="margin:0; white-space:pre-wrap;">cd /Users/vishnu/Documents/Helix/mock_frontend
+npm install
+npm run build
+npm run preview -- --host localhost --port 4173</pre>
+            </div>
+          `;
+        }
+      }, 2000);
+    </script>
   </head>
   <body>
     <div id="root"></div>
