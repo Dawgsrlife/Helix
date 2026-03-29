@@ -1,30 +1,76 @@
-"""Agentic chat copilot for Helix side panel.
-
-This module provides a deterministic, tool-using copilot that can:
-1. Explain the active candidate in plain language
-2. Apply explicit base edits (e.g. "change base 42 to G")
-3. Run single-step optimization edits (tissue specificity / safety / function)
-4. Compare candidates currently available in the session
-
-It intentionally avoids hidden magic so demo behavior is reliable.
-"""
+"""LangGraph-powered agentic copilot for Helix side panel."""
 
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from dataclasses import dataclass
+from typing import Any
 
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.graph import END, START, StateGraph
+from typing_extensions import TypedDict
+
+from config import settings
 from models.domain import CandidateScores
 from pipeline.evo2_score import rescore_mutation, score_candidate
 from services.evo2 import Evo2Service
 from services.session_store import SessionStore
+from services.translation import reverse_complement
 
 BASES = ("A", "T", "C", "G")
+MAX_VARIANTS_TO_EVAL = 180
 EDIT_RE = re.compile(
     r"(?:position|pos|base|bp)\s*(\d+)\D+(?:to|with|as|=)\s*([ATCG])\b",
     flags=re.IGNORECASE,
 )
+
+PLANNER_PROMPT = """You are the planning brain for a genomic IDE assistant.
+Return ONLY strict JSON with this exact shape:
+{"actions":[{"tool":"<tool_name>","args":{...}}]}
+
+Allowed tools:
+1) explain_candidate
+args: {}
+
+2) edit_base
+args: {"position": <int>, "new_base": "A|T|C|G"}
+
+3) optimize_candidate
+args: {"objective": "safety|tissue_specificity|functional|novelty"}
+
+4) compare_candidates
+args: {}
+
+5) transform_sequence
+args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement"}
+
+Rules:
+- If user asks for global sequence rewrite like "all Ts", use transform_sequence.
+- If user asks to compare or rank, include compare_candidates.
+- If user asks specific base mutation, include edit_base.
+- You may chain multiple actions in order.
+- If uncertain, default to explain_candidate.
+"""
+
+RESPONDER_PROMPT = """You are Helix's genomic copilot.
+Given executed tool traces and computed outcomes, produce a concise,
+clear researcher-facing response (2-5 sentences).
+Avoid fluff. Mention concrete outcomes and next best action."""
+
+
+class CopilotState(TypedDict, total=False):
+    session_id: str
+    candidate_id: int
+    message: str
+    history: list[dict[str, str]]
+    actions: list[dict[str, Any]]
+    tool_calls: list[dict[str, str]]
+    candidate_update: dict[str, Any] | None
+    comparison: list[dict[str, Any]] | None
+    execution_notes: list[str]
+    assistant_message: str
 
 
 @dataclass(frozen=True)
@@ -65,70 +111,221 @@ class AgentChatResult:
     candidate_update: AgentCandidateUpdate | None = None
     comparison: list[dict[str, object]] | None = None
 
-    def to_dict(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "assistant_message": self.assistant_message,
-            "tool_calls": [tool.to_dict() for tool in self.tool_calls],
-        }
-        if self.candidate_update is not None:
-            payload["candidate_update"] = self.candidate_update.to_dict()
-        if self.comparison is not None:
-            payload["comparison"] = self.comparison
-        return payload
+
+@dataclass
+class _ToolExecution:
+    call: AgentToolCall
+    note: str
+    candidate_update: AgentCandidateUpdate | None = None
+    comparison: list[dict[str, object]] | None = None
 
 
 class AgenticCopilot:
     def __init__(self, *, session_store: SessionStore, evo2_service: Evo2Service) -> None:
         self._session_store = session_store
         self._service = evo2_service
+        self._planner_llm = self._build_llm(planner=True)
+        self._responder_llm = self._build_llm(planner=False)
+        self._graph = self._build_graph()
 
-    async def chat(self, *, session_id: str, candidate_id: int, message: str) -> AgentChatResult:
-        prompt = message.strip()
-        if not prompt:
-            return AgentChatResult(
-                assistant_message="Ask me to edit, compare, or explain a candidate.",
-                tool_calls=[AgentToolCall(tool="validate_input", status="ok", summary="Message was empty.")],
+    async def chat(
+        self,
+        *,
+        session_id: str,
+        candidate_id: int,
+        message: str,
+        history: list[dict[str, str]] | None = None,
+    ) -> AgentChatResult:
+        state: CopilotState = {
+            "session_id": session_id,
+            "candidate_id": candidate_id,
+            "message": message.strip(),
+            "history": history or [],
+            "actions": [],
+            "tool_calls": [],
+            "candidate_update": None,
+            "comparison": None,
+            "execution_notes": [],
+            "assistant_message": "",
+        }
+        final = await self._graph.ainvoke(state)
+
+        candidate_update = None
+        if final.get("candidate_update"):
+            update_payload = final["candidate_update"]
+            candidate_update = AgentCandidateUpdate(
+                candidate_id=int(update_payload["candidate_id"]),
+                sequence=str(update_payload["sequence"]),
+                scores=dict(update_payload["scores"]),
+                mutation=update_payload.get("mutation"),
+                per_position_scores=update_payload.get("per_position_scores"),
             )
 
+        return AgentChatResult(
+            assistant_message=str(final.get("assistant_message") or "I could not produce a response."),
+            tool_calls=[AgentToolCall(**entry) for entry in final.get("tool_calls", [])],
+            candidate_update=candidate_update,
+            comparison=final.get("comparison"),
+        )
+
+    def _build_graph(self):
+        graph = StateGraph(CopilotState)
+        graph.add_node("plan", self._plan_node)
+        graph.add_node("execute", self._execute_node)
+        graph.add_node("respond", self._respond_node)
+        graph.add_edge(START, "plan")
+        graph.add_edge("plan", "execute")
+        graph.add_edge("execute", "respond")
+        graph.add_edge("respond", END)
+        return graph.compile()
+
+    def _build_llm(self, *, planner: bool):
+        # Prefer Gemini when key is available.
+        if settings.gemini_api_key:
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+
+                return ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    temperature=0.1 if planner else 0.2,
+                    google_api_key=settings.gemini_api_key,
+                )
+            except Exception:
+                return None
+        if settings.openai_api_key:
+            try:
+                from langchain_openai import ChatOpenAI
+
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    temperature=0.1 if planner else 0.2,
+                    api_key=settings.openai_api_key,
+                )
+            except Exception:
+                return None
+        return None
+
+    async def _plan_node(self, state: CopilotState) -> dict[str, object]:
+        message = state.get("message", "")
+        if not message:
+            return {"actions": [{"tool": "explain_candidate", "args": {}}]}
+
+        # Deterministic intent parsing is the primary path for edit-like commands.
+        # This keeps side-panel behavior reliable for demo-critical prompts
+        # (e.g., "make all Ts", explicit base edits, ranking requests).
+        deterministic = self._fallback_plan(message)
+        if not _is_default_explain_plan(deterministic):
+            return {"actions": deterministic}
+
+        llm_actions = await self._plan_actions_with_llm(message)
+        if llm_actions:
+            return {"actions": llm_actions}
+        return {"actions": deterministic}
+
+    async def _execute_node(self, state: CopilotState) -> dict[str, object]:
+        session_id = str(state["session_id"])
+        candidate_id = int(state["candidate_id"])
         sequence = await self._session_store.require_candidate_sequence(session_id, candidate_id)
-        normalized = prompt.lower()
+        actions = list(state.get("actions", []))
+        if not actions:
+            actions = [{"tool": "explain_candidate", "args": {}}]
 
-        explicit_edit = _parse_explicit_edit(prompt)
-        if explicit_edit is not None:
-            return await self._handle_explicit_edit(
-                session_id=session_id,
-                candidate_id=candidate_id,
-                sequence=sequence,
-                position=explicit_edit[0],
-                new_base=explicit_edit[1],
-            )
+        tool_calls: list[dict[str, str]] = []
+        execution_notes: list[str] = []
+        candidate_update: AgentCandidateUpdate | None = None
+        comparison: list[dict[str, object]] | None = None
 
-        if any(token in normalized for token in ("compare", "best candidate", "rank candidates", "which candidate")):
-            return await self._handle_compare(session_id=session_id, active_candidate_id=candidate_id)
+        for action in actions:
+            tool = str(action.get("tool", "")).strip()
+            args = action.get("args") or {}
+            try:
+                if tool == "edit_base":
+                    result = await self._tool_edit_base(
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        sequence=sequence,
+                        position=int(args.get("position")),
+                        new_base=str(args.get("new_base", "")).upper(),
+                    )
+                elif tool == "optimize_candidate":
+                    result = await self._tool_optimize(
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        sequence=sequence,
+                        objective=str(args.get("objective", "tissue_specificity")),
+                    )
+                elif tool == "compare_candidates":
+                    result = await self._tool_compare(session_id=session_id, active_candidate_id=candidate_id)
+                elif tool == "transform_sequence":
+                    result = await self._tool_transform(
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        sequence=sequence,
+                        mode=str(args.get("mode", "all_t")),
+                    )
+                else:
+                    result = await self._tool_explain(candidate_id=candidate_id, sequence=sequence)
+            except Exception as exc:
+                result = _ToolExecution(
+                    call=AgentToolCall(tool=tool or "unknown_tool", status="failed", summary=str(exc)),
+                    note=f"Tool {tool or 'unknown_tool'} failed: {exc}",
+                )
 
-        if any(token in normalized for token in ("tissue-specific", "tissue specific", "safer", "off-target", "functional", "novel")):
-            return await self._handle_optimize(
-                session_id=session_id,
-                candidate_id=candidate_id,
-                sequence=sequence,
-                objective=_objective_from_prompt(normalized),
-            )
+            tool_calls.append(result.call.to_dict())
+            execution_notes.append(result.note)
+            if result.candidate_update is not None:
+                candidate_update = _merge_candidate_updates(candidate_update, result.candidate_update)
+                sequence = result.candidate_update.sequence
+            if result.comparison is not None:
+                comparison = result.comparison
 
-        return await self._handle_explain(candidate_id=candidate_id, sequence=sequence)
+        return {
+            "tool_calls": tool_calls,
+            "execution_notes": execution_notes,
+            "candidate_update": candidate_update.to_dict() if candidate_update else None,
+            "comparison": comparison,
+        }
 
-    async def _handle_explain(self, *, candidate_id: int, sequence: str) -> AgentChatResult:
+    async def _respond_node(self, state: CopilotState) -> dict[str, str]:
+        notes = state.get("execution_notes", [])
+        if not notes:
+            return {"assistant_message": "No actions were executed."}
+
+        # LLM summary when available; deterministic fallback otherwise.
+        if self._responder_llm is not None:
+            try:
+                payload = json.dumps(
+                    {
+                        "user_message": state.get("message", ""),
+                        "tool_calls": state.get("tool_calls", []),
+                        "execution_notes": notes,
+                    },
+                    indent=2,
+                )
+                messages = [
+                    SystemMessage(content=RESPONDER_PROMPT),
+                    HumanMessage(content=payload),
+                ]
+                response = await asyncio.wait_for(self._responder_llm.ainvoke(messages), timeout=8.0)
+                text = _message_to_text(response.content).strip()
+                if text:
+                    return {"assistant_message": text}
+            except Exception:
+                pass
+
+        return {"assistant_message": notes[-1]}
+
+    async def _tool_explain(self, *, candidate_id: int, sequence: str) -> _ToolExecution:
         scores, per_position = await score_candidate(self._service, sequence)
         score_dict = scores.to_dict()
-
-        assistant = (
-            f"Candidate #{candidate_id} is currently { _band(score_dict['combined']) } overall. "
-            f"Functional plausibility is {score_dict['functional']:.3f}, tissue fit is {score_dict['tissue_specificity']:.3f}, "
-            f"off-target risk is {score_dict['off_target']:.3f}, and novelty is {score_dict['novelty']:.3f}. "
-            "Ask me to mutate a position (for example: 'change base position 42 to G') or optimize for tissue specificity/safety."
+        note = (
+            f"Candidate #{candidate_id} is {_band(score_dict['combined'])}. "
+            f"Functional {score_dict['functional']:.3f}, tissue {score_dict['tissue_specificity']:.3f}, "
+            f"off-target {score_dict['off_target']:.3f}, novelty {score_dict['novelty']:.3f}."
         )
-        return AgentChatResult(
-            assistant_message=assistant,
-            tool_calls=[AgentToolCall(tool="score_candidate", status="ok", summary="Scored active candidate.")],
+        return _ToolExecution(
+            call=AgentToolCall(tool="score_candidate", status="ok", summary="Scored active candidate."),
+            note=note,
             candidate_update=AgentCandidateUpdate(
                 candidate_id=candidate_id,
                 sequence=sequence,
@@ -137,7 +334,7 @@ class AgenticCopilot:
             ),
         )
 
-    async def _handle_explicit_edit(
+    async def _tool_edit_base(
         self,
         *,
         session_id: str,
@@ -145,12 +342,11 @@ class AgenticCopilot:
         sequence: str,
         position: int,
         new_base: str,
-    ) -> AgentChatResult:
+    ) -> _ToolExecution:
+        if new_base not in BASES:
+            raise ValueError(f"invalid base '{new_base}'")
         if position < 0 or position >= len(sequence):
-            return AgentChatResult(
-                assistant_message=f"Position {position} is out of range for candidate #{candidate_id} (length {len(sequence)}).",
-                tool_calls=[AgentToolCall(tool="edit_base", status="failed", summary="Position out of range.")],
-            )
+            raise ValueError(f"position {position} is out of range for sequence length {len(sequence)}")
 
         updated_scores, delta = await rescore_mutation(
             self._service,
@@ -164,13 +360,13 @@ class AgenticCopilot:
 
         score_dict = updated_scores.to_dict()
         impact = "benign" if abs(delta) < 0.001 else "moderate" if abs(delta) < 0.005 else "deleterious"
-        assistant = (
-            f"Applied edit on candidate #{candidate_id}: base {position} -> {new_base}. "
-            f"Delta likelihood {delta:.5f} ({impact}). New combined score is {score_dict['combined']:.3f}."
+        note = (
+            f"Applied edit on candidate #{candidate_id}: base {position}->{new_base}. "
+            f"Delta likelihood {delta:.5f} ({impact}). New combined {score_dict['combined']:.3f}."
         )
-        return AgentChatResult(
-            assistant_message=assistant,
-            tool_calls=[AgentToolCall(tool="edit_base", status="ok", summary=f"Mutated position {position} to {new_base}.")],
+        return _ToolExecution(
+            call=AgentToolCall(tool="edit_base", status="ok", summary=f"Mutated position {position} to {new_base}."),
+            note=note,
             candidate_update=AgentCandidateUpdate(
                 candidate_id=candidate_id,
                 sequence=mutated,
@@ -186,57 +382,59 @@ class AgenticCopilot:
             ),
         )
 
-    async def _handle_optimize(
+    async def _tool_optimize(
         self,
         *,
         session_id: str,
         candidate_id: int,
         sequence: str,
         objective: str,
-    ) -> AgentChatResult:
+    ) -> _ToolExecution:
+        objective = objective.strip().lower() or "tissue_specificity"
+        if objective not in {"safety", "tissue_specificity", "functional", "novelty"}:
+            objective = "tissue_specificity"
+
         baseline_scores, _ = await score_candidate(self._service, sequence)
         baseline = baseline_scores.to_dict()
 
-        candidates: list[tuple[str, int, str]] = []
-        steps = max(1, len(sequence) // 10)
-        for position in range(0, len(sequence), steps):
-            current = sequence[position]
+        variant_specs: list[tuple[int, str]] = []
+        for position, current in enumerate(sequence):
             for alt in BASES:
-                if alt == current:
-                    continue
-                candidates.append((sequence[:position] + alt + sequence[position + 1 :], position, alt))
-            if len(candidates) >= 36:
-                break
+                if alt != current:
+                    variant_specs.append((position, alt))
+        if len(variant_specs) > MAX_VARIANTS_TO_EVAL:
+            step = max(1, len(variant_specs) // MAX_VARIANTS_TO_EVAL)
+            variant_specs = variant_specs[::step][:MAX_VARIANTS_TO_EVAL]
 
-        async def _score_variant(variant: str, pos: int, alt: str) -> tuple[str, int, str, CandidateScores]:
+        async def _score_variant(position: int, alt: str) -> tuple[int, str, str, CandidateScores]:
+            variant = sequence[:position] + alt + sequence[position + 1 :]
             scores, _ = await score_candidate(self._service, variant)
-            return variant, pos, alt, scores
+            return position, alt, variant, scores
 
-        scored = await asyncio.gather(*[_score_variant(v, p, b) for v, p, b in candidates])
-        best_variant, best_pos, best_alt, best_scores = max(scored, key=lambda x: _objective_score(x[3], objective))
+        scored = await asyncio.gather(*[_score_variant(position, alt) for position, alt in variant_specs])
+        best_position, best_alt, best_variant, best_scores = max(
+            scored,
+            key=lambda row: _objective_score(row[3], objective),
+        )
         await self._session_store.set_candidate_sequence(session_id, candidate_id, best_variant)
         _, per_position = await score_candidate(self._service, best_variant)
 
         best = best_scores.to_dict()
         delta = best["combined"] - baseline["combined"]
-        assistant = (
-            f"Optimization objective: {objective}. I tested {len(scored)} single-base variants and selected "
-            f"position {best_pos} -> {best_alt}. Combined score moved from {baseline['combined']:.3f} to {best['combined']:.3f} "
-            f"({delta:+.3f})."
+        note = (
+            f"Optimization objective '{objective}': evaluated {len(scored)} variants, "
+            f"chose {best_position}->{best_alt}. Combined moved {baseline['combined']:.3f} -> {best['combined']:.3f} ({delta:+.3f})."
         )
-        return AgentChatResult(
-            assistant_message=assistant,
-            tool_calls=[
-                AgentToolCall(tool="search_single_base_variants", status="ok", summary=f"Evaluated {len(scored)} variants."),
-                AgentToolCall(tool="apply_variant", status="ok", summary=f"Applied position {best_pos} -> {best_alt}."),
-            ],
+        return _ToolExecution(
+            call=AgentToolCall(tool="optimize_candidate", status="ok", summary=f"Applied {best_position}->{best_alt}."),
+            note=note,
             candidate_update=AgentCandidateUpdate(
                 candidate_id=candidate_id,
                 sequence=best_variant,
                 scores=best,
                 mutation={
-                    "position": best_pos,
-                    "reference_base": sequence[best_pos],
+                    "position": best_position,
+                    "reference_base": sequence[best_position],
                     "new_base": best_alt,
                     "delta_combined": delta,
                     "objective": objective,
@@ -245,20 +443,21 @@ class AgenticCopilot:
             ),
         )
 
-    async def _handle_compare(self, *, session_id: str, active_candidate_id: int) -> AgentChatResult:
+    async def _tool_compare(self, *, session_id: str, active_candidate_id: int) -> _ToolExecution:
         pool = await self._session_store.list_candidate_sequences(session_id)
         if not pool:
-            return AgentChatResult(
-                assistant_message="No candidates are available yet in this session.",
-                tool_calls=[AgentToolCall(tool="list_candidates", status="failed", summary="No candidate sequences found.")],
+            return _ToolExecution(
+                call=AgentToolCall(tool="compare_candidates", status="failed", summary="No candidates available."),
+                note="No candidates are available yet in this session.",
+                comparison=[],
             )
 
-        async def _score(cid: int, seq: str) -> tuple[int, str, dict[str, float]]:
+        async def _score(cid: int, seq: str) -> tuple[int, dict[str, float]]:
             scores, _ = await score_candidate(self._service, seq)
-            return cid, seq, scores.to_dict()
+            return cid, scores.to_dict()
 
         scored = await asyncio.gather(*[_score(cid, seq) for cid, seq in sorted(pool.items())])
-        ranked = sorted(scored, key=lambda row: row[2]["combined"], reverse=True)
+        ranked = sorted(scored, key=lambda row: row[1]["combined"], reverse=True)
         comparison = [
             {
                 "candidate_id": cid,
@@ -268,24 +467,167 @@ class AgenticCopilot:
                 "off_target": round(score["off_target"], 4),
                 "novelty": round(score["novelty"], 4),
             }
-            for cid, _seq, score in ranked[:5]
+            for cid, score in ranked[:8]
         ]
         top = comparison[0]
         active = next((row for row in comparison if row["candidate_id"] == active_candidate_id), None)
-        active_text = (
-            f" Active candidate #{active_candidate_id} sits at combined {active['combined']:.3f}."
+        active_suffix = (
+            f" Active candidate #{active_candidate_id} is at {active['combined']:.3f}."
             if active is not None
             else ""
         )
-
-        return AgentChatResult(
-            assistant_message=(
-                f"Compared {len(scored)} candidates. Best is #{top['candidate_id']} with combined {top['combined']:.3f}. "
-                f"Functional {top['functional']:.3f}, tissue {top['tissue_specificity']:.3f}, off-target {top['off_target']:.3f}.{active_text}"
-            ),
-            tool_calls=[AgentToolCall(tool="compare_candidates", status="ok", summary=f"Ranked {len(scored)} candidates.")],
+        note = (
+            f"Compared {len(scored)} candidates. Best is #{top['candidate_id']} (combined {top['combined']:.3f})."
+            f"{active_suffix}"
+        )
+        return _ToolExecution(
+            call=AgentToolCall(tool="compare_candidates", status="ok", summary=f"Ranked {len(scored)} candidates."),
+            note=note,
             comparison=comparison,
         )
+
+    async def _tool_transform(
+        self,
+        *,
+        session_id: str,
+        candidate_id: int,
+        sequence: str,
+        mode: str,
+    ) -> _ToolExecution:
+        transformed = _apply_transform(sequence, mode)
+        if transformed == sequence:
+            note = f"Requested transform '{mode}' produced no sequence change."
+        else:
+            note = f"Applied transform '{mode}' to candidate #{candidate_id}."
+
+        await self._session_store.set_candidate_sequence(session_id, candidate_id, transformed)
+        scores, per_position = await score_candidate(self._service, transformed)
+        score_dict = scores.to_dict()
+        note += f" New combined score {score_dict['combined']:.3f}."
+
+        return _ToolExecution(
+            call=AgentToolCall(tool="transform_sequence", status="ok", summary=f"Applied {mode}."),
+            note=note,
+            candidate_update=AgentCandidateUpdate(
+                candidate_id=candidate_id,
+                sequence=transformed,
+                scores=score_dict,
+                mutation={"mode": mode},
+                per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
+            ),
+        )
+
+    async def _plan_actions_with_llm(self, message: str) -> list[dict[str, Any]] | None:
+        if self._planner_llm is None:
+            return None
+        try:
+            messages = [
+                SystemMessage(content=PLANNER_PROMPT),
+                HumanMessage(content=message),
+            ]
+            response = await asyncio.wait_for(self._planner_llm.ainvoke(messages), timeout=8.0)
+            text = _message_to_text(response.content)
+            payload = _extract_json_object(text)
+            actions = payload.get("actions", [])
+            if not isinstance(actions, list):
+                return None
+            normalized = [_normalize_action(entry) for entry in actions]
+            normalized = [entry for entry in normalized if entry is not None]
+            return normalized or None
+        except Exception:
+            return None
+
+    def _fallback_plan(self, message: str) -> list[dict[str, Any]]:
+        text = message.lower()
+        actions: list[dict[str, Any]] = []
+
+        explicit = _parse_explicit_edit(message)
+        if explicit is not None:
+            actions.append({"tool": "edit_base", "args": {"position": explicit[0], "new_base": explicit[1]}})
+            if "explain" in text or "impact" in text:
+                actions.append({"tool": "explain_candidate", "args": {}})
+
+        transform_mode = _parse_transform_mode(text)
+        if transform_mode is not None:
+            actions.append({"tool": "transform_sequence", "args": {"mode": transform_mode}})
+
+        if any(token in text for token in ("compare", "rank", "best candidate", "which candidate")):
+            actions.append({"tool": "compare_candidates", "args": {}})
+
+        if any(token in text for token in ("tissue-specific", "tissue specific", "safer", "off-target", "novel", "functional")):
+            actions.append({"tool": "optimize_candidate", "args": {"objective": _objective_from_prompt(text)}})
+
+        if not actions:
+            actions.append({"tool": "explain_candidate", "args": {}})
+        return actions
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text).strip()
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        snippet = text[start : end + 1]
+        try:
+            parsed = json.loads(snippet)
+            return parsed if isinstance(parsed, dict) else {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _normalize_action(entry: Any) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    tool = str(entry.get("tool", "")).strip()
+    args = entry.get("args", {})
+    if not isinstance(args, dict):
+        args = {}
+    if tool not in {"explain_candidate", "edit_base", "optimize_candidate", "compare_candidates", "transform_sequence"}:
+        return None
+    return {"tool": tool, "args": args}
+
+
+def _merge_candidate_updates(
+    previous: AgentCandidateUpdate | None, current: AgentCandidateUpdate
+) -> AgentCandidateUpdate:
+    if previous is None:
+        return current
+    if current.mutation is None and previous.mutation is not None:
+        current.mutation = previous.mutation
+    return current
+
+
+def _is_default_explain_plan(actions: list[dict[str, Any]]) -> bool:
+    if len(actions) != 1:
+        return False
+    action = actions[0]
+    return action.get("tool") == "explain_candidate"
+
+
+def _message_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks: list[str] = []
+        for item in content:
+            if isinstance(item, str):
+                chunks.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    chunks.append(text)
+        return "\n".join(chunks)
+    return str(content)
 
 
 def _parse_explicit_edit(message: str) -> tuple[int, str] | None:
@@ -293,6 +635,35 @@ def _parse_explicit_edit(message: str) -> tuple[int, str] | None:
     if match is None:
         return None
     return int(match.group(1)), match.group(2).upper()
+
+
+def _parse_transform_mode(text: str) -> str | None:
+    if "reverse complement" in text:
+        return "reverse_complement"
+    if re.search(r"\ball\s+t(?:s|'s)?\b", text) or "all thymine" in text:
+        return "all_t"
+    if re.search(r"\ball\s+a(?:s|'s)?\b", text) or "all adenine" in text:
+        return "all_a"
+    if re.search(r"\ball\s+c(?:s|'s)?\b", text) or "all cytosine" in text:
+        return "all_c"
+    if re.search(r"\ball\s+g(?:s|'s)?\b", text) or "all guanine" in text:
+        return "all_g"
+    return None
+
+
+def _apply_transform(sequence: str, mode: str) -> str:
+    mode = mode.strip().lower()
+    if mode == "all_t":
+        return "T" * len(sequence)
+    if mode == "all_a":
+        return "A" * len(sequence)
+    if mode == "all_c":
+        return "C" * len(sequence)
+    if mode == "all_g":
+        return "G" * len(sequence)
+    if mode == "reverse_complement":
+        return reverse_complement(sequence)
+    return sequence
 
 
 def _objective_from_prompt(text: str) -> str:

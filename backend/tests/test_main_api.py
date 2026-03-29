@@ -199,6 +199,35 @@ def test_agent_chat_explicit_edit_persists_sequence() -> None:
     assert verify.json()["reference_base"] == "G"
 
 
+def test_agent_chat_transform_all_ts_persists_sequence() -> None:
+    client = TestClient(app)
+    session_id = "agent-transform"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    transform = client.post(
+        "/api/agent/chat",
+        json={
+            "session_id": session_id,
+            "candidate_id": 0,
+            "message": "Make the genome all Ts for the fun of it",
+        },
+    )
+    assert transform.status_code == 200
+    body = transform.json()
+    assert any(call["tool"] == "transform_sequence" for call in body["tool_calls"])
+    transformed_sequence = body["candidate_update"]["sequence"]
+    assert transformed_sequence
+    assert set(transformed_sequence) == {"T"}
+
+    # Verify transformed sequence persisted in session store.
+    verify = client.post(
+        "/api/edit/base",
+        json={"session_id": session_id, "candidate_id": 0, "position": 10, "new_base": "A"},
+    )
+    assert verify.status_code == 200
+    assert verify.json()["reference_base"] == "T"
+
+
 def test_design_accepts_run_profile() -> None:
     client = TestClient(app)
     res = client.post(

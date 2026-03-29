@@ -202,6 +202,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                 session_id=request.session_id,
                 candidate_id=request.candidate_id,
                 message=request.message,
+                history=request.history,
             )
     except SessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail="session not found") from exc
