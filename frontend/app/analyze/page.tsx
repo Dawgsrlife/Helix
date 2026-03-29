@@ -57,6 +57,8 @@ export default function AnalyzePage() {
   const setActivePdb = useHelixStore((s) => s.setActivePdb);
   const setHighlightResidues = useHelixStore((s) => s.setHighlightResidues);
   const addEditEntry = useHelixStore((s) => s.addEditEntry);
+  const candidates = useHelixStore((s) => s.candidates);
+  const activeCandidateId = useHelixStore((s) => s.activeCandidateId);
   const chatOpen = useHelixStore((s) => s.chatOpen);
   const toggleChat = useHelixStore((s) => s.toggleChat);
 
@@ -298,15 +300,17 @@ export default function AnalyzePage() {
             </motion.div>
           )}
 
-          {/* ═══ EXPLORER: inspect ═══ */}
+          {/* ═══ EXPLORER: inspect (read-only, navigational) ═══ */}
           {viewMode === "explorer" && analysisResult && (
             <motion.div key="explorer" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              {/* Explorer has annotation track prominently */}
               <div className="px-5 py-2 shrink-0" style={{ background: "#1c1c1f" }}>
                 <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
                 <AnnotationLegend regions={regions} />
               </div>
               <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Sequence view (read-only focus) */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                   <div className="flex-1 overflow-auto px-5 py-4">
                     <SequenceViewer bases={bases} regions={regions}
@@ -317,25 +321,71 @@ export default function AnalyzePage() {
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
-                <div className="w-[340px] shrink-0 flex flex-col overflow-y-auto"
+                {/* Inspector panel: context-sensitive, read-only details */}
+                <div className="w-[320px] shrink-0 flex flex-col overflow-y-auto"
                   style={{ background: "#222225", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  {/* Region info (when position selected) */}
                   <div className="p-5">
-                    <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
-                      mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
-                    {mutationEffect && <div className="mt-4"><MutationDiff effect={mutationEffect} /></div>}
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "#5bb5a2" }}>Inspector</span>
+                    {selectedPosition !== null ? (
+                      <div className="space-y-3">
+                        <div>
+                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "#888" }}>Position</span>
+                          <div className="text-lg font-semibold font-mono" style={{ color: "#F0EFED" }}>{selectedPosition}</div>
+                        </div>
+                        <div>
+                          <span className="text-[11px] uppercase tracking-wider" style={{ color: "#888" }}>Base</span>
+                          <div className="text-lg font-semibold font-mono" style={{ color: bases[selectedPosition]?.nucleotide === "A" ? "#6bbd7a" : bases[selectedPosition]?.nucleotide === "T" ? "#d47a7a" : bases[selectedPosition]?.nucleotide === "C" ? "#6b9fd4" : "#c9a855" }}>
+                            {bases[selectedPosition]?.nucleotide ?? "N"}
+                          </div>
+                        </div>
+                        {bases[selectedPosition]?.annotationType && (
+                          <div>
+                            <span className="text-[11px] uppercase tracking-wider" style={{ color: "#888" }}>Region</span>
+                            <div className="text-sm font-medium" style={{ color: "#F0EFED" }}>{bases[selectedPosition]?.annotationType}</div>
+                          </div>
+                        )}
+                        {bases[selectedPosition]?.likelihoodScore !== undefined && (
+                          <div>
+                            <span className="text-[11px] uppercase tracking-wider" style={{ color: "#888" }}>Likelihood</span>
+                            <div className="text-sm font-mono" style={{ color: "#D1D0CC" }}>{bases[selectedPosition]?.likelihoodScore?.toFixed(3)}</div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[13px] leading-relaxed" style={{ color: "#888" }}>
+                        Click a base in the sequence to inspect its position, annotation, and likelihood score.
+                      </p>
+                    )}
                   </div>
                   <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
-                  <div className="p-5 flex-1 flex flex-col min-h-0">
-                    <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
-                    <div className="flex-1 rounded-lg overflow-hidden min-h-[180px]" style={{ background: "#141416" }}>
+                  {/* Region summary */}
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "#888" }}>Regions ({regions.length})</span>
+                    <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                      {regions.slice(0, 6).map((r, i) => (
+                        <button key={i} onClick={() => setSelectedPosition(r.start)}
+                          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition-colors hover:bg-white/[0.03]"
+                          style={{ fontSize: "12px" }}>
+                          <span style={{ color: "#888" }}>{r.type}</span>
+                          <span className="flex-1" />
+                          <span className="font-mono" style={{ color: "#555" }}>{r.start}-{r.end}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  {/* Structure preview (smaller, read-only) */}
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "#888" }}>Structure</span>
+                    <div className="rounded-lg overflow-hidden h-[140px]" style={{ background: "#141416" }}>
                       {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
-                        <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure data</div>
+                        <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure</div>
                       )}
                     </div>
-                    <StructureControls onReset={() => setHighlightResidues([])}
-                      onHighlight={() => selectedPosition !== null ? setHighlightResidues([selectedPosition]) : undefined} />
                   </div>
-                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  <div className="flex-1" />
+                  {/* CTA to IDE */}
                   <div className="p-5">
                     <button onClick={() => setViewMode("ide")}
                       className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all hover:scale-[1.01]"
@@ -344,22 +394,46 @@ export default function AnalyzePage() {
                     </button>
                   </div>
                 </div>
+                {chatOpen && <ChatPanel />}
               </div>
             </motion.div>
           )}
 
-          {/* ═══ IDE: manipulate ═══ */}
+          {/* ═══ IDE / DESIGN STUDIO: manipulate (editable, dense, operational) ═══ */}
           {viewMode === "ide" && analysisResult && (
             <motion.div key="ide" className="flex-1 flex flex-col overflow-hidden"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              {/* IDE toolbar: controls, status, actions */}
               <div className="h-10 shrink-0 flex items-center justify-between px-5"
                 style={{ background: "#1c1c1f", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                <span className="text-xs font-mono" style={{ color: "#888" }}>
-                  {rawSequence.length} bp | {regions.length} regions | {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
-                </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "#5bb5a2" }}>LIVE</span>
+                <div className="flex items-center gap-4">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded" style={{ background: "rgba(91,181,162,0.1)", color: "#5bb5a2" }}>LIVE EDITING</span>
+                  <span className="text-xs font-mono" style={{ color: "#D1D0CC" }}>
+                    {rawSequence.length} bp | {editHistory.length} edit{editHistory.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                    style={{ color: "#888", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    Save version
+                  </button>
+                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                    style={{ color: "#888", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    Revert
+                  </button>
+                  <button onClick={() => setViewMode("compare")}
+                    className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors hover:bg-white/[0.04]"
+                    style={{ color: "#888", border: "1px solid rgba(255,255,255,0.06)" }}>
+                    Compare
+                  </button>
+                  <button className="text-[10px] px-2.5 py-1 rounded font-medium transition-colors"
+                    style={{ background: "#5bb5a2", color: "#141416" }}>
+                    Rescore
+                  </button>
+                </div>
               </div>
               <div className="flex-1 flex overflow-hidden min-h-0">
+                {/* Editable workspace */}
                 <div className="flex-1 flex flex-col overflow-hidden min-w-0">
                   <div className="px-5 py-1.5 shrink-0" style={{ background: "#1c1c1f" }}>
                     <AnnotationTrack regions={regions} sequenceLength={rawSequence.length} />
@@ -373,17 +447,47 @@ export default function AnalyzePage() {
                       highlightedPosition={selectedPosition ?? undefined} onPositionHover={setSelectedPosition} />
                   </div>
                 </div>
-                <div className="w-[360px] shrink-0 flex flex-col overflow-y-auto"
+                {/* IDE right panel: mutation + scoring + structure + history */}
+                <div className="w-[380px] shrink-0 flex flex-col overflow-y-auto"
                   style={{ background: "#222225", borderLeft: "1px solid rgba(255,255,255,0.04)" }}>
+                  {/* Mutation editor (primary tool in IDE) */}
                   <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "#5bb5a2" }}>Mutation Editor</span>
                     <MutationPanel sequence={rawSequence} onMutationSubmit={handleMutationSubmit}
                       mutationEffect={mutationEffect ?? undefined} isLoading={mutationLoading} />
                     {mutationEffect && <div className="mt-4"><MutationDiff effect={mutationEffect} /></div>}
                   </div>
                   <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
-                  <div className="p-5 flex-1 flex flex-col min-h-0">
-                    <span className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "#888" }}>Structure</span>
-                    <div className="flex-1 rounded-lg overflow-hidden min-h-[160px]" style={{ background: "#141416" }}>
+                  {/* Scoring summary (IDE shows all 4 dims) */}
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-3" style={{ color: "#888" }}>Candidate scores</span>
+                    {candidates.length > 0 && (() => {
+                      const c = candidates.find(c => c.id === (activeCandidateId ?? 0)) ?? candidates[0];
+                      return (
+                        <div className="space-y-2">
+                          {[
+                            { label: "Functional", val: c.scores.functional, color: "#5bb5a2" },
+                            { label: "Tissue", val: c.scores.tissue, color: "#6b9fd4" },
+                            { label: "Off-target", val: c.scores.offTarget, color: "#d47a7a" },
+                            { label: "Novelty", val: c.scores.novelty, color: "#c9a855" },
+                          ].map(({ label, val, color }) => (
+                            <div key={label} className="flex items-center gap-3">
+                              <span className="text-[11px] w-16" style={{ color: "#888" }}>{label}</span>
+                              <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.04)" }}>
+                                <div className="h-full rounded-full" style={{ width: `${val * 100}%`, background: color, opacity: 0.7 }} />
+                              </div>
+                              <span className="text-[11px] font-mono w-10 text-right" style={{ color }}>{(val * 100).toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  {/* Structure */}
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "#888" }}>Structure</span>
+                    <div className="rounded-lg overflow-hidden h-[160px]" style={{ background: "#141416" }}>
                       {activePdb ? <ProteinViewer pdbData={activePdb} highlightResidues={highlightResidues} /> : (
                         <div className="flex items-center justify-center h-full text-xs" style={{ color: "#555" }}>No structure</div>
                       )}
@@ -392,15 +496,16 @@ export default function AnalyzePage() {
                       onHighlight={() => selectedPosition !== null ? setHighlightResidues([selectedPosition]) : undefined} />
                   </div>
                   <div className="h-px mx-5" style={{ background: "rgba(255,255,255,0.04)" }} />
+                  {/* Edit history (IDE exclusive) */}
                   <div className="p-5">
                     <span className="text-[11px] font-medium uppercase tracking-wider" style={{ color: "#888" }}>
                       Edit history ({editHistory.length})
                     </span>
                     {editHistory.length === 0 ? (
-                      <p className="text-xs mt-2" style={{ color: "#555" }}>No edits yet. Click a base, select a target, and run simulation.</p>
+                      <p className="text-xs mt-2" style={{ color: "#555" }}>Click a base, select a target, and run simulation to begin editing.</p>
                     ) : (
                       <div className="mt-2 space-y-1">
-                        {editHistory.slice(-5).reverse().map((e, i) => (
+                        {editHistory.slice(-8).reverse().map((e, i) => (
                           <div key={i} className="flex items-center gap-2 text-xs font-mono py-1" style={{ color: "#D1D0CC" }}>
                             <span style={{ color: "#555" }}>pos {e.position}</span>
                             <span style={{ color: "#d47a7a" }}>{e.from}</span>
@@ -412,6 +517,7 @@ export default function AnalyzePage() {
                     )}
                   </div>
                 </div>
+                {chatOpen && <ChatPanel />}
               </div>
             </motion.div>
           )}
