@@ -30,10 +30,10 @@ export function useMutationSim() {
         store.setSequence(mutated);
         useHelixStore.setState({ bases: newBases });
 
-        // Re-fold protein structure in the background
+        // Re-fold protein structure — keep loading state while folding
         try {
           const pdb = await fetchStructure(0, mutated.length, mutated);
-          store.setActivePdb(pdb);
+          useHelixStore.getState().setActivePdb(pdb);
         } catch {
           // Structure prediction may fail — keep old PDB
         }

@@ -164,7 +164,7 @@ export default function MutationPanel({
               animate={{ rotate: 360 }}
               transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
             />
-            Running
+            Mutating & re-folding...
           </span>
         ) : (
           "Run simulation"
