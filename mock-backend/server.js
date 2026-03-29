@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const expressWs = require("express-ws");
+const fs = require("fs");
+const path = require("path");
 const { v4: uuidv4 } = require("uuid");
 
 const app = express();
@@ -13,20 +15,26 @@ app.use(express.json());
 // Constants
 // ---------------------------------------------------------------------------
 
-const SAMPLE_PDB = `HEADER    MOCK PROTEIN
-ATOM      1  N   ALA A   1       1.000   2.000   3.000  1.00 90.00           N
-ATOM      2  CA  ALA A   1       2.000   3.000   4.000  1.00 90.00           C
-ATOM      3  C   ALA A   1       3.000   4.000   5.000  1.00 85.00           C
-ATOM      4  O   ALA A   1       4.000   5.000   6.000  1.00 85.00           O
-ATOM      5  N   GLY A   2       3.500   5.500   4.500  1.00 80.00           N
-ATOM      6  CA  GLY A   2       4.500   6.500   5.500  1.00 80.00           C
-ATOM      7  C   GLY A   2       5.500   7.500   6.500  1.00 75.00           C
-ATOM      8  O   GLY A   2       6.500   8.500   7.500  1.00 75.00           O
-ATOM      9  N   LEU A   3       5.000   8.000   5.000  1.00 70.00           N
-ATOM     10  CA  LEU A   3       6.000   9.000   6.000  1.00 70.00           C
-ATOM     11  C   LEU A   3       7.000  10.000   7.000  1.00 65.00           C
-ATOM     12  O   LEU A   3       8.000  11.000   8.000  1.00 65.00           O
+// Try to load the real 114-residue PDB from the frontend's public assets
+let SAMPLE_PDB;
+try {
+  SAMPLE_PDB = fs.readFileSync(
+    path.join(__dirname, "..", "frontend", "public", "assets", "sample-structure.pdb"),
+    "utf8"
+  );
+} catch {
+  // Fallback to minimal PDB
+  SAMPLE_PDB = `ATOM      1  N   MET A   1      12.345  23.456   5.678  1.00 92.30           N
+ATOM      2  CA  MET A   1      13.100  24.200   6.100  1.00 93.10           C
+ATOM      3  C   MET A   1      14.500  23.800   5.800  1.00 91.50           C
+ATOM      4  O   MET A   1      14.800  22.700   5.400  1.00 89.20           O
+ATOM      5  N   ASP A   2      15.300  24.800   6.000  1.00 90.80           N
+ATOM      6  CA  ASP A   2      16.700  24.600   5.700  1.00 91.20           C
+ATOM      7  C   ASP A   2      17.500  25.800   5.200  1.00 88.50           C
+ATOM      8  O   ASP A   2      17.100  26.950   5.400  1.00 85.30           O
+TER
 END`;
+}
 
 const BASES = ["A", "T", "C", "G"];
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import gsap from "gsap";
@@ -13,6 +13,12 @@ gsap.registerPlugin(ScrollTrigger);
 
 export default function Home() {
   const main = useRef<HTMLDivElement>(null);
+
+  // Force dark mode on landing page
+  useEffect(() => {
+    document.documentElement.classList.remove("light");
+    document.documentElement.classList.add("dark");
+  }, []);
 
   useGSAP(() => {
 
