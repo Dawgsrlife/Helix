@@ -65,6 +65,7 @@ interface HelixState {
   selectedPosition: number | null;
   selectedRegionIndex: number | null;
   activePdb: string | null;
+  originalPdb: string | null;
   highlightResidues: number[];
 
   mutationEffect: MutationEffect | null;
@@ -140,6 +141,7 @@ const initialState = {
   selectedPosition: null as number | null,
   selectedRegionIndex: null as number | null,
   activePdb: null as string | null,
+  originalPdb: null as string | null,
   highlightResidues: [] as number[],
   mutationEffect: null as MutationEffect | null,
   mutationLoading: false,
@@ -229,7 +231,15 @@ export const useHelixStore = create<HelixState>((set, get) => ({
 
   setSelectedPosition: (pos) => set({ selectedPosition: pos }),
   setSelectedRegionIndex: (idx) => set({ selectedRegionIndex: idx }),
-  setActivePdb: (pdb) => set({ activePdb: pdb }),
+  setActivePdb: (pdb) => {
+    const state = get();
+    // Save the first PDB as the original for comparison
+    if (!state.originalPdb && pdb) {
+      set({ activePdb: pdb, originalPdb: pdb });
+    } else {
+      set({ activePdb: pdb });
+    }
+  },
   setHighlightResidues: (residues) => set({ highlightResidues: residues }),
   setMutationEffect: (effect) => set({ mutationEffect: effect }),
   setMutationLoading: (loading) => set({ mutationLoading: loading }),
