@@ -1,248 +1,230 @@
-# Helix: Source of Truth
-
-This is the canonical project state document. If anything conflicts between docs and code, **this file + code wins**.
-
-It reconciles `ARCHITECTURE.md` (target design), `BACKEND_ARCHITECTURE.md` (original backend spec), and the actual codebase.
-
----
-
-## 1. One-line goal
-
-Build a demo-ready genomic IDE where a researcher submits a design goal, watches the pipeline stream live, edits sequence bases, and gets immediate re-scoring with structural context.
-
----
-
-## 2. Current status snapshot
-
-### Backend (Vishnu)
-
-- Runnable and tested: **85 tests passing** (`pytest -q` in `backend/`).
-- All REST endpoints implemented: `/api/design`, `/api/analyze`, `/api/edit/base`, `/api/edit/followup`, `/api/mutations`, `/api/structure`, `/api/health`.
-- WebSocket streaming infrastructure built: `ws/events.py` (typed event contracts), `ws/manager.py` (session lifecycle with pending-event queue).
-- Orchestrator runs generation and followup pipelines in-process async (Celery/Redis wiring exists in config but is not the active runtime path).
-- Evo2 service operates in mock mode by default. Supports mock, local, and NIM API backends.
-- Intent parser uses heuristic fallback by default. Optional Gemini path exists but is gated off (`intent_allow_live_calls = False`).
-- Parallel retrieval coordinator built. NCBI, PubMed, ClinVar services implemented.
-- Structure prediction returns mock PDB (no `services/alphafold.py` wrapper yet).
-
-### Frontend (Alex)
-
-- Three parallel agents completed their work. All components rebuilt to demo quality.
-- **Agent 1 (Landing + Shell)**: Obsidian design system in globals.css, GSAP timeline landing page, editorial layout, Inter + JetBrains Mono fonts via next/font.
-- **Agent 2 (Genome Browser)**: Canvas-based likelihood graph (handles 10k+ positions), GSAP stagger reveal, muted base colors, Notion-style sequence input with examples.
-- **Agent 3 (Right Panel)**: Spring-animated mutation results, pLDDT protein viewer with sample PDB, Lucide icon controls, ShadCN Badge + Tooltip.
-- Build passes cleanly. Crash fix applied (removed HDR Environment preset from Three.js).
-- Frontend currently uses non-streaming endpoints (`/api/analyze`, `/api/mutations`, `/api/structure`).
-- Streaming pipeline (`/api/design` + WebSocket events) exists backend-side but is **not yet consumed** by frontend.
-
-### Integration
-
-- Frontend and backend are independently functional but not yet connected via WebSocket streaming.
-- Mock data fallbacks in frontend hooks ensure demo works without a running backend.
-
----
-
-## 3. Architecture: target vs current
-
-### 3.1 Target (hackathon demo path)
-
-Researcher types goal in Chat panel. Frontend sends `POST /api/design`. Backend streams intent, retrieval, generation, scoring, structure, explanation events via WebSocket. Frontend renders each event progressively. Researcher edits bases (instant re-score) or types follow-ups (partial re-run).
-
-### 3.2 Current as-built path
-
-**Path A (implemented, actively used by frontend):**
-- `POST /api/analyze` for per-position scores + ORF-derived protein regions
-- `POST /api/mutations` for mutation effect prediction
-- `POST /api/structure` for structure mock PDB
-- Frontend hooks fall back to mock data when backend is unreachable
-
-**Path B (implemented in backend, not yet consumed by frontend):**
-- `POST /api/design` returns session ID + WebSocket URL
-- `WS /ws/pipeline/{session_id}` emits: `intent_parsed`, `retrieval_progress`, `generation_token`, `candidate_scored`, `structure_ready`, `explanation_chunk`, `pipeline_complete`
-
----
-
-## 4. Module map
-
-### 4.1 Backend modules (verified)
-
-| Module | Purpose | Status | Notes |
-|--------|---------|--------|-------|
-| `config.py` | Environment-driven settings (evo2_mode, structure_mode, intent keys) | Working | Celery/Redis configured but not active at runtime |
-| `models/domain.py` | Domain types with serialization helpers (`to_dict()`, `to_ws_event()`) | Working | Strong serialization boundary prevents integration drift |
-| `services/evo2.py` | Evo2 abstraction: Mock, Local, NIM implementations | Working (mock) | Empty-sequence edge case handled |
-| `services/translation.py` | DNA to protein, ORF finding, codon table | Working | |
-| `services/ncbi.py` | NCBI gene info retrieval | Working | 10 req/sec rate limit with API key |
-| `services/pubmed.py` | PubMed literature search | Working | |
-| `services/clinvar.py` | ClinVar pathogenic variant lookup | Working | |
-| `pipeline/evo2_score.py` | 4D candidate scoring + mutation rescoring | Working | Heuristic/mock-grade for demo velocity |
-| `pipeline/intent_parser.py` | NL goal to DesignSpec (heuristic default, Gemini optional) | Working | |
-| `pipeline/retrieval.py` | Parallel retrieval coordinator | Working | |
-| `pipeline/orchestrator.py` | Async generation + followup pipelines | Working | In-process, not Celery-dispatched |
-| `ws/events.py` | Typed WebSocket event contracts | Working | |
-| `ws/manager.py` | Session lifecycle + pending-event queue | Working | Solves POST-before-WS race condition |
-| `main.py` | FastAPI entrypoint, all endpoints | Working | In-memory state only |
-| `services/alphafold.py` | AlphaFold/ColabFold wrapper | **Not built** | Mock PDB returned from endpoint directly |
-
-### 4.2 Frontend modules (verified)
-
-| Module | Purpose | Status | Notes |
-|--------|---------|--------|-------|
-| `app/page.tsx` | Landing page with GSAP timeline | Rebuilt | Obsidian design system |
-| `app/layout.tsx` | Root layout with Inter + JetBrains Mono | Rebuilt | |
-| `app/analyze/page.tsx` | Main IDE workspace, wires all panels | **Needs update** | Still uses old imports/layout |
-| `components/layout/AppShell.tsx` | IDE chrome with HELIX wordmark | Rebuilt | |
-| `components/sequence/*` | SequenceViewer, BaseToken, SequenceInput, RegionHighlight | Rebuilt | Canvas likelihood graph, GSAP stagger |
-| `components/annotation/*` | AnnotationTrack, AnnotationLegend, LikelihoodGraph | Rebuilt | |
-| `components/mutation/*` | MutationPanel, MutationDiff | Rebuilt | Spring animations, mock fallback |
-| `components/structure/*` | ProteinViewer, StructureControls | Rebuilt | pLDDT coloring, sample PDB, crash fix applied |
-| `components/ui/*` | Button, Badge, Tooltip, LoadingState | Working | ShadCN components |
-| `hooks/useSequenceAnalysis.ts` | Analysis request lifecycle | Working | Non-streaming |
-| `hooks/useAnnotations.ts` | Derive regions + bases from result | Working | |
-| `hooks/useMutationSim.ts` | Mutation prediction with mock fallback | Working | |
-| `lib/api.ts` | Fetch wrappers, domain type mapping | Working | No WebSocket client yet |
-
----
-
-## 5. API contract status
-
-| Contract | Backend | Frontend | Integration |
-|----------|---------|----------|-------------|
-| `POST /api/analyze` | Implemented | Consumed | Working |
-| `POST /api/mutations` | Implemented | Consumed | Working |
-| `POST /api/structure` | Implemented (mock) | Consumed | Working |
-| `GET /api/health` | Implemented | Not consumed | - |
-| `POST /api/design` | Implemented | **Not consumed** | Gap |
-| `WS /ws/pipeline/{session_id}` | Implemented | **Not consumed** | Gap |
-| `POST /api/edit/base` | Implemented | **Not consumed** | Gap |
-| `POST /api/edit/followup` | Implemented | **Not consumed** | Gap |
-
----
-
-## 6. What is right
-
-- Backend is no longer just a library. Streaming infrastructure exists and is tested.
-- Frontend components are rebuilt to demo quality with the Obsidian design system.
-- Mock data fallbacks mean the frontend demo works standalone.
-- Correct hackathon priority: mocked biology is acceptable; integration velocity matters.
-
-## 7. What is still wrong or incomplete
-
-1. **Frontend does not consume WebSocket pipeline events.** This is the primary integration gap.
-2. **`analyze/page.tsx` needs rewiring** to use the new Obsidian-styled components from all three agents.
-3. **Zustand store not yet created** for shared pipeline state (selected candidate, session ID, pipeline status).
-4. **Candidate/session state is in-memory only** in the backend (not persisted across restarts).
-5. **`/api/edit/base` operates on a default sequence**, not the actual session candidate.
-6. **`services/alphafold.py` does not exist.** Mock PDB is returned directly from endpoints.
-7. **Dat could not attend.** His modules (intent parser, explanation layer) run on heuristic/mock. No one is actively owning the ML/prompt layer.
-
----
-
-## 8. Convergence plan
-
-### P0: Demo unblock (immediate)
-
-1. Wire `analyze/page.tsx` with all rebuilt agent components.
-2. Add Zustand store for shared state (selected position, active candidate, pipeline status).
-3. Ensure the non-streaming demo path works end-to-end with mock data.
-
-### P1: Streaming integration
-
-4. Add WebSocket client hook (`useDesignPipeline`) that connects to `ws://host/ws/pipeline/{session_id}`.
-5. Build event reducer that updates Zustand store as events arrive.
-6. Add Chat panel UI that triggers `/api/design` and renders streaming events.
-
-### P2: Edit loop
-
-7. Wire base pair click in Genome Browser to `POST /api/edit/base`.
-8. Wire Chat input to `POST /api/edit/followup`.
-9. Persist session candidates by `session_id` in backend.
-
-### P3: Polish
-
-10. Implement `services/alphafold.py` with ColabFold fallback.
-11. Replace mock retrieval/explanation with real services where time permits.
-12. Demo rehearsal, video recording, Devpost submission.
-
----
-
-## 9. Team
-
-| Person | Role | Constraint |
-|--------|------|-----------|
-| Alex | Frontend, 3 parallel Claude agents | Leaves before closing ceremony |
-| Vishnu | Backend orchestration, Evo2, pipeline | Leaves before closing ceremony |
-| Henry | Fullstack glue, demo, pitch | Flies out Sunday 5am |
-| TBD | 4th teammate | Recruiting at YHack |
-
-**Critical**: At least one person must be physically present for Sunday judging. This is a hard rule.
-
----
-
-## 10. Frontend design system (Obsidian Protocol)
-
-### Colors
-
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--surface-void` | #0c0c0e | Page background |
-| `--surface-base` | #131315 | Panel backgrounds |
-| `--surface-raised` | #1b1b1d | Elevated panels, inputs |
-| `--surface-elevated` | #232326 | Active/hover surfaces |
-| `--surface-overlay` | #2a2a2c | Modals, dropdowns |
-| `--text-primary` | #e5e1e4 | Headings, important text |
-| `--text-secondary` | #8a8a8a | Body text |
-| `--text-muted` | #6b6b6b | Labels |
-| `--text-faint` | #4a4a4a | Placeholders, line numbers |
-| `--accent` | #5bb5a2 | CTAs, active states, progress |
-| `--base-a` | #6bbd7a | Adenine |
-| `--base-t` | #d47a7a | Thymine |
-| `--base-c` | #6b9fd4 | Cytosine |
-| `--base-g` | #c9a855 | Guanine |
-
-### Typography
-
-- Sans: Inter. Mono: JetBrains Mono. One family each.
-- H1: 28px weight 500. Body: 14px weight 400. Labels: 11px uppercase tracking 0.08em. Code: 13px mono.
-
-### Animation
-
-- Duration: 0.2-0.3s. Easing: cubic-bezier(0.16, 1, 0.3, 1). Stagger: 30ms per item.
-- GSAP for sequence timelines. Framer Motion for everything else.
-
-### Rules
-
-- Tonal surface separation, not borders. Section by shifting background hex, not adding 1px strokes.
-- Color carries meaning, not decoration. Bases are colored because that is data. Everything else is grayscale.
-- Minimal border-radius (8px max). No pills on buttons.
-- No pure black (#000000). No pure white (#FFFFFF). Use the surface/text tokens.
-
----
-
-## 11. Code conventions
-
-- SOLID. One component = one concern.
-- No `any` types.
-- No fetch logic inside components. Use hooks.
-- No nested ternaries in JSX.
-- API responses mapped to domain types at the boundary (hooks/lib), never inside components.
-- Zustand for shared pipeline state. Local useState for component-internal state.
-- Zustand selectors to prevent unnecessary re-renders: `useStore((s) => s.field)`.
-
----
-
-## 12. Prize tracks
-
-Targeting: **Grand Prize**, **Societal Impact (ASUS)**, **Best UI/UX**, **Most Creative**.
-
-The ASUS Societal Impact track is the strongest fit. We are using ASUS hardware (GX10) to compress drug discovery timelines. The prize is more ASUS hardware.
-
----
-
-## 13. Rule for future changes
-
-Every architecture or doc update must include:
-1. An **as-built** section (what exists in code now).
-2. A **target** section (what is intended next).
-3. A **gap list** (explicit missing pieces).
-4. A corresponding test or verification command.
+# Helix Source of Truth
+
+Date: 2026-03-29  
+Status: Canonical
+
+## Doc Precedence
+
+1. This file is the only canonical planning and execution source.
+2. `/Users/vishnu/Documents/Helix/ARCHITECTURE.md` and `/Users/vishnu/Documents/Helix/BACKEND_ARCHITECTURE.md` are reference context only.
+3. If there is conflict, code + this document win.
+
+## One-line Product Goal
+
+Helix is a genomic design IDE demo where a user submits a design goal, watches candidate DNA generation live, compares ranked candidates, edits bases inline, and sees immediate model feedback plus structure context.
+
+## As-built Snapshot (2026-03-29)
+
+### Backend
+
+- FastAPI endpoints are live: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`.
+- WebSocket event contract now includes:
+  - `pipeline_manifest`
+  - `stage_status`
+  - `candidate_status`
+  - `intent_parsed`
+  - `retrieval_progress`
+  - `generation_token`
+  - `candidate_scored`
+  - `structure_ready`
+  - `explanation_chunk` (candidate-bound)
+  - `pipeline_complete` (with requested/completed/failed counters)
+- `/api/design` accepts `run_profile: "demo" | "live"` (default `demo`) and `num_candidates`.
+- Generation orchestration now emits N candidate placeholders and guarantees `pipeline_complete.candidates` includes one record per requested candidate ID.
+- Stage state is orchestrator-driven (`stage_status`) instead of frontend inference.
+- Explanation chunks include `candidate_id`.
+- Retrieval and stage flow are timeout-bounded in profile configs.
+- Candidate scoring events now include per-position likelihoods so the frontend can render a true sequence heatmap.
+- Generation and scoring now degrade to deterministic fallback instead of dropping candidate IDs on upstream model/API failures.
+- Structure fallback now emits richer synthetic PDB backbones (hundreds of atoms, not tiny line fragments) for dependable 3D visuals.
+- New `agent/chat` endpoint runs tool-style actions for side-panel chat:
+  - explain active candidate
+  - explicit base edit by position
+  - objective-driven single-step optimization
+  - compare all candidates in current session
+
+### Mock Frontend
+
+- `/Users/vishnu/Documents/Helix/mock_frontend` is now a Vite + React app.
+- Uses reducer/store single source of truth for full WS event handling.
+- Silent autoplay enabled by default.
+- Visual stack includes React Flow stage DAG, multi-lane DNA stream, candidate race cards, sequence heatmap overlays, and 3Dmol structure panel.
+- Side panel is now functional agent chat (not static copy): each message can execute backend tools and mutate candidate state.
+- Scientific details are moved to collapsible drawer.
+
+### Real Frontend
+
+- `/Users/vishnu/Documents/Helix/frontend` remains untouched by this reset.
+
+## Public Contracts
+
+### `POST /api/design` request
+
+```json
+{
+  "goal": "Design ...",
+  "session_id": "uuid-or-custom",
+  "num_candidates": 5,
+  "run_profile": "demo"
+}
+```
+
+### `pipeline_manifest`
+
+```json
+{
+  "event": "pipeline_manifest",
+  "data": {
+    "session_id": "abc",
+    "requested_candidates": 5,
+    "candidate_ids": [0, 1, 2, 3, 4],
+    "run_profile": "demo"
+  }
+}
+```
+
+### `stage_status`
+
+```json
+{
+  "event": "stage_status",
+  "data": {
+    "stage": "generation",
+    "status": "active",
+    "progress": 0.42
+  }
+}
+```
+
+### `candidate_status`
+
+```json
+{
+  "event": "candidate_status",
+  "data": {
+    "candidate_id": 3,
+    "status": "failed",
+    "reason": "generation_timeout"
+  }
+}
+```
+
+### `explanation_chunk`
+
+```json
+{
+  "event": "explanation_chunk",
+  "data": {
+    "candidate_id": 1,
+    "text": "..."
+  }
+}
+```
+
+### `pipeline_complete`
+
+```json
+{
+  "event": "pipeline_complete",
+  "data": {
+    "requested_candidates": 5,
+    "completed_candidates": 4,
+    "failed_candidates": 1,
+    "candidates": [
+      {
+        "id": 0,
+        "status": "structured",
+        "sequence": "...",
+        "scores": { "functional": 0.8, "combined": 0.69 },
+        "pdb_data": "...",
+        "confidence": 0.73,
+        "error": null
+      }
+    ]
+  }
+}
+```
+
+### `POST /api/agent/chat` request
+
+```json
+{
+  "session_id": "abc",
+  "candidate_id": 0,
+  "message": "change base position 42 to G"
+}
+```
+
+### `POST /api/agent/chat` response (shape)
+
+```json
+{
+  "assistant_message": "...",
+  "tool_calls": [
+    { "tool": "edit_base", "status": "ok", "summary": "Mutated position 42 to G." }
+  ],
+  "candidate_update": {
+    "candidate_id": 0,
+    "sequence": "...",
+    "scores": {
+      "functional": 0.73,
+      "tissue_specificity": 0.40,
+      "off_target": 0.00,
+      "novelty": 0.43,
+      "combined": 0.66
+    },
+    "mutation": {
+      "position": 42,
+      "reference_base": "T",
+      "new_base": "G"
+    },
+    "per_position_scores": [{ "position": 0, "score": -0.41 }]
+  },
+  "comparison": null
+}
+```
+
+## Current Gaps
+
+1. Agent loop is deterministic tool-routing, not yet full multi-step planner memory with LangGraph state graphs.
+2. 3D panel currently depends on ESMFold availability and fallback; no AlphaFold-specific confidence channels rendered yet.
+3. UI is now functional and clearer, but still needs final visual polish pass to reach “judge showpiece” quality.
+
+## Acceptance Checklist
+
+- Backend contract tests pass for new WS events and `run_profile`.
+- `/api/agent/chat` can explain, edit, optimize, and compare candidates with persisted state updates.
+- Stage transitions never regress (`pending -> active -> done|failed`).
+- Requesting 5 candidates yields 5 terminal records in `pipeline_complete`.
+- Explanation chunks are candidate-bound.
+- Mock frontend starts silent autoplay by default and reaches `pipeline_complete` without manual input.
+- Inline base edit round-trip updates active candidate and score panel.
+- Heatmap track updates from per-position likelihood scores.
+- Real frontend remains untouched.
+
+## Runbook
+
+### Backend
+
+```bash
+cd /Users/vishnu/Documents/Helix/backend
+source .venv/bin/activate
+redis-server
+uvicorn main:app --reload --port 8000
+```
+
+### Mock Frontend
+
+```bash
+cd /Users/vishnu/Documents/Helix/mock_frontend
+npm install
+npm run dev
+```
+
+### Focused Verification
+
+```bash
+cd /Users/vishnu/Documents/Helix/backend
+source .venv/bin/activate
+pytest -q tests/test_ws_manager.py tests/test_ws_events.py tests/test_orchestrator.py tests/test_pipeline_e2e_contract.py tests/test_main_api.py tests/test_api_validation_matrix.py
+```

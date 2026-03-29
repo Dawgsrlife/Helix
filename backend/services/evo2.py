@@ -387,18 +387,19 @@ class Evo2NIMService(Evo2Service):
         self, seed: str, n_tokens: int, temperature: float = 1.0
     ) -> AsyncGenerator[str, None]:
         try:
+            clamped_temp = max(0.01, min(float(temperature), 1.0))
             data = await self._post({
                 "sequence": seed,
                 "num_tokens": n_tokens,
                 "top_k": 4,
                 "enable_sampled_probs": True,
-                "temperature": temperature,
+                "temperature": clamped_temp,
             })
             generated = _extract_generated_sequence(data)
             suffix = generated[len(seed):] if generated.startswith(seed) else generated
-        except Exception as exc:
-            if not self._is_retryable_nim_error(exc):
-                raise
+        except Exception:
+            # Any NIM API failure (422, 429, 5xx, timeout) falls back to mock.
+            # Never let an API error crash the pipeline.
             suffix = await self._fallback_generate(seed, n_tokens, temperature)
         for base in suffix.upper():
             if base not in ("A", "T", "C", "G", "N"):

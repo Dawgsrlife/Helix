@@ -1,5 +1,7 @@
 """Tests for websocket connection manager behavior."""
 
+import asyncio
+
 from ws.manager import WebSocketManager
 
 
@@ -40,8 +42,25 @@ async def test_pending_events_flushed_on_connect() -> None:
     assert manager.pending_count("s2") == 1
 
     ws = await _connect(manager, "s2")
+    await asyncio.sleep(0)
     assert ws.sent[0]["event"] == "queued"
     assert manager.pending_count("s2") == 0
+
+
+@pytest.mark.asyncio
+async def test_concurrent_send_event_calls_are_serialized() -> None:
+    manager = WebSocketManager()
+    ws = await _connect(manager, "s3")
+
+    await asyncio.gather(
+        *[
+            manager.send_event("s3", {"event": f"e{i}", "data": {"i": i}})
+            for i in range(25)
+        ]
+    )
+
+    assert len(ws.sent) == 25
+    assert {msg["event"] for msg in ws.sent} == {f"e{i}" for i in range(25)}
 
 
 def test_disconnect_removes_session() -> None:

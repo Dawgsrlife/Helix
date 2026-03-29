@@ -88,3 +88,10 @@ def test_design_response_contract_fields(client: TestClient) -> None:
     assert body["status"] == "pipeline_started"
     assert body["ws_url"] == "ws://testserver/ws/pipeline/contract-1"
 
+
+def test_design_rejects_invalid_run_profile(client: TestClient) -> None:
+    res = client.post(
+        "/api/design",
+        json={"goal": "Design BDNF enhancer", "session_id": "contract-bad-profile", "run_profile": "fast"},
+    )
+    assert res.status_code == 422

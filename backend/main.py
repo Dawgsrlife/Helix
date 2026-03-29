@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from models.requests import (
     AnalyzeRequest,
+    AgentChatRequest,
     BaseEditRequest,
     DesignRequest,
     FollowupEditRequest,
@@ -17,6 +18,9 @@ from models.requests import (
 )
 from models.responses import (
     AnalysisResponse,
+    AgentCandidateUpdateResponse,
+    AgentChatResponse,
+    AgentToolCallResponse,
     BaseEditResponse,
     CandidateScoresResponse,
     DesignAcceptedResponse,
@@ -34,6 +38,8 @@ from pipeline.orchestrator import (
     run_generation_pipeline,
 )
 from services.evo2 import create_evo2_service
+from services.mock_pdb import build_mock_pdb_from_dna
+from services.agentic_copilot import AgenticCopilot
 from services.session_store import (
     CandidateNotFoundError,
     SessionLockTimeoutError,
@@ -43,6 +49,12 @@ from services.session_store import (
 from services.structure import predict_structure
 from services.translation import find_orfs
 from ws.manager import WebSocketManager
+from ws.events import (
+    CandidateStatusData,
+    CandidateStatusEvent,
+    StructureReadyData,
+    StructureReadyEvent,
+)
 
 app = FastAPI(title="Helix Backend", version="0.1.0")
 app.add_middleware(
@@ -56,6 +68,7 @@ app.add_middleware(
 ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
+copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
 
 
 @app.on_event("startup")
@@ -95,23 +108,22 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
+    num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
     await session_store.initialize_session(session_id)
-    await session_store.set_pending_goal(session_id, request.goal)
-    if ws_manager.has_session(session_id):
-        pending_goal = await session_store.pop_pending_goal(session_id)
-        if pending_goal is not None:
-            asyncio.create_task(
-                run_generation_pipeline(
-                    manager=ws_manager,
-                    service=evo2_service,
-                    session_id=session_id,
-                    goal=pending_goal,
-                    seed_sequence=DEFAULT_SEED,
-                    on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
-                        session_id, candidate_id, sequence
-                    ),
-                )
-            )
+    asyncio.create_task(
+        run_generation_pipeline(
+            manager=ws_manager,
+            service=evo2_service,
+            session_id=session_id,
+            goal=request.goal,
+            n_candidates=num_candidates,
+            run_profile=request.run_profile,
+            seed_sequence=DEFAULT_SEED,
+            on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
+                session_id, candidate_id, sequence
+            ),
+        )
+    )
     return DesignAcceptedResponse(
         session_id=session_id,
         ws_url=_build_ws_url(http_request, session_id),
@@ -188,6 +200,76 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
     return FollowupAcceptedResponse(steps_rerunning=steps)
 
 
+@app.post("/api/agent/chat", response_model=AgentChatResponse)
+async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
+    try:
+        async with session_store.candidate_guard(request.session_id, request.candidate_id):
+            result = await copilot.chat(
+                session_id=request.session_id,
+                candidate_id=request.candidate_id,
+                message=request.message,
+                history=request.history,
+            )
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except CandidateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
+    except SessionLockTimeoutError as exc:
+        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
+
+    candidate_update = None
+    if result.candidate_update is not None:
+        update = result.candidate_update
+        pdb_data = update.pdb_data
+        confidence = update.confidence
+        structure_model = update.structure_model
+        if pdb_data is None:
+            try:
+                pdb_data, confidence, structure_model = await _predict_structure_snapshot(
+                    sequence=update.sequence,
+                    candidate_id=update.candidate_id,
+                )
+                update.pdb_data = pdb_data
+                update.confidence = confidence
+                update.structure_model = structure_model
+                await ws_manager.send_event(
+                    request.session_id,
+                    StructureReadyEvent(
+                        data=StructureReadyData(
+                            candidate_id=update.candidate_id,
+                            pdb_data=pdb_data,
+                            confidence=confidence,
+                        )
+                    ).to_json(),
+                )
+                await ws_manager.send_event(
+                    request.session_id,
+                    CandidateStatusEvent(
+                        data=CandidateStatusData(candidate_id=update.candidate_id, status="structured")
+                    ).to_json(),
+                )
+            except Exception:
+                # Keep chat endpoint resilient even if structure refresh fails.
+                pass
+        candidate_update = AgentCandidateUpdateResponse(
+            candidate_id=update.candidate_id,
+            sequence=update.sequence,
+            scores=CandidateScoresResponse(**update.scores),
+            mutation=update.mutation,
+            per_position_scores=update.per_position_scores,
+            pdb_data=update.pdb_data,
+            confidence=update.confidence,
+            structure_model=update.structure_model,
+        )
+
+    return AgentChatResponse(
+        assistant_message=result.assistant_message,
+        tool_calls=[AgentToolCallResponse(**tool.to_dict()) for tool in result.tool_calls],
+        candidate_update=candidate_update,
+        comparison=result.comparison,
+    )
+
+
 @app.post("/api/mutations", response_model=MutationResponse)
 async def mutations(request: MutationRequest) -> MutationResponse:
     if request.position < 0 or request.position >= len(request.sequence):
@@ -208,14 +290,9 @@ async def structure(request: StructureRequest) -> StructureResponse:
     if request.region_start < 0 or request.region_end > len(sequence) or request.region_start >= request.region_end:
         raise HTTPException(status_code=422, detail="invalid structure region")
 
-    if settings.structure_mode == StructureMode.ESMFOLD:
-        result = await predict_structure(sequence, request.region_start, request.region_end)
-        if result is not None:
-            return StructureResponse(pdb_data=result.pdb_data, model=result.model, confidence=result.confidence)
-
-    # Fallback to mock
-    pdb = _mock_pdb_from_sequence(sequence[request.region_start:request.region_end])
-    return StructureResponse(pdb_data=pdb, model="mock", confidence=0.71)
+    region = sequence[request.region_start:request.region_end]
+    pdb_data, confidence, model = await _predict_structure_snapshot(sequence=region, candidate_id=0)
+    return StructureResponse(pdb_data=pdb_data, model=model, confidence=confidence)
 
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -232,27 +309,20 @@ async def health() -> HealthResponse:
 @app.websocket("/ws/pipeline/{session_id}")
 async def pipeline_ws(websocket: WebSocket, session_id: str) -> None:
     await ws_manager.connect(websocket, session_id)
-    pending_goal = await session_store.pop_pending_goal(session_id)
-    if pending_goal is not None:
-        async with session_store.candidate_guard(session_id, 0):
-            seed_sequence = await session_store.seed_for_session(session_id)
-        asyncio.create_task(
-            run_generation_pipeline(
-                manager=ws_manager,
-                service=evo2_service,
-                session_id=session_id,
-                goal=pending_goal,
-                seed_sequence=seed_sequence,
-                on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
-                    session_id, candidate_id, sequence
-                ),
-            )
-        )
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(session_id)
+
+
+async def _predict_structure_snapshot(*, sequence: str, candidate_id: int) -> tuple[str, float, str]:
+    if settings.structure_mode == StructureMode.ESMFOLD:
+        result = await predict_structure(sequence)
+        if result is not None:
+            return result.pdb_data, result.confidence, result.model
+    pdb, confidence = build_mock_pdb_from_dna(sequence, candidate_id=candidate_id)
+    return pdb, confidence, "mock"
 
 def _build_ws_url(http_request: Request, session_id: str) -> str:
     ws_scheme = "wss" if http_request.url.scheme == "https" else "ws"
@@ -263,20 +333,3 @@ def _build_ws_url(http_request: Request, session_id: str) -> str:
 async def _persist_candidate_sequence(session_id: str, candidate_id: int, sequence: str) -> None:
     async with session_store.candidate_guard(session_id, candidate_id):
         await session_store.set_candidate_sequence(session_id, candidate_id, sequence)
-
-
-def _mock_pdb_from_sequence(sequence: str) -> str:
-    lines = [
-        "HEADER    HELIX MOCK STRUCTURE",
-        "TITLE     MOCK PDB",
-        f"REMARK    LENGTH {len(sequence)}",
-    ]
-    for idx in range(1, min(len(sequence), 8) + 1):
-        x = 7.0 + idx * 1.1
-        y = 3.0 + idx * 0.8
-        z = 1.0 + idx * 0.5
-        lines.append(
-            f"ATOM  {idx:5d}  CA  ALA A{idx:4d}    {x:8.3f}{y:8.3f}{z:8.3f}  1.00 70.00           C"
-        )
-    lines.append("END")
-    return "\n".join(lines)

@@ -1,6 +1,8 @@
 """Pydantic request models for all API endpoints."""
 
-from pydantic import BaseModel, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
 
 
 VALID_BASES = frozenset("ATCGN")
@@ -26,6 +28,8 @@ def _validate_base(base: str) -> str:
 class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
+    num_candidates: int | None = None
+    run_profile: Literal["demo", "live"] = "demo"
 
 
 class AnalyzeRequest(BaseModel):
@@ -53,6 +57,13 @@ class FollowupEditRequest(BaseModel):
     session_id: str
     message: str
     candidate_id: int | None = None
+
+
+class AgentChatRequest(BaseModel):
+    session_id: str
+    candidate_id: int = 0
+    message: str
+    history: list[dict[str, str]] = Field(default_factory=list)
 
 
 class MutationRequest(BaseModel):
