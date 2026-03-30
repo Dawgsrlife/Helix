@@ -115,6 +115,8 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
     num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
+    # Agent memory should only live within the active chat lifecycle for this run.
+    copilot.clear_session_memory(session_id=session_id)
     await session_store.initialize_session(session_id)
     _set_session_context(
         session_id,
@@ -223,6 +225,20 @@ async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedRespons
 
 @app.post("/api/agent/chat", response_model=AgentChatResponse)
 async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
+    # Auto-bootstrap session when frontend sends a sequence but no real session exists
+    try:
+        await session_store.require_candidate_sequence(request.session_id, request.candidate_id)
+    except (SessionNotFoundError, CandidateNotFoundError):
+        if request.sequence:
+            await session_store.set_candidate_sequence(
+                request.session_id, request.candidate_id, request.sequence,
+            )
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail="session not found — include 'sequence' to auto-create",
+            )
+
     try:
         async with session_store.candidate_guard(request.session_id, request.candidate_id):
             result = await copilot.chat(

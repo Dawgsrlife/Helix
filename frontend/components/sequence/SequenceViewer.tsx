@@ -87,6 +87,7 @@ export default function SequenceViewer({
                     nucleotide={base.nucleotide}
                     position={base.position}
                     annotationType={base.annotationType}
+                    likelihoodScore={base.likelihoodScore}
                     isHighlighted={base.position === highlightedPosition}
                     onClick={onBaseClick}
                   />

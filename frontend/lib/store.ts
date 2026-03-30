@@ -43,6 +43,8 @@ interface Candidate {
   scores: { functional: number; tissue: number; offTarget: number; novelty: number };
   overall: number;
   status: string;
+  perPositionScores?: LikelihoodScore[];
+  error?: string | null;
 }
 
 interface RetrievalStatus {
@@ -74,6 +76,7 @@ interface HelixState {
   editHistory: EditEntry[];
   chatMessages: ChatMessage[];
   chatOpen: boolean;
+  chatDraft: string | null;
   candidates: Candidate[];
   activeCandidateId: number | null;
 
@@ -114,6 +117,8 @@ interface HelixState {
   addEditEntry: (entry: Omit<EditEntry, "timestamp">) => void;
   addChatMessage: (msg: Omit<ChatMessage, "timestamp">) => void;
   toggleChat: () => void;
+  setChatOpen: (open: boolean) => void;
+  setChatDraft: (draft: string | null) => void;
   setCandidates: (candidates: Candidate[]) => void;
   setActiveCandidateId: (id: number | null) => void;
   setSessionId: (id: string | null) => void;
@@ -147,7 +152,8 @@ const initialState = {
   mutationLoading: false,
   editHistory: [] as EditEntry[],
   chatMessages: [] as ChatMessage[],
-  chatOpen: false,
+  chatOpen: true,
+  chatDraft: null as string | null,
   candidates: [] as Candidate[],
   activeCandidateId: null as number | null,
   sessionId: null as string | null,
@@ -177,44 +183,44 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   setSequence: (seq) => set({ rawSequence: seq }),
 
   setAnalysisResult: (result) => {
+    const state = get();
     const regions = result.regions;
     const bases = parseSequence(result.rawSequence, regions).map((base, i) => ({
       ...base,
       likelihoodScore: result.perPositionScores[i]?.score,
     }));
-    // Generate mock candidates from analysis
-    const candidates: Candidate[] = [{
-      id: 0,
-      sequence: result.rawSequence,
-      scores: {
-        functional: 0.85 + Math.random() * 0.12,
-        tissue: 0.70 + Math.random() * 0.20,
-        offTarget: Math.random() * 0.05,
-        novelty: 0.50 + Math.random() * 0.30,
-      },
-      overall: 0,
-      status: "scored",
-    }];
-    candidates[0].overall = (candidates[0].scores.functional * 0.35 + candidates[0].scores.tissue * 0.30 + (1 - candidates[0].scores.offTarget) * 0.20 + candidates[0].scores.novelty * 0.15) * 100;
 
-    // Add 2-3 more mock candidates
-    for (let i = 1; i <= 3; i++) {
-      const c: Candidate = {
-        id: i,
+    let candidates = [...state.candidates];
+    if (candidates.length === 0) {
+      // For direct /api/analyze path (non-pipeline), create one deterministic candidate.
+      const meanAbs = result.perPositionScores.length
+        ? result.perPositionScores.reduce((sum, row) => sum + Math.abs(row.score), 0) / result.perPositionScores.length
+        : 0.5;
+      const normalized = Math.max(0, Math.min(1, meanAbs / 2.5));
+      const baseCandidate: Candidate = {
+        id: 0,
         sequence: result.rawSequence,
         scores: {
-          functional: 0.60 + Math.random() * 0.30,
-          tissue: 0.50 + Math.random() * 0.35,
-          offTarget: Math.random() * 0.08,
-          novelty: 0.40 + Math.random() * 0.40,
+          functional: Math.max(0.35, Math.min(0.92, 0.45 + normalized * 0.4)),
+          tissue: Math.max(0.2, Math.min(0.9, 0.4 + normalized * 0.3)),
+          offTarget: Math.max(0.0, Math.min(0.35, 0.18 - normalized * 0.12)),
+          novelty: Math.max(0.2, Math.min(0.9, 0.35 + normalized * 0.35)),
         },
         overall: 0,
         status: "scored",
+        perPositionScores: result.perPositionScores,
+        error: null,
       };
-      c.overall = (c.scores.functional * 0.35 + c.scores.tissue * 0.30 + (1 - c.scores.offTarget) * 0.20 + c.scores.novelty * 0.15) * 100;
-      candidates.push(c);
+      baseCandidate.overall =
+        (baseCandidate.scores.functional * 0.35 +
+          baseCandidate.scores.tissue * 0.3 +
+          (1 - baseCandidate.scores.offTarget) * 0.2 +
+          baseCandidate.scores.novelty * 0.15) *
+        100;
+      candidates = [baseCandidate];
     }
-    candidates.sort((a, b) => b.overall - a.overall);
+
+    const activeCandidateId = state.activeCandidateId ?? candidates[0]?.id ?? null;
 
     set({
       analysisResult: result,
@@ -222,9 +228,9 @@ export const useHelixStore = create<HelixState>((set, get) => ({
       regions, bases,
       scores: result.perPositionScores,
       pipelineStatus: "complete",
-      viewMode: "analyze",
+      viewMode: "structure",
       candidates,
-      activeCandidateId: candidates[0].id,
+      activeCandidateId,
       error: null,
     });
   },
@@ -249,8 +255,29 @@ export const useHelixStore = create<HelixState>((set, get) => ({
   addEditEntry: (entry) => set({ editHistory: [...get().editHistory, { ...entry, timestamp: Date.now() }] }),
   addChatMessage: (msg) => set({ chatMessages: [...get().chatMessages, { ...msg, timestamp: Date.now() }] }),
   toggleChat: () => set({ chatOpen: !get().chatOpen }),
+  setChatOpen: (open) => set({ chatOpen: open }),
+  setChatDraft: (draft) => set({ chatDraft: draft }),
   setCandidates: (candidates) => set({ candidates }),
-  setActiveCandidateId: (id) => set({ activeCandidateId: id }),
+  setActiveCandidateId: (id) => {
+    const state = get();
+    const candidate = state.candidates.find((c) => c.id === id);
+    if (!candidate) {
+      set({ activeCandidateId: id });
+      return;
+    }
+    const regions = state.regions;
+    const perPosition = candidate.perPositionScores ?? state.scores;
+    const nextBases = parseSequence(candidate.sequence, regions).map((base, i) => ({
+      ...base,
+      likelihoodScore: perPosition[i]?.score,
+    }));
+    set({
+      activeCandidateId: id,
+      rawSequence: candidate.sequence,
+      scores: perPosition,
+      bases: nextBases,
+    });
+  },
   setSessionId: (id) => set({ sessionId: id }),
   setWsStatus: (status) => set({ wsStatus: status }),
   appendGeneratingToken: (token) => set((s) => ({

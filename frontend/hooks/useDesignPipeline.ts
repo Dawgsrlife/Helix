@@ -4,6 +4,7 @@ import { useCallback, useRef } from "react";
 import { submitDesign } from "@/lib/api";
 import { useHelixStore } from "@/lib/store";
 import { parseSequence } from "@/lib/sequenceUtils";
+import type { LikelihoodScore } from "@/types";
 
 /**
  * Hook for the streaming design pipeline.
@@ -21,6 +22,9 @@ import { parseSequence } from "@/lib/sequenceUtils";
  */
 export function useDesignPipeline() {
   const wsRef = useRef<WebSocket | null>(null);
+  const pipelineCompletedRef = useRef(false);
+  const candidateSequenceRef = useRef<Record<number, string>>({});
+  const candidateScoresRef = useRef<Record<number, LikelihoodScore[]>>({});
 
   const setPipelineStatus = useHelixStore((s) => s.setPipelineStatus);
   const setPipelineStage = useHelixStore((s) => s.setPipelineStage);
@@ -52,7 +56,14 @@ export function useDesignPipeline() {
 
       try {
         // Step 1: POST /api/design → get session + WS URL
-        const { sessionId, wsUrl } = await submitDesign(goal);
+        pipelineCompletedRef.current = false;
+        candidateSequenceRef.current = {};
+        candidateScoresRef.current = {};
+        const { sessionId, wsUrl } = await submitDesign(goal, {
+          numCandidates: 10,
+          runProfile: "demo",
+          truthMode: "demo_fallback",
+        });
         setSessionId(sessionId);
 
         // Step 2: Open WebSocket
@@ -77,16 +88,37 @@ export function useDesignPipeline() {
         };
 
         ws.onerror = () => {
+          useHelixStore.getState().setWsStatus("disconnected");
+          useHelixStore.getState().setPipelineStatus("error");
+          useHelixStore.getState().setViewMode("input");
           setError("WebSocket connection error");
+          try {
+            ws.close();
+          } catch {
+            // noop
+          }
         };
 
         ws.onclose = () => {
+          const store = useHelixStore.getState();
+          if (!pipelineCompletedRef.current && store.pipelineStatus === "analyzing") {
+            store.setPipelineStatus("error");
+            store.setViewMode("input");
+            store.setError("Pipeline stream ended unexpectedly. Please retry.");
+          }
           wsRef.current = null;
           useHelixStore.getState().setWsStatus("disconnected");
         };
       } catch {
-        // Backend unavailable — run mock pipeline simulation
-        runMockPipeline(goal);
+        const allowUiMocks = process.env.NEXT_PUBLIC_ALLOW_UI_MOCKS === "true";
+        if (allowUiMocks) {
+          // Explicit opt-in for local mock demos only.
+          runMockPipeline(goal);
+          return;
+        }
+        setPipelineStatus("error");
+        setViewMode("input");
+        setError("Could not connect to backend pipeline at http://localhost:8000 (or NEXT_PUBLIC_API_URL).");
       }
     },
     [
@@ -162,6 +194,57 @@ export function useDesignPipeline() {
         break;
       }
 
+      case "pipeline_manifest": {
+        const candidateIds = Array.isArray(msg.data.candidate_ids)
+          ? (msg.data.candidate_ids as number[])
+          : [0];
+        const placeholders = candidateIds.map((id) => ({
+          id,
+          sequence: "",
+          scores: { functional: 0, tissue: 0, offTarget: 0, novelty: 0 },
+          overall: 0,
+          status: "queued",
+          perPositionScores: [],
+          error: null,
+        }));
+        store.setCandidates(placeholders);
+        store.setActiveCandidateId(candidateIds[0] ?? 0);
+        break;
+      }
+
+      case "stage_status": {
+        const stage = String(msg.data.stage ?? "");
+        const status = String(msg.data.status ?? "");
+        if (status === "active") {
+          store.setPipelineStage(stage);
+        }
+        if (status === "done" || status === "failed") {
+          store.addCompletedStage(stage);
+        }
+        break;
+      }
+
+      case "candidate_status": {
+        const candidateId = Number(msg.data.candidate_id ?? 0);
+        const status = String(msg.data.status ?? "queued");
+        const reason = typeof msg.data.reason === "string" ? msg.data.reason : null;
+        const existing = store.candidates.find((c) => c.id === candidateId);
+        const next = existing
+          ? { ...existing, status, error: reason }
+          : {
+              id: candidateId,
+              sequence: candidateSequenceRef.current[candidateId] ?? "",
+              scores: { functional: 0, tissue: 0, offTarget: 0, novelty: 0 },
+              overall: 0,
+              status,
+              perPositionScores: [],
+              error: reason,
+            };
+        const remaining = store.candidates.filter((c) => c.id !== candidateId);
+        store.setCandidates([...remaining, next].sort((a, b) => b.overall - a.overall));
+        break;
+      }
+
       case "retrieval_progress": {
         const source = msg.data.source as string;
         const status = msg.data.status as "pending" | "running" | "complete" | "failed";
@@ -183,6 +266,20 @@ export function useDesignPipeline() {
 
       case "generation_token": {
         const token = msg.data.token as string;
+        const candidateId = Number(msg.data.candidate_id ?? 0);
+        const current = candidateSequenceRef.current[candidateId] ?? "";
+        candidateSequenceRef.current[candidateId] = `${current}${token}`;
+
+        const existing = store.candidates.find((c) => c.id === candidateId);
+        if (existing) {
+          const updated = {
+            ...existing,
+            sequence: candidateSequenceRef.current[candidateId],
+            status: existing.status === "queued" ? "running" : existing.status,
+          };
+          const rest = store.candidates.filter((c) => c.id !== candidateId);
+          store.setCandidates([...rest, updated].sort((a, b) => b.overall - a.overall));
+        }
         store.appendGeneratingToken(token);
         break;
       }
@@ -200,27 +297,46 @@ export function useDesignPipeline() {
           combined?: number;
         };
         const candidateId = (msg.data.candidate_id as number) ?? 0;
+        const perPosition = Array.isArray(msg.data.per_position_scores)
+          ? (msg.data.per_position_scores as Array<{ position: number; score: number }>)
+          : [];
+        candidateScoresRef.current[candidateId] = perPosition;
+        const generatedSequence = candidateSequenceRef.current[candidateId] ?? "";
 
         // Update or create candidate with real scores
         const existing = store.candidates.find((c) => c.id === candidateId);
-        if (existing) {
-          store.setCandidates(
-            store.candidates.map((c) =>
-              c.id === candidateId
-                ? {
-                    ...c,
-                    scores: {
-                      functional: scores.functional,
-                      tissue: scores.tissue_specificity,
-                      offTarget: scores.off_target,
-                      novelty: scores.novelty,
-                    },
-                    overall: (scores.combined ?? 0) * 100,
-                    status: "scored",
-                  }
-                : c
-            )
-          );
+        const nextCandidate = {
+          ...(existing ?? {
+            id: candidateId,
+            sequence: generatedSequence,
+            scores: { functional: 0, tissue: 0, offTarget: 0, novelty: 0 },
+            overall: 0,
+            status: "running",
+            perPositionScores: [],
+            error: null,
+          }),
+          sequence: generatedSequence || existing?.sequence || "",
+          scores: {
+            functional: scores.functional,
+            tissue: scores.tissue_specificity,
+            offTarget: scores.off_target,
+            novelty: scores.novelty,
+          },
+          overall: (scores.combined ?? 0) * 100,
+          status: "scored",
+          perPositionScores: perPosition,
+          error: null,
+        };
+        const remaining = store.candidates.filter((c) => c.id !== candidateId);
+        const nextCandidates = [...remaining, nextCandidate].sort((a, b) => b.overall - a.overall);
+        store.setCandidates(nextCandidates);
+
+        if (store.activeCandidateId === candidateId && perPosition.length > 0) {
+          const bases = parseSequence(nextCandidate.sequence, store.regions).map((base, i) => ({
+            ...base,
+            likelihoodScore: perPosition[i]?.score,
+          }));
+          useHelixStore.setState({ scores: perPosition, bases, rawSequence: nextCandidate.sequence });
         }
         break;
       }
@@ -240,11 +356,14 @@ export function useDesignPipeline() {
       }
 
       case "pipeline_complete": {
+        pipelineCompletedRef.current = true;
         store.addCompletedStage("explanation");
 
         const candidates = msg.data.candidates as Array<{
           id: number;
           sequence: string;
+          status?: string;
+          error?: string | null;
           scores: {
             functional: number;
             tissue_specificity: number;
@@ -256,15 +375,20 @@ export function useDesignPipeline() {
         }>;
 
         if (candidates && candidates.length > 0) {
-          const primarySeq = candidates[0].sequence;
+          const sortedIncoming = [...candidates].sort(
+            (a, b) => (b.scores?.combined ?? -1) - (a.scores?.combined ?? -1)
+          );
+          const primarySeq = sortedIncoming[0].sequence;
           const regions = parseSequenceToRegions(primarySeq);
-          const perPositionScores = generateMockScores(primarySeq);
+          const primaryScores =
+            candidateScoresRef.current[sortedIncoming[0].id] ??
+            generateMockScores(primarySeq);
 
           // Build AnalysisResult from pipeline data
           const result = {
             rawSequence: primarySeq,
             regions,
-            perPositionScores,
+            perPositionScores: primaryScores,
             predictedProteins: candidates
               .filter((c) => c.pdb_data)
               .map((c) => ({
@@ -286,7 +410,9 @@ export function useDesignPipeline() {
               novelty: c.scores.novelty,
             },
             overall: (c.scores.combined ?? 0) * 100,
-            status: "scored" as const,
+            status: c.status ?? "scored",
+            perPositionScores: candidateScoresRef.current[c.id] ?? [],
+            error: c.error ?? null,
           }));
           mappedCandidates.sort((a, b) => b.overall - a.overall);
 

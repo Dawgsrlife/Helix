@@ -24,9 +24,9 @@
 
 import type { AnalysisResult, MutationEffect } from "@/types";
 
-// When NEXT_PUBLIC_API_URL is not set, use local Next.js API routes (same origin).
-// To connect to the real backend on the GX10: set NEXT_PUBLIC_API_URL=http://<gpu-ip>:8000
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Default to the real local backend to avoid silently hitting mock Next routes.
+// Override with NEXT_PUBLIC_API_URL when backend runs on another machine.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000";
 
 // ---------------------------------------------------------------------------
 // Response mappers (API shape -> domain type)
@@ -142,15 +142,34 @@ export interface DesignSession {
   wsUrl: string;
 }
 
+export interface SubmitDesignOptions {
+  sessionId?: string;
+  numCandidates?: number;
+  runProfile?: "demo" | "live";
+  truthMode?: "demo_fallback" | "real_only";
+}
+
 /** POST /api/design - Start a full design pipeline. Returns WS URL for streaming. */
 export async function submitDesign(
   goal: string,
-  sessionId?: string
+  options: SubmitDesignOptions = {}
 ): Promise<DesignSession> {
+  const {
+    sessionId,
+    numCandidates = 10,
+    runProfile = "demo",
+    truthMode = "demo_fallback",
+  } = options;
   const res = await fetch(`${API_BASE}/api/design`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ goal, session_id: sessionId }),
+    body: JSON.stringify({
+      goal,
+      session_id: sessionId,
+      num_candidates: numCandidates,
+      run_profile: runProfile,
+      truth_mode: truthMode,
+    }),
   });
   if (!res.ok) throw new Error(`Design submission failed: ${res.status}`);
   const data = await res.json();

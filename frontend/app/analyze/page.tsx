@@ -137,6 +137,8 @@ function AnalyzePageInner() {
   const activeCandidateId = useHelixStore((s) => s.activeCandidateId);
   const chatOpen = useHelixStore((s) => s.chatOpen);
   const toggleChat = useHelixStore((s) => s.toggleChat);
+  const setChatOpen = useHelixStore((s) => s.setChatOpen);
+  const setChatDraft = useHelixStore((s) => s.setChatDraft);
   const theme = useHelixStore((s) => s.theme);
   const wsStatus = useHelixStore((s) => s.wsStatus);
   const toggleTheme = useHelixStore((s) => s.toggleTheme);
@@ -211,6 +213,11 @@ function AnalyzePageInner() {
 
   // 3D ↔ sequence linking
   const [clickedResidue, setClickedResidue] = useState<number | null>(null);
+
+  const queueGuidedPrompt = useCallback((prompt: string) => {
+    setChatOpen(true);
+    setChatDraft(prompt);
+  }, [setChatDraft, setChatOpen]);
 
   const handleResidueClick = useCallback((residueSeq: number) => {
     const basePos = (residueSeq - 1) * 3;
@@ -762,6 +769,51 @@ function AnalyzePageInner() {
                       This 3D structure was predicted by <ScienceTooltip term="esmfold">ESMFold</ScienceTooltip> from the amino acid sequence encoded in your DNA.
                       Each sphere is one <ScienceTooltip term="residue">amino acid residue</ScienceTooltip>. Colors indicate the AI&apos;s confidence (<ScienceTooltip term="plddt">pLDDT score</ScienceTooltip>).
                     </p>
+                  </div>
+
+                  <div className="h-px mx-5" style={{ background: "var(--ghost-border)" }} />
+
+                  <div className="p-5">
+                    <span className="text-[11px] font-medium uppercase tracking-wider block mb-2" style={{ color: "var(--accent)" }}>
+                      Guided Next Steps
+                    </span>
+                    {(() => {
+                      const active = candidates.find((c) => c.id === (activeCandidateId ?? -1)) ?? candidates[0];
+                      if (!active) return null;
+                      const likely = active.scores.functional >= 0.7 ? "Promising" : active.scores.functional >= 0.55 ? "Moderate" : "Weak";
+                      const tissueFit = active.scores.tissue >= 0.7 ? "Strong" : active.scores.tissue >= 0.55 ? "Moderate" : "Weak";
+                      const safety = active.scores.offTarget <= 0.03 ? "Strong" : active.scores.offTarget <= 0.08 ? "Moderate" : "Risky";
+                      return (
+                        <>
+                          <p className="text-[12px] leading-relaxed mb-3" style={{ color: "var(--text-primary)" }}>
+                            Candidate #{active.id}: likely-to-work <strong>{likely}</strong>, tissue-fit <strong>{tissueFit}</strong>, safety <strong>{safety}</strong>.
+                          </p>
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => queueGuidedPrompt("Explain this structure and candidate in plain English for a patient-facing clinician and for a biotech researcher.")}
+                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                            >
+                              Explain this candidate for layman + clinician
+                            </button>
+                            <button
+                              onClick={() => queueGuidedPrompt("Improve this candidate for tissue specificity and show exact score changes.")}
+                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                            >
+                              Improve tissue specificity
+                            </button>
+                            <button
+                              onClick={() => queueGuidedPrompt("Reduce off-target risk and explain the tradeoffs in one concise paragraph.")}
+                              className="w-full text-left px-3 py-2 rounded-lg text-[11px] transition-colors hover:bg-white/[0.05]"
+                              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+                            >
+                              Make it safer
+                            </button>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   <div className="flex-1" />

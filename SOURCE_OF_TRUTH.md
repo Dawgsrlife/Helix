@@ -1,6 +1,6 @@
 # Helix Source of Truth
 
-Date: 2026-03-29  
+Date: 2026-03-30
 Status: Canonical
 
 ## Doc Precedence
@@ -11,50 +11,89 @@ Status: Canonical
 
 ## One-line Product Goal
 
-Helix is a genomic design IDE demo where a user submits a design goal, watches candidate DNA generation live, compares ranked candidates, edits bases inline, and sees immediate model feedback plus structure context.
+Helix is a free, open-source genomic design IDE where researchers submit a design goal, watch candidate DNA generation live, compare ranked candidates, edit bases inline, and get real-time AI feedback plus protein structure context.
 
-## As-built Snapshot (2026-03-29)
+## Post-Hackathon Status (2026-03-30)
+
+Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitioning from hackathon prototype to a production-grade open-source genomic research tool.
+
+### What's Real
+- NCBI, PubMed, ClinVar integrations (live API calls with retry/rate-limiting)
+- WebSocket streaming pipeline (intent → retrieval → generation → scoring → structure → explanation)
+- Evo2 service abstraction (mock, local 7B, NVIDIA NIM 40B)
+- Translation service (codon table, ORF finding, GC content — pure computation)
+- 4D scoring logic (functional, tissue specificity, off-target, novelty)
+- Session management (in-memory dev, Redis production)
+- Frontend workspace (Next.js 16, sequence viewer, 3D structure, leaderboard, chat)
+- 85 backend tests passing
+
+### What's Mocked / Faked
+- **Structure prediction** defaults to MOCK (synthetic PDB from `mock_pdb.py`). ESMFold integration exists but ESM Atlas API is unreliable. No local folding model.
+- **Evo2 inference** defaults to MOCK (Markov chain + heuristics). Real local/NIM modes exist but are not the default path.
+- **Explanation layer** returns hardcoded fallback strings when Gemini API is unavailable.
+- **Agent chat** is deterministic tool-routing, not multi-step planning.
+- **Frontend API layer** has mock fallbacks for every endpoint (works without backend).
+
+### What's Badly Done
+- **Orchestrator (`pipeline/orchestrator.py`)** has massive DRY violations: scoring fallback code copy-pasted 3x, structure prediction duplicated between generation and followup pipelines, no separation of concerns.
+- **No README** — cannot be open-sourced without one.
+- **No Docker/CI** — project can only run on the developer's machine.
+- **No `.env.example`** — new contributors can't configure the project.
+- **Mock frontend deleted** but still referenced in docs.
+
+---
+
+## Roadmap: Hackathon → Production
+
+Priority order. Each item is a self-contained PR. Do one at a time.
+
+### Phase 1: Code Quality & Foundation
+- [x] **1.1 Refactor orchestrator DRY violations** — Extract scoring, structure prediction, and event emission into reusable helpers. The orchestrator is the core of the pipeline and currently unmaintainable.
+- [ ] **1.2 README + .env.example** — Write a real README for open-source. Include setup instructions, architecture overview, screenshots.
+- [ ] **1.3 Dockerfile + docker-compose** — Backend, Redis, and frontend in containers. Anyone should be able to `docker compose up`.
+- [ ] **1.4 CI pipeline** — GitHub Actions: lint, type-check, test on every PR.
+
+### Phase 2: Real Integrations
+- [ ] **2.1 Real structure prediction** — Replace mock PDB with local ESMFold (via `esm` PyTorch package) or ColabFold. ESM Atlas API is deprecated; need local inference.
+- [ ] **2.2 Real explanation layer** — Wire up LLM streaming (Claude/Gemini) for mechanistic reports instead of hardcoded strings.
+- [ ] **2.3 Real agent loop** — Move from deterministic tool-routing to LangGraph state machine with memory and multi-step planning.
+
+### Phase 3: Scale & Polish
+- [ ] **3.1 Sequence length scaling** — Support full gene-length sequences (10k-100k bp). Current demo caps at ~3k.
+- [ ] **3.2 FASTA/GenBank import/export** — Researchers need to bring their own sequences and export results.
+- [ ] **3.3 Multi-user sessions** — Move beyond single-user. Auth, session isolation, concurrent pipelines.
+- [ ] **3.4 Frontend polish** — Loading states, error boundaries, responsive layout, accessibility.
+
+### Phase 4: Research-Grade Features
+- [ ] **4.1 Variant annotation** — ClinVar/gnomAD overlay on sequence viewer with pathogenicity predictions.
+- [ ] **4.2 Codon optimization** — For protein-coding designs, optimize codon usage for target organism.
+- [ ] **4.3 Off-target analysis** — BLAST integration for checking sequence uniqueness.
+- [ ] **4.4 Experiment tracking** — Version every design iteration (the "startup moat" from ARCHITECTURE.md).
+
+---
+
+## As-built Snapshot (2026-03-30)
 
 ### Backend
 
-- FastAPI endpoints are live: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`.
-- WebSocket event contract now includes:
-  - `pipeline_manifest`
-  - `stage_status`
-  - `candidate_status`
-  - `intent_parsed`
-  - `retrieval_progress`
-  - `generation_token`
-  - `candidate_scored`
-  - `structure_ready`
-  - `explanation_chunk` (candidate-bound)
-  - `pipeline_complete` (with requested/completed/failed counters)
-- `/api/design` accepts `run_profile: "demo" | "live"` (default `demo`) and `num_candidates`.
-- Generation orchestration now emits N candidate placeholders and guarantees `pipeline_complete.candidates` includes one record per requested candidate ID.
+- FastAPI endpoints: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`.
+- WebSocket event contract: `pipeline_manifest`, `stage_status`, `candidate_status`, `candidate_seed`, `intent_parsed`, `retrieval_progress`, `generation_token`, `candidate_scored`, `structure_ready`, `regulatory_map_ready`, `explanation_chunk`, `pipeline_complete`.
+- `/api/design` accepts `run_profile: "demo" | "live"`, `truth_mode`, and `num_candidates`.
+- Generation orchestration emits N candidate placeholders and guarantees `pipeline_complete.candidates` includes one record per requested candidate ID.
 - Stage state is orchestrator-driven (`stage_status`) instead of frontend inference.
-- Explanation chunks include `candidate_id`.
 - Retrieval and stage flow are timeout-bounded in profile configs.
-- Candidate scoring events now include per-position likelihoods so the frontend can render a true sequence heatmap.
-- Generation and scoring now degrade to deterministic fallback instead of dropping candidate IDs on upstream model/API failures.
-- Structure fallback now emits richer synthetic PDB backbones (hundreds of atoms, not tiny line fragments) for dependable 3D visuals.
-- New `agent/chat` endpoint runs tool-style actions for side-panel chat:
-  - explain active candidate
-  - explicit base edit by position
-  - objective-driven single-step optimization
-  - compare all candidates in current session
+- Candidate scoring events include per-position likelihoods for sequence heatmap rendering.
+- Generation and scoring degrade to deterministic fallback instead of dropping candidates.
+- Structure fallback emits richer synthetic PDB backbones (hundreds of atoms).
+- `agent/chat` endpoint runs tool-style actions: explain, edit, optimize, compare.
 
-### Mock Frontend
+### Frontend
 
-- `/Users/vishnu/Documents/Helix/mock_frontend` is now a Vite + React app.
-- Uses reducer/store single source of truth for full WS event handling.
-- Silent autoplay enabled by default.
-- Visual stack includes React Flow stage DAG, multi-lane DNA stream, candidate race cards, sequence heatmap overlays, and 3Dmol structure panel.
-- Side panel is now functional agent chat (not static copy): each message can execute backend tools and mutate candidate state.
-- Scientific details are moved to collapsible drawer.
-
-### Real Frontend
-
-- `/Users/vishnu/Documents/Helix/frontend` remains untouched by this reset.
+- Next.js 16 + TypeScript + React 19 workspace at `/frontend`.
+- Zustand store is single source of truth for all state.
+- Components: SequenceViewer, ProteinViewer (Three.js), CandidateLeaderboard, ChatPanel, PipelineStatus, AnnotationTrack, LikelihoodGraph.
+- WebSocket event handling via `useDesignPipeline` hook.
+- Mock fallbacks in all hooks for backend-independent development.
 
 ## Public Contracts
 
@@ -184,24 +223,6 @@ Helix is a genomic design IDE demo where a user submits a design goal, watches c
 }
 ```
 
-## Current Gaps
-
-1. Agent loop is deterministic tool-routing, not yet full multi-step planner memory with LangGraph state graphs.
-2. 3D panel currently depends on ESMFold availability and fallback; no AlphaFold-specific confidence channels rendered yet.
-3. UI is now functional and clearer, but still needs final visual polish pass to reach “judge showpiece” quality.
-
-## Acceptance Checklist
-
-- Backend contract tests pass for new WS events and `run_profile`.
-- `/api/agent/chat` can explain, edit, optimize, and compare candidates with persisted state updates.
-- Stage transitions never regress (`pending -> active -> done|failed`).
-- Requesting 5 candidates yields 5 terminal records in `pipeline_complete`.
-- Explanation chunks are candidate-bound.
-- Mock frontend starts silent autoplay by default and reaches `pipeline_complete` without manual input.
-- Inline base edit round-trip updates active candidate and score panel.
-- Heatmap track updates from per-position likelihood scores.
-- Real frontend remains untouched.
-
 ## Runbook
 
 ### Backend
@@ -213,18 +234,18 @@ redis-server
 uvicorn main:app --reload --port 8000
 ```
 
-### Mock Frontend
+### Frontend
 
 ```bash
-cd /Users/vishnu/Documents/Helix/mock_frontend
+cd /Users/vishnu/Documents/Helix/frontend
 npm install
 npm run dev
 ```
 
-### Focused Verification
+### Tests
 
 ```bash
 cd /Users/vishnu/Documents/Helix/backend
 source .venv/bin/activate
-pytest -q tests/test_ws_manager.py tests/test_ws_events.py tests/test_orchestrator.py tests/test_pipeline_e2e_contract.py tests/test_main_api.py tests/test_api_validation_matrix.py
+pytest -q
 ```

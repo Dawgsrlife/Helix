@@ -5,11 +5,38 @@ import { ChevronRight, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { ScienceTooltip } from "@/components/ui/ScienceTooltip";
 
+function strengthLabel(value: number): "Strong" | "Promising" | "Weak" {
+  if (value >= 0.75) return "Strong";
+  if (value >= 0.55) return "Promising";
+  return "Weak";
+}
+
+function safetyLabel(offTarget: number): "Strong" | "Moderate" | "Risky" {
+  if (offTarget <= 0.03) return "Strong";
+  if (offTarget <= 0.08) return "Moderate";
+  return "Risky";
+}
+
 export default function CandidateLeaderboard() {
   const candidates = useHelixStore((s) => s.candidates);
   const activeCandidateId = useHelixStore((s) => s.activeCandidateId);
   const setActiveCandidateId = useHelixStore((s) => s.setActiveCandidateId);
   const setViewMode = useHelixStore((s) => s.setViewMode);
+  const setChatOpen = useHelixStore((s) => s.setChatOpen);
+  const setChatDraft = useHelixStore((s) => s.setChatDraft);
+
+  const topCandidate = candidates[0];
+  const laySummary = topCandidate
+    ? `Top candidate #${topCandidate.id}: likely-to-work ${strengthLabel(topCandidate.scores.functional)}, tissue-fit ${strengthLabel(topCandidate.scores.tissue)}, safety ${safetyLabel(topCandidate.scores.offTarget)}.`
+    : "No candidates have completed scoring yet.";
+  const expertSummary = topCandidate
+    ? `Functional ${topCandidate.scores.functional.toFixed(3)}, tissue specificity ${topCandidate.scores.tissue.toFixed(3)}, off-target ${topCandidate.scores.offTarget.toFixed(3)}, novelty ${topCandidate.scores.novelty.toFixed(3)}.`
+    : "";
+
+  const queuePrompt = (prompt: string) => {
+    setChatOpen(true);
+    setChatDraft(prompt);
+  };
 
   return (
     <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "var(--surface-base)" }}>
@@ -24,6 +51,43 @@ export default function CandidateLeaderboard() {
             style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
             Inspect top candidate <ArrowRight size={14} />
           </button>
+        </div>
+
+        <div className="mb-5 rounded-xl p-4" style={{ background: "var(--surface-elevated)" }}>
+          <div className="text-[11px] font-medium uppercase tracking-wider mb-2" style={{ color: "var(--accent)" }}>
+            Plain-Language Translation
+          </div>
+          <p className="text-[13px] leading-relaxed mb-1" style={{ color: "var(--text-primary)" }}>
+            {laySummary}
+          </p>
+          {expertSummary && (
+            <p className="text-[12px] font-mono mb-3" style={{ color: "var(--text-muted)" }}>
+              {expertSummary}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => queuePrompt("Explain the top candidate for a clinician and a layman in 5 bullet points.")}
+              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+            >
+              Explain Top Candidate
+            </button>
+            <button
+              onClick={() => queuePrompt("Compare top 3 candidates and recommend one for safety-sensitive use.")}
+              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+            >
+              Compare Top 3
+            </button>
+            <button
+              onClick={() => queuePrompt("Improve the active candidate for tissue specificity and explain tradeoffs.")}
+              className="px-3 py-1.5 rounded-md text-[11px] transition-colors hover:bg-white/[0.06]"
+              style={{ background: "var(--surface-base)", color: "var(--text-secondary)" }}
+            >
+              Improve Tissue Fit
+            </button>
+          </div>
         </div>
 
         {/* Ranking table */}
@@ -57,6 +121,11 @@ export default function CandidateLeaderboard() {
               <span className="flex-1">
                 <span className="text-[13px] font-medium" style={{ color: "var(--text-primary)" }}>Candidate_{c.id.toString().padStart(3, "0")}</span>
                 <span className="text-[11px] font-mono ml-2" style={{ color: "var(--text-faint)" }}>{c.sequence.length} bp</span>
+                {c.status !== "scored" && (
+                  <span className="text-[10px] font-mono ml-2" style={{ color: c.status === "failed" ? "var(--base-t)" : "var(--text-faint)" }}>
+                    {c.status}
+                  </span>
+                )}
               </span>
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--accent)" }}>{(c.scores.functional * 100).toFixed(0)}%</span>
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-c)" }}>{(c.scores.tissue * 100).toFixed(0)}%</span>

@@ -65,6 +65,7 @@ class AgentChatRequest(BaseModel):
     candidate_id: int = 0
     message: str
     history: list[dict[str, str]] = Field(default_factory=list)
+    sequence: str | None = None  # Optional: bootstrap a session on the fly
 
 
 class MutationRequest(BaseModel):

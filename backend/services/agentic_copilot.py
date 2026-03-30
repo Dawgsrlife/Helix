@@ -24,6 +24,8 @@ MAX_VARIANTS_TO_EVAL = 48
 MAX_OPTIMIZE_CONCURRENCY = 8
 VARIANT_SCORE_TIMEOUT_SECONDS = 6.0
 MAX_AGENT_ITERATIONS = 3  # Max plan→execute→reflect loops
+MAX_MEMORY_TURNS = 32
+MAX_HISTORY_TURNS = 64
 EDIT_RE = re.compile(
     r"(?:position|pos|base|bp)\s*(\d+)\D+(?:to|with|as|=)\s*([ATCG])\b",
     flags=re.IGNORECASE,
@@ -49,9 +51,13 @@ args: {}
 5) transform_sequence
 args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement|replace_base", "from_base": "A|T|C|G (only for replace_base)", "to_base": "A|T|C|G (only for replace_base)"}
 
+6) restore_sequence
+args: {"sequence": "<ATCG...>"}
+
 Rules:
 - If user asks for global sequence rewrite like "all Ts", use transform_sequence.
 - If user asks to replace one base globally (e.g., "change all Gs to Cs"), use mode "replace_base".
+- If user asks to undo/revert, use restore_sequence with the most recent previous sequence from memory.
 - If user asks to compare or rank, include compare_candidates.
 - If user asks specific base mutation, include edit_base.
 - You may chain multiple actions in order.
@@ -79,6 +85,8 @@ class CopilotState(TypedDict, total=False):
     iteration: int
     should_continue: bool
     reasoning_steps: list[str]
+    memory_entries: list[dict[str, Any]]
+    candidate_snapshot: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -149,6 +157,12 @@ class AgenticCopilot:
         self._planner_llm = self._build_llm(planner=True)
         self._responder_llm = self._build_llm(planner=False)
         self._graph = self._build_graph()
+        self._memory: dict[tuple[str, int], list[dict[str, Any]]] = {}
+
+    def clear_session_memory(self, *, session_id: str) -> None:
+        keys = [key for key in self._memory if key[0] == session_id]
+        for key in keys:
+            self._memory.pop(key, None)
 
     async def chat(
         self,
@@ -158,11 +172,13 @@ class AgenticCopilot:
         message: str,
         history: list[dict[str, str]] | None = None,
     ) -> AgentChatResult:
+        memory_entries = self._memory_snapshot(session_id=session_id, candidate_id=candidate_id)
+        candidate_snapshot = await self._candidate_snapshot(session_id=session_id, candidate_id=candidate_id)
         state: CopilotState = {
             "session_id": session_id,
             "candidate_id": candidate_id,
             "message": message.strip(),
-            "history": history or [],
+            "history": _trim_history(history or []),
             "actions": [],
             "tool_calls": [],
             "candidate_update": None,
@@ -172,6 +188,8 @@ class AgenticCopilot:
             "iteration": 0,
             "should_continue": True,
             "reasoning_steps": [],
+            "memory_entries": memory_entries,
+            "candidate_snapshot": candidate_snapshot,
         }
         final = await self._graph.ainvoke(state)
 
@@ -190,7 +208,7 @@ class AgenticCopilot:
                 regulatory_map=update_payload.get("regulatory_map"),
             )
 
-        return AgentChatResult(
+        result = AgentChatResult(
             assistant_message=str(final.get("assistant_message") or "I could not produce a response."),
             tool_calls=[AgentToolCall(**entry) for entry in final.get("tool_calls", [])],
             candidate_update=candidate_update,
@@ -198,6 +216,15 @@ class AgenticCopilot:
             iterations=int(final.get("iteration", 1)),
             reasoning_steps=final.get("reasoning_steps"),
         )
+        self._remember_turn(
+            session_id=session_id,
+            candidate_id=candidate_id,
+            user_message=message.strip(),
+            candidate_update=candidate_update,
+            tool_calls=[call.to_dict() for call in result.tool_calls],
+            assistant_message=result.assistant_message,
+        )
+        return result
 
     def _build_graph(self):
         graph = StateGraph(CopilotState)
@@ -252,6 +279,9 @@ class AgenticCopilot:
         iteration = state.get("iteration", 0)
         reasoning = list(state.get("reasoning_steps", []))
         message = state.get("message", "")
+        history = state.get("history", [])
+        memory_entries = state.get("memory_entries", [])
+        candidate_snapshot = state.get("candidate_snapshot", {})
 
         if not message:
             reasoning.append(f"[iter {iteration}] No message provided, defaulting to explain_candidate")
@@ -266,13 +296,18 @@ class AgenticCopilot:
         # Deterministic intent parsing is the primary path for edit-like commands.
         # This keeps side-panel behavior reliable for demo-critical prompts
         # (e.g., "make all Ts", explicit base edits, ranking requests).
-        deterministic = self._fallback_plan(message)
+        deterministic = self._fallback_plan(message, memory_entries=memory_entries)
         if not _is_default_explain_plan(deterministic):
             tool_names = [a["tool"] for a in deterministic]
             reasoning.append(f"[iter {iteration}] Deterministic plan: {', '.join(tool_names)}")
             return {"actions": deterministic, "reasoning_steps": reasoning}
 
-        llm_actions = await self._plan_actions_with_llm(message)
+        llm_actions = await self._plan_actions_with_llm(
+            message,
+            history=history,
+            memory_entries=memory_entries,
+            candidate_snapshot=candidate_snapshot,
+        )
         if llm_actions:
             tool_names = [a["tool"] for a in llm_actions]
             reasoning.append(f"[iter {iteration}] LLM plan: {', '.join(tool_names)}")
@@ -323,6 +358,13 @@ class AgenticCopilot:
                         mode=str(args.get("mode", "all_t")),
                         from_base=str(args.get("from_base", "")).upper() or None,
                         to_base=str(args.get("to_base", "")).upper() or None,
+                    )
+                elif tool == "restore_sequence":
+                    result = await self._tool_restore(
+                        session_id=session_id,
+                        candidate_id=candidate_id,
+                        current_sequence=sequence,
+                        sequence=str(args.get("sequence", "")).upper(),
                     )
                 else:
                     result = await self._tool_explain(candidate_id=candidate_id, sequence=sequence)
@@ -455,6 +497,9 @@ class AgenticCopilot:
                 payload = json.dumps(
                     {
                         "user_message": state.get("message", ""),
+                        "conversation_history": state.get("history", []),
+                        "agent_memory": state.get("memory_entries", []),
+                        "candidate_snapshot": state.get("candidate_snapshot", {}),
                         "tool_calls": state.get("tool_calls", []),
                         "execution_notes": notes,
                         "iterations": iteration,
@@ -698,13 +743,58 @@ class AgenticCopilot:
             ),
         )
 
-    async def _plan_actions_with_llm(self, message: str) -> list[dict[str, Any]] | None:
+    async def _tool_restore(
+        self,
+        *,
+        session_id: str,
+        candidate_id: int,
+        current_sequence: str,
+        sequence: str,
+    ) -> _ToolExecution:
+        restored = "".join(base for base in sequence.upper() if base in BASES)
+        if not restored:
+            raise ValueError("restore_sequence requires a non-empty ATCG sequence")
+
+        await self._session_store.set_candidate_sequence(session_id, candidate_id, restored)
+        scores, per_position = await score_candidate(self._service, restored)
+        score_dict = scores.to_dict()
+        changed = sum(1 for before, after in zip(current_sequence, restored, strict=False) if before != after)
+        note = (
+            f"Restored candidate #{candidate_id} from memory snapshot "
+            f"({changed} positions changed). New combined score {score_dict['combined']:.3f}."
+        )
+        return _ToolExecution(
+            call=AgentToolCall(tool="restore_sequence", status="ok", summary="Restored previous sequence."),
+            note=note,
+            candidate_update=AgentCandidateUpdate(
+                candidate_id=candidate_id,
+                sequence=restored,
+                scores=score_dict,
+                mutation={"mode": "restore_sequence", "changed_positions": changed},
+                per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
+            ),
+        )
+
+    async def _plan_actions_with_llm(
+        self,
+        message: str,
+        *,
+        history: list[dict[str, str]] | None = None,
+        memory_entries: list[dict[str, Any]] | None = None,
+        candidate_snapshot: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]] | None:
         if self._planner_llm is None:
             return None
         try:
+            payload = {
+                "user_message": message,
+                "conversation_history": history or [],
+                "agent_memory": memory_entries or [],
+                "candidate_snapshot": candidate_snapshot or {},
+            }
             messages = [
                 SystemMessage(content=PLANNER_PROMPT),
-                HumanMessage(content=message),
+                HumanMessage(content=json.dumps(payload, indent=2)),
             ]
             response = await asyncio.wait_for(self._planner_llm.ainvoke(messages), timeout=8.0)
             text = _message_to_text(response.content)
@@ -718,9 +808,31 @@ class AgenticCopilot:
         except Exception:
             return None
 
-    def _fallback_plan(self, message: str) -> list[dict[str, Any]]:
+    def _fallback_plan(
+        self,
+        message: str,
+        *,
+        memory_entries: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         text = message.lower()
         actions: list[dict[str, Any]] = []
+        memory_entries = memory_entries or []
+
+        if any(token in text for token in ("undo", "revert", "roll back", "rollback")):
+            undo_action = _derive_undo_action(memory_entries)
+            if undo_action is not None:
+                actions.append(undo_action)
+                if "explain" in text or "impact" in text:
+                    actions.append({"tool": "explain_candidate", "args": {}})
+                return actions
+
+        if ("again" in text or "same change" in text or "do that" in text) and not actions:
+            repeat_action = _derive_repeat_action(memory_entries)
+            if repeat_action is not None:
+                actions.append(repeat_action)
+                if "explain" in text or "impact" in text:
+                    actions.append({"tool": "explain_candidate", "args": {}})
+                return actions
 
         explicit = _parse_explicit_edit(message)
         if explicit is not None:
@@ -754,6 +866,57 @@ class AgenticCopilot:
             actions.append({"tool": "explain_candidate", "args": {}})
         return actions
 
+    async def _candidate_snapshot(self, *, session_id: str, candidate_id: int) -> dict[str, Any]:
+        try:
+            sequence = await self._session_store.require_candidate_sequence(session_id, candidate_id)
+        except Exception:
+            return {}
+        gc = (sequence.count("G") + sequence.count("C")) / max(len(sequence), 1)
+        preview = sequence[:80]
+        return {
+            "length_bp": len(sequence),
+            "gc_ratio": round(gc, 4),
+            "preview": preview,
+        }
+
+    def _memory_key(self, *, session_id: str, candidate_id: int) -> tuple[str, int]:
+        return (session_id, candidate_id)
+
+    def _memory_snapshot(self, *, session_id: str, candidate_id: int) -> list[dict[str, Any]]:
+        key = self._memory_key(session_id=session_id, candidate_id=candidate_id)
+        return list(self._memory.get(key, []))
+
+    def _remember_turn(
+        self,
+        *,
+        session_id: str,
+        candidate_id: int,
+        user_message: str,
+        candidate_update: AgentCandidateUpdate | None,
+        tool_calls: list[dict[str, str]],
+        assistant_message: str,
+    ) -> None:
+        key = self._memory_key(session_id=session_id, candidate_id=candidate_id)
+        updates: list[dict[str, Any]] = []
+        if candidate_update is not None:
+            updates.append(
+                {
+                    "sequence": candidate_update.sequence,
+                    "scores": candidate_update.scores,
+                    "mutation": candidate_update.mutation,
+                }
+            )
+        record: dict[str, Any] = {
+            "user_message": user_message,
+            "tool_calls": tool_calls,
+            "assistant_message": assistant_message,
+            "candidate_updates": updates,
+        }
+        memory = self._memory.setdefault(key, [])
+        memory.append(record)
+        if len(memory) > MAX_MEMORY_TURNS:
+            del memory[:-MAX_MEMORY_TURNS]
+
 
 def _extract_json_object(text: str) -> dict[str, Any]:
     text = text.strip()
@@ -785,9 +948,60 @@ def _normalize_action(entry: Any) -> dict[str, Any] | None:
     args = entry.get("args", {})
     if not isinstance(args, dict):
         args = {}
-    if tool not in {"explain_candidate", "edit_base", "optimize_candidate", "compare_candidates", "transform_sequence"}:
+    if tool not in {
+        "explain_candidate",
+        "edit_base",
+        "optimize_candidate",
+        "compare_candidates",
+        "transform_sequence",
+        "restore_sequence",
+    }:
         return None
     return {"tool": tool, "args": args}
+
+
+def _trim_history(history: list[dict[str, str]]) -> list[dict[str, str]]:
+    if len(history) <= MAX_HISTORY_TURNS:
+        return history
+    return history[-MAX_HISTORY_TURNS:]
+
+
+def _derive_undo_action(memory_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not memory_entries:
+        return None
+    # Walk backwards to find a concrete previous sequence snapshot.
+    for idx in range(len(memory_entries) - 1, -1, -1):
+        entry = memory_entries[idx]
+        updates = entry.get("candidate_updates")
+        if not isinstance(updates, list) or not updates:
+            continue
+        current_seq = updates[-1].get("sequence")
+        if not isinstance(current_seq, str):
+            continue
+        # Prefer the previous update sequence, if available.
+        for prev_idx in range(idx - 1, -1, -1):
+            prev_updates = memory_entries[prev_idx].get("candidate_updates")
+            if not isinstance(prev_updates, list) or not prev_updates:
+                continue
+            previous_seq = prev_updates[-1].get("sequence")
+            if isinstance(previous_seq, str) and previous_seq and previous_seq != current_seq:
+                return {"tool": "restore_sequence", "args": {"sequence": previous_seq}}
+    return None
+
+
+def _derive_repeat_action(memory_entries: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for entry in reversed(memory_entries):
+        updates = entry.get("candidate_updates")
+        if not isinstance(updates, list) or not updates:
+            continue
+        mutation = updates[-1].get("mutation")
+        if not isinstance(mutation, dict):
+            continue
+        position = mutation.get("position")
+        new_base = mutation.get("new_base")
+        if isinstance(position, int) and isinstance(new_base, str) and new_base in BASES:
+            return {"tool": "edit_base", "args": {"position": position, "new_base": new_base}}
+    return None
 
 
 def _merge_candidate_updates(
@@ -854,7 +1068,7 @@ def _parse_transform_mode(text: str) -> str | None:
 
 def _parse_base_replacement(text: str) -> tuple[str, str] | None:
     match = re.search(
-        r"(?:change|replace|convert|swap|turn)\s+all\s+([atcg])(?:'s|s)?\s+(?:to|with|into)\s+([atcg])(?:'s|s)?",
+        r"(?:change|replace|convert|swap|turn)\s+all\s+([atcg])(?:['’]s|s)?\s+(?:to|with|into)\s+([atcg])(?:['’]s|s)?",
         text,
         flags=re.IGNORECASE,
     )

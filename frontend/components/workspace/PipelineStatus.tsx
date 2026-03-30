@@ -31,6 +31,8 @@ export default function PipelineStatus() {
   const generationTokenCount = useHelixStore((s) => s.generationTokenCount);
   const retrievalStatuses = useHelixStore((s) => s.retrievalStatuses);
   const explanation = useHelixStore((s) => s.explanation);
+  const generatingSequence = useHelixStore((s) => s.generatingSequence);
+  const candidates = useHelixStore((s) => s.candidates);
 
   // Local simulation state (fallback when no WebSocket)
   const [simCompleted, setSimCompleted] = useState<string[]>([]);
@@ -162,6 +164,73 @@ export default function PipelineStatus() {
             </span>
             <Loader2 size={14} className="animate-spin ml-auto" style={{ color: "var(--accent)" }} />
           </motion.div>
+        )}
+
+        {/* Live WebSocket stream (show, don't just tell) */}
+        {isStreaming && (
+          <div className="mt-6 space-y-3">
+            <div
+              className="rounded-lg p-3"
+              style={{ background: "var(--surface-raised)", border: "1px solid var(--ghost-border)" }}
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+                  Live Sequence Stream
+                </span>
+                <span className="text-[11px] font-mono" style={{ color: "var(--accent)" }}>
+                  {generationTokenCount} tokens
+                </span>
+              </div>
+              <div
+                className="font-mono text-[11px] leading-relaxed break-all max-h-[90px] overflow-auto"
+                style={{ color: "var(--text-secondary)" }}
+              >
+                {(generatingSequence.slice(-320) || "Waiting for generation tokens...")}
+              </div>
+            </div>
+
+            <div
+              className="rounded-lg p-3"
+              style={{ background: "var(--surface-raised)", border: "1px solid var(--ghost-border)" }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] uppercase tracking-wider" style={{ color: "var(--text-faint)" }}>
+                  Candidate Runtime
+                </span>
+                <span className="text-[11px] font-mono" style={{ color: "var(--text-secondary)" }}>
+                  {candidates.length} tracked
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {candidates.slice(0, 10).map((c) => (
+                  <div
+                    key={c.id}
+                    className="rounded-md px-2.5 py-2 text-[11px]"
+                    style={{
+                      background: "var(--surface-base)",
+                      border:
+                        c.status === "structured"
+                          ? "1px solid rgba(91,181,162,0.4)"
+                          : c.status === "failed"
+                            ? "1px solid rgba(212,122,122,0.45)"
+                            : "1px solid var(--ghost-border)",
+                      color:
+                        c.status === "structured"
+                          ? "var(--accent)"
+                          : c.status === "failed"
+                            ? "var(--base-t)"
+                            : "var(--text-muted)",
+                    }}
+                  >
+                    <div className="font-mono">#{c.id} · {c.status}</div>
+                    <div className="font-mono mt-0.5" style={{ color: "var(--text-faint)" }}>
+                      {c.sequence?.length ?? 0} bp
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

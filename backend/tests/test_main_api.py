@@ -285,6 +285,36 @@ def test_agent_chat_replace_all_g_to_c_only_replaces_g() -> None:
             assert after == before
 
 
+def test_agent_chat_undo_reverts_previous_sequence() -> None:
+    client = TestClient(app)
+    session_id = "agent-undo"
+    client.post("/api/design", json={"goal": "Design BDNF enhancer", "session_id": session_id})
+
+    before = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "explain this candidate"},
+    )
+    assert before.status_code == 200
+    original_sequence = before.json()["candidate_update"]["sequence"]
+
+    change = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "change base position 8 to G"},
+    )
+    assert change.status_code == 200
+    changed_sequence = change.json()["candidate_update"]["sequence"]
+    assert changed_sequence != original_sequence
+
+    undo = client.post(
+        "/api/agent/chat",
+        json={"session_id": session_id, "candidate_id": 0, "message": "undo that change and explain impact"},
+    )
+    assert undo.status_code == 200
+    body = undo.json()
+    assert any(call["tool"] == "restore_sequence" for call in body["tool_calls"])
+    assert body["candidate_update"]["sequence"] == original_sequence
+
+
 def test_design_accepts_run_profile() -> None:
     client = TestClient(app)
     res = client.post(

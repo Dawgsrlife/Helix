@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
-from models.domain import DesignSpec
+from models.domain import CandidateScores, DesignSpec, LikelihoodScore
 from pipeline.evo2_score import score_candidate
 from pipeline.intent_parser import parse_intent
 from pipeline.explanation import generate_explanation
@@ -141,6 +141,139 @@ class StageTracker:
         )
 
 
+# ---------------------------------------------------------------------------
+# Shared helpers — extracted to eliminate copy-paste across pipelines
+# ---------------------------------------------------------------------------
+
+
+async def _score_with_fallback(
+    service: Evo2Service,
+    fallback_service: Evo2Service,
+    sequence: str,
+    target_tissues: list[str] | None,
+    timeout: float,
+) -> tuple[CandidateScores, list[LikelihoodScore]]:
+    """Score a candidate, falling back to mock service on timeout or error."""
+    try:
+        async with asyncio.timeout(timeout):
+            return await score_candidate(service, sequence, target_tissues=target_tissues)
+    except (TimeoutError, Exception):
+        return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
+
+
+async def _emit_scored(
+    manager: WebSocketManager,
+    session_id: str,
+    candidate_id: int,
+    scores: CandidateScores,
+    per_position: list[LikelihoodScore],
+) -> dict[str, float]:
+    """Emit scoring events and return the score dict."""
+    score_dict = scores.to_dict()
+    await manager.send_event(
+        session_id,
+        CandidateScoredEvent(
+            data=CandidateScoredData(
+                candidate_id=candidate_id,
+                scores=score_dict,
+                per_position_scores=[
+                    {"position": x.position, "score": x.score} for x in per_position
+                ],
+            )
+        ).to_json(),
+    )
+    await manager.send_event(
+        session_id,
+        CandidateStatusEvent(
+            data=CandidateStatusData(candidate_id=candidate_id, status="scored")
+        ).to_json(),
+    )
+    return score_dict
+
+
+async def _resolve_structure(
+    sequence: str,
+    candidate_id: int,
+    timeout: float,
+    use_fallback: bool,
+) -> tuple[str | None, float | None, str | None]:
+    """Predict structure, returning (pdb_data, confidence, error_reason).
+
+    Tries the configured structure mode, then falls back to mock PDB if allowed.
+    """
+    pdb_data: str | None = None
+    confidence: float | None = None
+    error: str | None = None
+
+    try:
+        async with asyncio.timeout(timeout):
+            if settings.structure_mode == StructureMode.ESMFOLD:
+                result = await predict_structure(sequence)
+                if result is not None:
+                    pdb_data = result.pdb_data
+                    confidence = result.confidence
+            elif settings.structure_mode == StructureMode.MOCK:
+                pdb_data, confidence = build_mock_pdb_from_dna(
+                    sequence, candidate_id=candidate_id
+                )
+    except TimeoutError:
+        error = "structure_timeout"
+    except Exception as exc:
+        error = f"structure_error:{exc}"
+
+    if pdb_data is None and use_fallback:
+        pdb_data, confidence = build_mock_pdb_from_dna(
+            sequence, candidate_id=candidate_id
+        )
+        error = None
+
+    return pdb_data, confidence, error
+
+
+async def _emit_structure(
+    manager: WebSocketManager,
+    session_id: str,
+    candidate_id: int,
+    sequence: str,
+    pdb_data: str,
+    confidence: float | None,
+    spec: DesignSpec,
+) -> dict[str, object] | None:
+    """Emit structure + optional regulatory map events. Returns regulatory_map or None."""
+    await manager.send_event(
+        session_id,
+        StructureReadyEvent(
+            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
+        ).to_json(),
+    )
+
+    regulatory_map: dict[str, object] | None = None
+    if not _uses_protein_structure(spec.design_type):
+        regulatory_map = build_regulatory_map(sequence)
+        await manager.send_event(
+            session_id,
+            RegulatoryMapReadyEvent(
+                data=RegulatoryMapReadyData(
+                    candidate_id=candidate_id,
+                    regulatory_map=regulatory_map,
+                )
+            ).to_json(),
+        )
+
+    await manager.send_event(
+        session_id,
+        CandidateStatusEvent(
+            data=CandidateStatusData(candidate_id=candidate_id, status="structured")
+        ).to_json(),
+    )
+    return regulatory_map
+
+
+# ---------------------------------------------------------------------------
+# Profile configuration
+# ---------------------------------------------------------------------------
+
+
 def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
     use_structure_fallback = truth_mode != "real_only"
     if run_profile == "live":
@@ -162,10 +295,15 @@ def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
         retrieval_timeout=25.0,
         generation_timeout=8.0,
         scoring_timeout=8.0,
-        structure_timeout=4.0,
+        structure_timeout=20.0,
         explanation_timeout=10.0,
         use_structure_fallback=use_structure_fallback,
     )
+
+
+# ---------------------------------------------------------------------------
+# Main generation pipeline
+# ---------------------------------------------------------------------------
 
 
 async def run_generation_pipeline(
@@ -241,6 +379,7 @@ async def run_generation_pipeline(
         seed_sequence=seed_sequence,
         retrieval_result=retrieval_result,
         candidate_count=candidate_count,
+        enforce_foldable=n_tokens is None,
     )
     for candidate_id, seeded_sequence in sorted(candidate_seeds.items()):
         await manager.send_event(
@@ -305,8 +444,6 @@ async def run_generation_pipeline(
                 if n_tokens is not None
                 else max(96, target_sequence_length - len(varied_seed))
             )
-            # Keep temperature in [0.7, 1.0] to stay within NIM API limits.
-            # Diversity comes from seed variation + temperature spread.
             temperature = min(1.0, 0.7 + (0.03 * candidate_id))
             generated = varied_seed
             await manager.send_event(
@@ -331,19 +468,7 @@ async def run_generation_pipeline(
                                 data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
                             ).to_json(),
                         )
-            except TimeoutError:
-                generated = await _fill_with_demo_tokens(
-                    manager=manager,
-                    session_id=session_id,
-                    candidate_id=candidate_id,
-                    generated=generated,
-                    seed_length=len(varied_seed),
-                    n_tokens=tokens_to_generate,
-                    temperature=temperature,
-                    fallback_service=fallback_service,
-                )
-            except Exception as exc:
-                _ = exc
+            except (TimeoutError, Exception):
                 generated = await _fill_with_demo_tokens(
                     manager=manager,
                     session_id=session_id,
@@ -365,115 +490,22 @@ async def run_generation_pipeline(
                 await tracker.set("generation", "active", finished_generation / candidate_count)
                 await tracker.set("scoring", "active", max(0.01, finished_scoring / candidate_count))
 
-            try:
-                async with asyncio.timeout(profile.scoring_timeout):
-                    scores, per_position = await score_candidate(
-                        service,
-                        generated,
-                        target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-                    )
-                    score_dict = scores.to_dict()
-                    await manager.send_event(
-                        session_id,
-                        CandidateScoredEvent(
-                            data=CandidateScoredData(
-                                candidate_id=candidate_id,
-                                scores=score_dict,
-                                per_position_scores=[
-                                    {"position": x.position, "score": x.score} for x in per_position
-                                ],
-                            )
-                        ).to_json(),
-                    )
-                await manager.send_event(
-                    session_id,
-                    CandidateStatusEvent(
-                        data=CandidateStatusData(candidate_id=candidate_id, status="scored")
-                    ).to_json(),
-                )
-            except TimeoutError:
-                scores, per_position = await score_candidate(
-                    fallback_service,
-                    generated,
-                    target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-                )
-                score_dict = scores.to_dict()
-                await manager.send_event(
-                    session_id,
-                    CandidateScoredEvent(
-                        data=CandidateScoredData(
-                            candidate_id=candidate_id,
-                            scores=score_dict,
-                            per_position_scores=[
-                                {"position": x.position, "score": x.score} for x in per_position
-                            ],
-                        )
-                    ).to_json(),
-                )
-                await manager.send_event(
-                    session_id,
-                    CandidateStatusEvent(
-                        data=CandidateStatusData(candidate_id=candidate_id, status="scored")
-                    ).to_json(),
-                )
-            except Exception as exc:
-                _ = exc
-                scores, per_position = await score_candidate(
-                    fallback_service,
-                    generated,
-                    target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-                )
-                score_dict = scores.to_dict()
-                await manager.send_event(
-                    session_id,
-                    CandidateScoredEvent(
-                        data=CandidateScoredData(
-                            candidate_id=candidate_id,
-                            scores=score_dict,
-                            per_position_scores=[
-                                {"position": x.position, "score": x.score} for x in per_position
-                            ],
-                        )
-                    ).to_json(),
-                )
-                await manager.send_event(
-                    session_id,
-                    CandidateStatusEvent(
-                        data=CandidateStatusData(candidate_id=candidate_id, status="scored")
-                    ).to_json(),
-                )
+            # --- Score ---
+            target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
+            scores, per_position = await _score_with_fallback(
+                service, fallback_service, generated, target_tissues, profile.scoring_timeout,
+            )
+            score_dict = await _emit_scored(manager, session_id, candidate_id, scores, per_position)
 
             async with runtime_lock:
                 finished_scoring += 1
                 await tracker.set("scoring", "active", finished_scoring / candidate_count)
                 await tracker.set("structure", "active", max(0.01, finished_structure / candidate_count))
 
-            pdb_data: str | None = None
-            confidence: float | None = None
-            regulatory_map: dict[str, object] | None = None
-            structure_error: str | None = None
-
-            try:
-                async with asyncio.timeout(profile.structure_timeout):
-                    if settings.structure_mode == StructureMode.ESMFOLD:
-                        result = await predict_structure(generated)
-                        if result is not None:
-                            pdb_data = result.pdb_data
-                            confidence = result.confidence
-                    elif settings.structure_mode == StructureMode.MOCK:
-                        pdb_data, confidence = build_mock_pdb_from_dna(
-                            generated, candidate_id=candidate_id
-                        )
-            except TimeoutError:
-                structure_error = "structure_timeout"
-            except Exception as exc:
-                structure_error = f"structure_error:{exc}"
-
-            if pdb_data is None and profile.use_structure_fallback:
-                pdb_data, confidence = build_mock_pdb_from_dna(
-                    generated, candidate_id=candidate_id
-                )
-                structure_error = None
+            # --- Structure ---
+            pdb_data, confidence, structure_error = await _resolve_structure(
+                generated, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
+            )
 
             if pdb_data is None:
                 reason = structure_error or "structure_unavailable"
@@ -484,30 +516,8 @@ async def run_generation_pipeline(
                     await tracker.set("structure", "active", finished_structure / candidate_count)
                 return
 
-            await manager.send_event(
-                session_id,
-                StructureReadyEvent(
-                    data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
-                ).to_json(),
-            )
-
-            if emit_regulatory_overlay:
-                regulatory_map = build_regulatory_map(generated)
-                await manager.send_event(
-                    session_id,
-                    RegulatoryMapReadyEvent(
-                        data=RegulatoryMapReadyData(
-                            candidate_id=candidate_id,
-                            regulatory_map=regulatory_map,
-                        )
-                    ).to_json(),
-                )
-
-            await manager.send_event(
-                session_id,
-                CandidateStatusEvent(
-                    data=CandidateStatusData(candidate_id=candidate_id, status="structured")
-                ).to_json(),
+            regulatory_map = await _emit_structure(
+                manager, session_id, candidate_id, generated, pdb_data, confidence, spec,
             )
 
             candidate = CandidateRuntime(
@@ -540,6 +550,30 @@ async def run_generation_pipeline(
     structured = [candidate for candidate in runtime.values() if candidate.status == "structured" and candidate.scores]
     if structured:
         top_candidate = max(structured, key=lambda c: float((c.scores or {}).get("combined", 0.0)))
+        if (
+            settings.structure_mode == StructureMode.ESMFOLD
+            and top_candidate.pdb_data
+            and _looks_like_mock_pdb(top_candidate.pdb_data)
+        ):
+            with contextlib.suppress(Exception):
+                high_fidelity = await asyncio.wait_for(
+                    predict_structure(top_candidate.sequence),
+                    timeout=max(45.0, profile.structure_timeout * 2.5),
+                )
+                if high_fidelity is not None:
+                    top_candidate.pdb_data = high_fidelity.pdb_data
+                    top_candidate.confidence = high_fidelity.confidence
+                    runtime[top_candidate.id] = top_candidate
+                    await manager.send_event(
+                        session_id,
+                        StructureReadyEvent(
+                            data=StructureReadyData(
+                                candidate_id=top_candidate.id,
+                                pdb_data=high_fidelity.pdb_data,
+                                confidence=high_fidelity.confidence,
+                            )
+                        ).to_json(),
+                    )
         if first_explained_candidate_id != top_candidate.id:
             await tracker.set("explanation", "active", 0.7)
             with contextlib.suppress(Exception):
@@ -584,6 +618,11 @@ async def run_generation_pipeline(
             )
         ).to_json(),
     )
+
+
+# ---------------------------------------------------------------------------
+# Follow-up pipeline
+# ---------------------------------------------------------------------------
 
 
 async def run_followup_pipeline(
@@ -633,64 +672,21 @@ async def run_followup_pipeline(
         base = _simple_mutate(base, 20, "C")
     await tracker.set("generation", "done", 1.0)
 
+    # --- Score ---
     await tracker.set("scoring", "active", 0.2)
-    try:
-        async with asyncio.timeout(profile.scoring_timeout):
-            scores, per_position = await score_candidate(
-                service,
-                base,
-                target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-            )
-    except TimeoutError:
-        scores, per_position = await score_candidate(
-            fallback_service,
-            base,
-            target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-        )
-    except Exception:
-        scores, per_position = await score_candidate(
-            fallback_service,
-            base,
-            target_tissues=spec.tissue_specificity.high_expression if spec.tissue_specificity else None,
-        )
-    await manager.send_event(
-        session_id,
-        CandidateScoredEvent(
-            data=CandidateScoredData(
-                candidate_id=candidate_id,
-                scores=scores.to_dict(),
-                per_position_scores=[{"position": x.position, "score": x.score} for x in per_position],
-            )
-        ).to_json(),
+    target_tissues = spec.tissue_specificity.high_expression if spec.tissue_specificity else None
+    scores, per_position = await _score_with_fallback(
+        service, fallback_service, base, target_tissues, profile.scoring_timeout,
     )
-    await manager.send_event(
-        session_id,
-        CandidateStatusEvent(
-            data=CandidateStatusData(candidate_id=candidate_id, status="scored")
-        ).to_json(),
-    )
+    await _emit_scored(manager, session_id, candidate_id, scores, per_position)
     await tracker.set("scoring", "done", 1.0)
-    await tracker.set("structure", "active", 0.2)
 
-    pdb_data: str | None = None
-    confidence: float | None = None
-    regulatory_map: dict[str, object] | None = None
-    structure_error: str | None = None
-    try:
-        async with asyncio.timeout(profile.structure_timeout):
-            if settings.structure_mode == StructureMode.ESMFOLD:
-                result = await predict_structure(base)
-                if result is not None:
-                    pdb_data = result.pdb_data
-                    confidence = result.confidence
-            elif settings.structure_mode == StructureMode.MOCK:
-                pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
-    except TimeoutError:
-        structure_error = "structure_timeout"
-    except Exception as exc:
-        structure_error = f"structure_error:{exc}"
-    if pdb_data is None and profile.use_structure_fallback:
-        pdb_data, confidence = build_mock_pdb_from_dna(base, candidate_id=candidate_id)
+    # --- Structure ---
+    await tracker.set("structure", "active", 0.2)
+    pdb_data, confidence, structure_error = await _resolve_structure(
+        base, candidate_id, profile.structure_timeout, profile.use_structure_fallback,
+    )
+
     if pdb_data is None:
         reason = structure_error or "structure_unavailable"
         await manager.send_event(
@@ -728,31 +724,14 @@ async def run_followup_pipeline(
             ).to_json(),
         )
         return steps
-    await manager.send_event(
-        session_id,
-        StructureReadyEvent(
-            data=StructureReadyData(candidate_id=candidate_id, pdb_data=pdb_data, confidence=confidence)
-        ).to_json(),
-    )
 
-    if not _uses_protein_structure(spec.design_type):
-        regulatory_map = build_regulatory_map(base)
-        await manager.send_event(
-            session_id,
-            RegulatoryMapReadyEvent(
-                data=RegulatoryMapReadyData(candidate_id=candidate_id, regulatory_map=regulatory_map)
-            ).to_json(),
-        )
-
-    await manager.send_event(
-        session_id,
-        CandidateStatusEvent(
-            data=CandidateStatusData(candidate_id=candidate_id, status="structured")
-        ).to_json(),
+    regulatory_map = await _emit_structure(
+        manager, session_id, candidate_id, base, pdb_data, confidence, spec,
     )
     await tracker.set("structure", "done", 1.0)
-    await tracker.set("explanation", "active", 0.2)
 
+    # --- Explanation ---
+    await tracker.set("explanation", "active", 0.2)
     await manager.send_event(
         session_id,
         ExplanationChunkEvent(
@@ -793,6 +772,11 @@ async def run_followup_pipeline(
         ).to_json(),
     )
     return steps
+
+
+# ---------------------------------------------------------------------------
+# Intent & retrieval helpers
+# ---------------------------------------------------------------------------
 
 
 async def _emit_intent(manager: WebSocketManager, session_id: str, goal: str) -> DesignSpec:
@@ -902,6 +886,11 @@ def _build_retrieval_fallback(source_name: str, spec: DesignSpec) -> dict[str, o
     }
 
 
+# ---------------------------------------------------------------------------
+# Generation helpers
+# ---------------------------------------------------------------------------
+
+
 async def _fill_with_demo_tokens(
     *,
     manager: WebSocketManager,
@@ -944,10 +933,9 @@ def _uses_protein_structure(design_type: str | None) -> bool:
 
 
 def _default_target_sequence_length(design_type: str | None, run_profile: str) -> int:
-    # Keep demo fast while making sequences visibly non-trivial.
     if run_profile == "live":
-        return 960 if _uses_protein_structure(design_type) else 720
-    return 520 if _uses_protein_structure(design_type) else 420
+        return 16000 if _uses_protein_structure(design_type) else 12000
+    return 3200 if _uses_protein_structure(design_type) else 2200
 
 
 def _select_context_seed(retrieval_result: RetrievalResult | None, fallback_seed: str) -> tuple[str, str]:
@@ -963,9 +951,13 @@ def _build_candidate_seeds(
     seed_sequence: str,
     retrieval_result: RetrievalResult | None,
     candidate_count: int,
+    enforce_foldable: bool = True,
 ) -> tuple[dict[int, str], str]:
     base_seed, source = _select_context_seed(retrieval_result, seed_sequence)
-    seeds = {cid: _vary_seed(base_seed, cid) for cid in range(candidate_count)}
+    seeds: dict[int, str] = {}
+    for cid in range(candidate_count):
+        varied = _vary_seed(base_seed, cid)
+        seeds[cid] = _ensure_foldable_seed(varied, cid) if enforce_foldable else varied
     return seeds, source
 
 
@@ -976,6 +968,66 @@ def _vary_seed(sequence: str, candidate_id: int) -> str:
     bases = ["A", "T", "C", "G"]
     new_base = bases[candidate_id % len(bases)]
     return _simple_mutate(sequence, pos, new_base)
+
+
+def _ensure_foldable_seed(sequence: str, candidate_id: int, min_length_bp: int = 720) -> str:
+    cleaned = "".join(base for base in sequence.upper() if base in {"A", "T", "C", "G"})
+    if not cleaned:
+        cleaned = DEFAULT_SEED
+    if _longest_orf_bp(cleaned) >= 360 and len(cleaned) >= min_length_bp:
+        return cleaned
+
+    prefix = cleaned
+    suffix = cleaned[-min(120, len(cleaned)) :] if len(cleaned) > 180 else ""
+    scaffold_target = max(min_length_bp - len(prefix) - len(suffix), 120)
+    scaffold = _coding_scaffold(candidate_id=candidate_id, target_bp=scaffold_target)
+    seeded = f"{prefix}{scaffold}{suffix}"
+    if len(seeded) < min_length_bp:
+        seeded += _coding_scaffold(candidate_id=candidate_id + 17, target_bp=min_length_bp - len(seeded))
+    return seeded
+
+
+def _coding_scaffold(*, candidate_id: int, target_bp: int) -> str:
+    codon_sets = [
+        ["GCT", "CTG", "GAA", "AAG", "ACC", "TCT", "GGT", "CAG", "AAC", "ATC", "GAC", "TTC"],
+        ["GCC", "TTG", "GAG", "AAA", "ACT", "AGC", "GGC", "CAA", "AAT", "ATT", "GAT", "TTT"],
+        ["GCA", "CTA", "GAA", "AAG", "ACA", "TCC", "GGA", "CAG", "AAC", "ATC", "GAC", "TTC"],
+        ["GCG", "CTC", "GAG", "AAA", "ACG", "TCG", "GGG", "CAA", "AAT", "ATT", "GAT", "TTT"],
+    ]
+    codons = codon_sets[candidate_id % len(codon_sets)]
+    if target_bp <= 6:
+        return "ATGTAA"
+
+    body_bp = max(3, target_bp - 6)
+    body_bp -= body_bp % 3
+    body_codons = max(1, body_bp // 3)
+    body = "".join(codons[i % len(codons)] for i in range(body_codons))
+    return f"ATG{body}TAA"
+
+
+def _longest_orf_bp(sequence: str) -> int:
+    seq = sequence.upper()
+    stops = {"TAA", "TAG", "TGA"}
+    best = 0
+    for frame in range(3):
+        start_pos: int | None = None
+        for i in range(frame, len(seq) - 2, 3):
+            codon = seq[i : i + 3]
+            if start_pos is None:
+                if codon == "ATG":
+                    start_pos = i
+                continue
+            if codon in stops:
+                best = max(best, i + 3 - start_pos)
+                start_pos = None
+        if start_pos is not None:
+            best = max(best, len(seq) - start_pos)
+    return best
+
+
+def _looks_like_mock_pdb(pdb_data: str) -> bool:
+    header = "\n".join(pdb_data.splitlines()[:4]).lower()
+    return "synthetic fallback" in header or "helix demo structure" in header
 
 
 def create_session_id() -> str:

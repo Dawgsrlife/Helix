@@ -36,7 +36,10 @@ export function useSequenceAnalysis() {
 
         // Create a backend session so Helio agent chat works
         try {
-          const { sessionId } = await submitDesign(`Analyze sequence: ${sequence.slice(0, 50)}...`);
+          const { sessionId } = await submitDesign(
+            `Analyze sequence: ${sequence.slice(0, 50)}...`,
+            { numCandidates: 1, runProfile: "demo", truthMode: "demo_fallback" }
+          );
           useHelixStore.getState().setSessionId(sessionId);
         } catch {
           // Session creation is optional — Helio falls back to local responses

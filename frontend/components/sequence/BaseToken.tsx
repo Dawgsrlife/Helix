@@ -7,6 +7,7 @@ interface BaseTokenProps {
   nucleotide: Nucleotide;
   position: number;
   annotationType?: AnnotationType;
+  likelihoodScore?: number;
   isHighlighted: boolean;
   onClick: (position: number) => void;
 }
@@ -34,16 +35,29 @@ function BaseTokenInner({
   nucleotide,
   position,
   annotationType,
+  likelihoodScore,
   isHighlighted,
   onClick,
 }: BaseTokenProps) {
   const handleClick = useCallback(() => onClick(position), [onClick, position]);
 
-  const bg = isHighlighted
+  const heat = (() => {
+    if (typeof likelihoodScore !== "number") return "transparent";
+    const normalized = Math.max(0, Math.min(1, (likelihoodScore + 3) / 6));
+    // Low likelihood -> warm risk tint, high likelihood -> cool confidence tint.
+    if (normalized >= 0.5) {
+      const alpha = 0.04 + (normalized - 0.5) * 0.18;
+      return `rgba(91, 181, 162, ${alpha.toFixed(3)})`;
+    }
+    const alpha = 0.04 + (0.5 - normalized) * 0.2;
+    return `rgba(212, 122, 122, ${alpha.toFixed(3)})`;
+  })();
+
+  const bgColor = isHighlighted
     ? "rgba(91, 181, 162, 0.18)"
     : annotationType
       ? REGION_TINT[annotationType]
-      : "transparent";
+      : heat;
 
   return (
     <span
@@ -52,7 +66,7 @@ function BaseTokenInner({
       className="inline-block w-[1ch] text-center cursor-pointer select-none"
       style={{
         color: BASE_HEX[nucleotide],
-        backgroundColor: bg,
+        backgroundColor: bgColor,
         lineHeight: "22px",
         fontSize: "13px",
         borderBottom: isHighlighted
