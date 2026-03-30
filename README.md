@@ -127,7 +127,7 @@ source .venv/bin/activate
 pytest -q
 ```
 
-226 tests covering the pipeline orchestrator, scoring logic, WebSocket events, API endpoints, and external service contracts.
+281 tests covering the pipeline orchestrator, scoring logic, WebSocket events, API endpoints, and external service contracts.
 
 ---
 

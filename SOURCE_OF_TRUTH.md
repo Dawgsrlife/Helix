@@ -31,7 +31,7 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
 - **Evo2 inference** defaults to MOCK (Markov chain + heuristics). Real local/NIM modes exist but are not the default path.
 - **Explanation layer** supports Gemini and Claude streaming. Without API keys, generates score-based summaries from actual candidate data.
-- **Agent chat** is deterministic tool-routing, not multi-step planning.
+- **Agent chat** uses LangGraph (plan→execute→reflect→respond) with Claude tool_use, Gemini, and deterministic planning. Memory persists in Redis.
 - **Frontend API layer** has mock fallbacks for every endpoint (works without backend).
 
 ### What's Badly Done
@@ -56,7 +56,7 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 ### Phase 2: Real Integrations
 - [x] **2.1 Real structure prediction** — ESMFold API (api.esmatlas.com) is live and verified. Structure service hardened with retry logic. Set `STRUCTURE_MODE=esmfold` for real folding.
 - [x] **2.2 Real explanation layer** — Supports Gemini and Claude streaming. Score-based fallback generates useful summaries from actual candidate scores instead of hardcoded strings. 10 new tests.
-- [ ] **2.3 Real agent loop** — Move from deterministic tool-routing to LangGraph state machine with memory and multi-step planning.
+- [x] **2.3 Real agent loop** — Refactored 1142-line monolith into 7 modules under `services/agent/`. Added Claude native `tool_use` for planning, Redis-backed persistent memory, and 55 dedicated unit tests.
 
 ### Phase 3: Scale & Polish
 - [ ] **3.1 Sequence length scaling** — Support full gene-length sequences (10k-100k bp). Current demo caps at ~3k.

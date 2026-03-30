@@ -66,6 +66,21 @@ class SessionStore(ABC):
         pass
 
     @abstractmethod
+    async def get_raw(self, key: str) -> str | None:
+        """Read an arbitrary string by key (used for agent memory, etc.)."""
+        pass
+
+    @abstractmethod
+    async def set_raw(self, key: str, value: str) -> None:
+        """Write an arbitrary string by key."""
+        pass
+
+    @abstractmethod
+    async def delete_pattern(self, pattern: str) -> None:
+        """Delete all keys matching a glob pattern."""
+        pass
+
+    @abstractmethod
     async def close(self) -> None:
         pass
 
@@ -81,6 +96,7 @@ class MemorySessionStore(SessionStore):
         self._default_seed = default_seed
         self._pending_goals: dict[str, str] = {}
         self._candidates: dict[str, dict[int, str]] = {}
+        self._raw_store: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._candidate_locks: dict[str, asyncio.Lock] = {}
 
@@ -131,6 +147,21 @@ class MemorySessionStore(SessionStore):
             lock = self._candidate_locks.setdefault(key, asyncio.Lock())
         async with lock:
             yield
+
+    async def get_raw(self, key: str) -> str | None:
+        async with self._lock:
+            return self._raw_store.get(key)
+
+    async def set_raw(self, key: str, value: str) -> None:
+        async with self._lock:
+            self._raw_store[key] = value
+
+    async def delete_pattern(self, pattern: str) -> None:
+        import fnmatch
+        async with self._lock:
+            keys_to_remove = [k for k in self._raw_store if fnmatch.fnmatch(k, pattern)]
+            for k in keys_to_remove:
+                del self._raw_store[k]
 
     async def close(self) -> None:
         return
@@ -229,6 +260,22 @@ class RedisSessionStore(SessionStore):
             # Never let cleanup errors mask the original request outcome.
             with suppress(Exception):
                 await lock.release()
+
+    async def get_raw(self, key: str) -> str | None:
+        value = await self._client.get(key)
+        return str(value) if value is not None else None
+
+    async def set_raw(self, key: str, value: str) -> None:
+        await self._client.set(key, value, ex=self._ttl_seconds)
+
+    async def delete_pattern(self, pattern: str) -> None:
+        cursor: int = 0
+        while True:
+            cursor, keys = await self._client.scan(cursor=cursor, match=pattern, count=100)
+            if keys:
+                await self._client.delete(*keys)
+            if cursor == 0:
+                break
 
     async def close(self) -> None:
         await self._client.aclose()
