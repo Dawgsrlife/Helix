@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 ESMFOLD_API_URL = "https://api.esmatlas.com/foldSequence/v1/pdb/"
 MIN_PROTEIN_LENGTH = 40
+MAX_RETRIES = 2
 PDB_RECORD_PREFIXES = {
     "HEADER",
     "TITLE",
@@ -27,6 +28,7 @@ PDB_RECORD_PREFIXES = {
     "TER",
     "ENDMDL",
     "END",
+    "REMARK",
 }
 
 
@@ -150,28 +152,41 @@ async def predict_structure(
         )
         return None
 
-    try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                ESMFOLD_API_URL,
-                content=protein,
-                headers={"Content-Type": "text/plain"},
-            )
-            resp.raise_for_status()
+    last_error: Exception | None = None
+    for attempt in range(MAX_RETRIES + 1):
+        try:
+            async with httpx.AsyncClient(timeout=90.0) as client:
+                resp = await client.post(
+                    ESMFOLD_API_URL,
+                    content=protein,
+                    headers={"Content-Type": "text/plain"},
+                )
+                if resp.status_code == 429:
+                    logger.warning("ESMFold rate limited (attempt %d/%d)", attempt + 1, MAX_RETRIES + 1)
+                    last_error = httpx.HTTPStatusError(
+                        "Rate limited", request=resp.request, response=resp
+                    )
+                    continue
+                resp.raise_for_status()
 
-            pdb_data = _extract_pdb_text(resp.text)
-            if not pdb_data or not _has_backbone_atoms(pdb_data):
-                logger.warning("ESMFold returned invalid PDB response")
-                return None
+                pdb_data = _extract_pdb_text(resp.text)
+                if not pdb_data or not _has_backbone_atoms(pdb_data):
+                    logger.warning("ESMFold returned invalid PDB response")
+                    return None
 
-            confidence = _extract_mean_plddt(pdb_data)
+                confidence = _extract_mean_plddt(pdb_data)
 
-            return StructurePrediction(
-                pdb_data=pdb_data,
-                protein_sequence=protein,
-                confidence=round(confidence, 4),
-            )
+                return StructurePrediction(
+                    pdb_data=pdb_data,
+                    protein_sequence=protein,
+                    confidence=round(confidence, 4),
+                )
 
-    except Exception:
-        logger.warning("ESMFold API call failed", exc_info=True)
-        return None
+        except httpx.HTTPStatusError:
+            raise
+        except Exception as exc:
+            last_error = exc
+            logger.warning("ESMFold API call failed (attempt %d/%d)", attempt + 1, MAX_RETRIES + 1, exc_info=True)
+
+    logger.error("ESMFold API exhausted all retries: %s", last_error)
+    return None

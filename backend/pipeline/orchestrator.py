@@ -157,7 +157,7 @@ async def _score_with_fallback(
     try:
         async with asyncio.timeout(timeout):
             return await score_candidate(service, sequence, target_tissues=target_tissues)
-    except (TimeoutError, Exception):
+    except Exception:
         return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
 
 
@@ -468,7 +468,7 @@ async def run_generation_pipeline(
                                 data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
                             ).to_json(),
                         )
-            except (TimeoutError, Exception):
+            except Exception:
                 generated = await _fill_with_demo_tokens(
                     manager=manager,
                     session_id=session_id,

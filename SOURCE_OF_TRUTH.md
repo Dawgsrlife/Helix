@@ -28,9 +28,9 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - 85 backend tests passing
 
 ### What's Mocked / Faked
-- **Structure prediction** defaults to MOCK (synthetic PDB from `mock_pdb.py`). ESMFold integration exists but ESM Atlas API is unreliable. No local folding model.
+- **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
 - **Evo2 inference** defaults to MOCK (Markov chain + heuristics). Real local/NIM modes exist but are not the default path.
-- **Explanation layer** returns hardcoded fallback strings when Gemini API is unavailable.
+- **Explanation layer** supports Gemini and Claude streaming. Without API keys, generates score-based summaries from actual candidate data.
 - **Agent chat** is deterministic tool-routing, not multi-step planning.
 - **Frontend API layer** has mock fallbacks for every endpoint (works without backend).
 
@@ -49,13 +49,13 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 
 ### Phase 1: Code Quality & Foundation
 - [x] **1.1 Refactor orchestrator DRY violations** — Extract scoring, structure prediction, and event emission into reusable helpers. The orchestrator is the core of the pipeline and currently unmaintainable.
-- [ ] **1.2 README + .env.example** — Write a real README for open-source. Include setup instructions, architecture overview, screenshots.
-- [ ] **1.3 Dockerfile + docker-compose** — Backend, Redis, and frontend in containers. Anyone should be able to `docker compose up`.
-- [ ] **1.4 CI pipeline** — GitHub Actions: lint, type-check, test on every PR.
+- [x] **1.2 README + .env.example** — Write a real README for open-source. Include setup instructions, architecture overview, screenshots.
+- [x] **1.3 Dockerfile + docker-compose** — Backend, Redis, and frontend in containers. Anyone should be able to `docker compose up`.
+- [x] **1.4 CI pipeline** — GitHub Actions: lint, type-check, test on every PR.
 
 ### Phase 2: Real Integrations
-- [ ] **2.1 Real structure prediction** — Replace mock PDB with local ESMFold (via `esm` PyTorch package) or ColabFold. ESM Atlas API is deprecated; need local inference.
-- [ ] **2.2 Real explanation layer** — Wire up LLM streaming (Claude/Gemini) for mechanistic reports instead of hardcoded strings.
+- [x] **2.1 Real structure prediction** — ESMFold API (api.esmatlas.com) is live and verified. Structure service hardened with retry logic. Set `STRUCTURE_MODE=esmfold` for real folding.
+- [x] **2.2 Real explanation layer** — Supports Gemini and Claude streaming. Score-based fallback generates useful summaries from actual candidate scores instead of hardcoded strings. 10 new tests.
 - [ ] **2.3 Real agent loop** — Move from deterministic tool-routing to LangGraph state machine with memory and multi-step planning.
 
 ### Phase 3: Scale & Polish
