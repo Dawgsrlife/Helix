@@ -59,7 +59,7 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 - [x] **2.3 Real agent loop** — Refactored 1142-line monolith into 7 modules under `services/agent/`. Added Claude native `tool_use` for planning, Redis-backed persistent memory, and 55 dedicated unit tests.
 
 ### Phase 3: Scale & Polish
-- [ ] **3.1 Sequence length scaling** — Support full gene-length sequences (10k-100k bp). Current demo caps at ~3k.
+- [x] **3.1 Sequence length scaling** — Support gene-length sequences up to 100k bp. Added `target_length` to design requests, dynamic timeout/worker scaling, token batching for sequences >5k (200-token `generation_batch` events + `generation_progress`), per-position score downsampling for sequences >10k (capped at 2k points), faster mock generation for long sequences. 38 new tests.
 - [ ] **3.2 FASTA/GenBank import/export** — Researchers need to bring their own sequences and export results.
 - [ ] **3.3 Multi-user sessions** — Move beyond single-user. Auth, session isolation, concurrent pipelines.
 - [ ] **3.4 Frontend polish** — Loading states, error boundaries, responsive layout, accessibility.

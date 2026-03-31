@@ -147,6 +147,7 @@ export interface SubmitDesignOptions {
   numCandidates?: number;
   runProfile?: "demo" | "live";
   truthMode?: "demo_fallback" | "real_only";
+  targetLength?: number;
 }
 
 /** POST /api/design - Start a full design pipeline. Returns WS URL for streaming. */
@@ -159,17 +160,22 @@ export async function submitDesign(
     numCandidates = 10,
     runProfile = "demo",
     truthMode = "demo_fallback",
+    targetLength,
   } = options;
+  const body: Record<string, unknown> = {
+    goal,
+    session_id: sessionId,
+    num_candidates: numCandidates,
+    run_profile: runProfile,
+    truth_mode: truthMode,
+  };
+  if (targetLength !== undefined) {
+    body.target_length = targetLength;
+  }
   const res = await fetch(`${API_BASE}/api/design`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      goal,
-      session_id: sessionId,
-      num_candidates: numCandidates,
-      run_profile: runProfile,
-      truth_mode: truthMode,
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Design submission failed: ${res.status}`);
   const data = await res.json();

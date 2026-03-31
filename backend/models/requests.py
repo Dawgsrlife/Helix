@@ -25,12 +25,21 @@ def _validate_base(base: str) -> str:
     return base
 
 
+MAX_SEQUENCE_LENGTH = 100_000
+
 class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
     num_candidates: int | None = None
     run_profile: Literal["demo", "live"] = "demo"
     truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"
+    target_length: int | None = Field(
+        None,
+        ge=100,
+        le=MAX_SEQUENCE_LENGTH,
+        description="Target sequence length in base pairs (100–100,000). "
+        "If omitted, chosen automatically based on design type and run profile.",
+    )
 
 
 class AnalyzeRequest(BaseModel):

@@ -136,6 +136,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
             run_profile=request.run_profile,
             truth_mode=request.truth_mode,
             seed_sequence=DEFAULT_SEED,
+            target_length=request.target_length,
             on_candidate_ready=lambda candidate_id, sequence: _persist_candidate_sequence(
                 session_id, candidate_id, sequence
             ),

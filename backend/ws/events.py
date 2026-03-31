@@ -78,6 +78,35 @@ class GenerationTokenEvent(BaseModel):
         return self.model_dump(mode="json")
 
 
+class GenerationBatchData(BaseModel):
+    candidate_id: int
+    tokens: str
+    start_position: int
+
+
+class GenerationBatchEvent(BaseModel):
+    event: Literal["generation_batch"] = "generation_batch"
+    data: GenerationBatchData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
+class GenerationProgressData(BaseModel):
+    candidate_id: int
+    generated_bp: int
+    target_bp: int
+    progress: float
+
+
+class GenerationProgressEvent(BaseModel):
+    event: Literal["generation_progress"] = "generation_progress"
+    data: GenerationProgressData
+
+    def to_json(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class CandidateScoredData(BaseModel):
     candidate_id: int
     scores: dict[str, float]

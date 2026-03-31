@@ -28,6 +28,10 @@ from ws.events import (
     CandidateScoredEvent,
     ExplanationChunkData,
     ExplanationChunkEvent,
+    GenerationBatchData,
+    GenerationBatchEvent,
+    GenerationProgressData,
+    GenerationProgressEvent,
     GenerationTokenData,
     GenerationTokenEvent,
     IntentParsedData,
@@ -52,6 +56,13 @@ CandidateUpdateCallback = Callable[[int, str], Awaitable[None] | None]
 SpecUpdateCallback = Callable[[DesignSpec], Awaitable[None] | None]
 STAGE_ORDER = ["intent", "retrieval", "generation", "scoring", "structure", "explanation", "complete"]
 STAGE_RANK = {"pending": 0, "active": 1, "done": 2, "failed": 2}
+
+# Sequence length scaling thresholds
+TOKEN_BATCH_THRESHOLD = 5_000       # Batch tokens into chunks above this length
+TOKEN_BATCH_SIZE = 200              # Number of tokens per batch event
+SCORE_DOWNSAMPLE_THRESHOLD = 10_000  # Downsample per-position scores above this
+SCORE_DOWNSAMPLE_MAX_POINTS = 2_000  # Maximum per-position scores to emit
+PROGRESS_EMIT_INTERVAL = 500        # Emit generation_progress every N tokens
 
 
 @dataclass
@@ -161,6 +172,21 @@ async def _score_with_fallback(
         return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
 
 
+def _downsample_scores(
+    per_position: list[LikelihoodScore],
+) -> list[dict[str, float | int]]:
+    """Downsample per-position scores for long sequences to reduce payload size."""
+    n = len(per_position)
+    if n <= SCORE_DOWNSAMPLE_THRESHOLD:
+        return [{"position": x.position, "score": x.score} for x in per_position]
+    # Keep every Nth score to fit within the max points limit
+    step = max(1, n // SCORE_DOWNSAMPLE_MAX_POINTS)
+    return [
+        {"position": per_position[i].position, "score": per_position[i].score}
+        for i in range(0, n, step)
+    ]
+
+
 async def _emit_scored(
     manager: WebSocketManager,
     session_id: str,
@@ -176,9 +202,7 @@ async def _emit_scored(
             data=CandidateScoredData(
                 candidate_id=candidate_id,
                 scores=score_dict,
-                per_position_scores=[
-                    {"position": x.position, "score": x.score} for x in per_position
-                ],
+                per_position_scores=_downsample_scores(per_position),
             )
         ).to_json(),
     )
@@ -274,16 +298,22 @@ async def _emit_structure(
 # ---------------------------------------------------------------------------
 
 
-def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
+def _profile(
+    run_profile: str,
+    truth_mode: str,
+    target_length: int | None = None,
+) -> PipelineProfile:
     use_structure_fallback = truth_mode != "real_only"
+    # Scale timeouts for long sequences: base timeout * max(1, length / baseline)
+    length_scale = max(1.0, (target_length or 0) / 10_000) if target_length else 1.0
     if run_profile == "live":
         return PipelineProfile(
             run_profile="live",
             truth_mode=truth_mode,
-            candidate_workers=3,
+            candidate_workers=max(1, 3 if (target_length or 0) <= 20_000 else 2),
             retrieval_timeout=20.0,
-            generation_timeout=25.0,
-            scoring_timeout=20.0,
+            generation_timeout=25.0 * length_scale,
+            scoring_timeout=20.0 * length_scale,
             structure_timeout=65.0,
             explanation_timeout=20.0,
             use_structure_fallback=use_structure_fallback,
@@ -291,10 +321,10 @@ def _profile(run_profile: str, truth_mode: str) -> PipelineProfile:
     return PipelineProfile(
         run_profile="demo",
         truth_mode=truth_mode,
-        candidate_workers=4,
+        candidate_workers=max(1, 4 if (target_length or 0) <= 10_000 else 2),
         retrieval_timeout=25.0,
-        generation_timeout=8.0,
-        scoring_timeout=8.0,
+        generation_timeout=max(8.0, 8.0 * length_scale),
+        scoring_timeout=max(8.0, 8.0 * length_scale),
         structure_timeout=20.0,
         explanation_timeout=10.0,
         use_structure_fallback=use_structure_fallback,
@@ -317,11 +347,12 @@ async def run_generation_pipeline(
     run_profile: str = "demo",
     truth_mode: str = "demo_fallback",
     seed_sequence: str = DEFAULT_SEED,
+    target_length: int | None = None,
     on_candidate_ready: CandidateUpdateCallback | None = None,
     on_spec_ready: SpecUpdateCallback | None = None,
 ) -> None:
     candidate_count = max(1, min(int(n_candidates), 10))
-    profile = _profile(run_profile, truth_mode)
+    profile = _profile(run_profile, truth_mode, target_length=target_length)
     fallback_service = Evo2MockService()
     tracker = StageTracker(manager, session_id)
     runtime: dict[int, CandidateRuntime] = {cid: CandidateRuntime(id=cid) for cid in range(candidate_count)}
@@ -402,7 +433,9 @@ async def run_generation_pipeline(
     semaphore = asyncio.Semaphore(min(profile.candidate_workers, candidate_count))
     uses_protein_structure = _uses_protein_structure(spec.design_type)
     emit_regulatory_overlay = not uses_protein_structure
-    target_sequence_length = _default_target_sequence_length(spec.design_type, profile.run_profile)
+    target_sequence_length = _default_target_sequence_length(
+        spec.design_type, profile.run_profile, target_length_override=target_length,
+    )
 
     async def _attempt_first_explanation(candidate: CandidateRuntime) -> None:
         nonlocal first_explanation_task, first_explained_candidate_id
@@ -453,21 +486,35 @@ async def run_generation_pipeline(
                 ).to_json(),
             )
 
+            use_batching = tokens_to_generate >= TOKEN_BATCH_THRESHOLD
+
             try:
                 async with asyncio.timeout(profile.generation_timeout):
-                    async for token in service.generate(
-                        varied_seed,
-                        n_tokens=tokens_to_generate,
-                        temperature=temperature,
-                    ):
-                        position = len(generated)
-                        generated += token
-                        await manager.send_event(
-                            session_id,
-                            GenerationTokenEvent(
-                                data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
-                            ).to_json(),
+                    if use_batching:
+                        generated = await _generate_batched(
+                            manager=manager,
+                            session_id=session_id,
+                            candidate_id=candidate_id,
+                            service=service,
+                            seed=varied_seed,
+                            n_tokens=tokens_to_generate,
+                            temperature=temperature,
+                            generated=generated,
                         )
+                    else:
+                        async for token in service.generate(
+                            varied_seed,
+                            n_tokens=tokens_to_generate,
+                            temperature=temperature,
+                        ):
+                            position = len(generated)
+                            generated += token
+                            await manager.send_event(
+                                session_id,
+                                GenerationTokenEvent(
+                                    data=GenerationTokenData(candidate_id=candidate_id, token=token, position=position)
+                                ).to_json(),
+                            )
             except Exception:
                 generated = await _fill_with_demo_tokens(
                     manager=manager,
@@ -891,6 +938,90 @@ def _build_retrieval_fallback(source_name: str, spec: DesignSpec) -> dict[str, o
 # ---------------------------------------------------------------------------
 
 
+async def _generate_batched(
+    *,
+    manager: WebSocketManager,
+    session_id: str,
+    candidate_id: int,
+    service: Evo2Service,
+    seed: str,
+    n_tokens: int,
+    temperature: float,
+    generated: str,
+) -> str:
+    """Generate tokens in batches, emitting batch events and periodic progress.
+
+    For long sequences (>5k bp), sending per-token WebSocket events is
+    wasteful. Instead, accumulate tokens into batches of TOKEN_BATCH_SIZE
+    and emit them as a single `generation_batch` event. Emit
+    `generation_progress` every PROGRESS_EMIT_INTERVAL tokens so the
+    frontend can show a progress bar.
+    """
+    batch_buffer: list[str] = []
+    batch_start = len(generated)
+    tokens_emitted = 0
+
+    async for token in service.generate(seed, n_tokens=n_tokens, temperature=temperature):
+        generated += token
+        batch_buffer.append(token)
+        tokens_emitted += 1
+
+        if len(batch_buffer) >= TOKEN_BATCH_SIZE:
+            await manager.send_event(
+                session_id,
+                GenerationBatchEvent(
+                    data=GenerationBatchData(
+                        candidate_id=candidate_id,
+                        tokens="".join(batch_buffer),
+                        start_position=batch_start,
+                    )
+                ).to_json(),
+            )
+            batch_start = len(generated)
+            batch_buffer.clear()
+
+        if tokens_emitted % PROGRESS_EMIT_INTERVAL == 0:
+            await manager.send_event(
+                session_id,
+                GenerationProgressEvent(
+                    data=GenerationProgressData(
+                        candidate_id=candidate_id,
+                        generated_bp=len(generated),
+                        target_bp=len(seed) + n_tokens,
+                        progress=round(tokens_emitted / n_tokens, 4),
+                    )
+                ).to_json(),
+            )
+
+    # Flush remaining batch
+    if batch_buffer:
+        await manager.send_event(
+            session_id,
+            GenerationBatchEvent(
+                data=GenerationBatchData(
+                    candidate_id=candidate_id,
+                    tokens="".join(batch_buffer),
+                    start_position=batch_start,
+                )
+            ).to_json(),
+        )
+
+    # Final progress
+    await manager.send_event(
+        session_id,
+        GenerationProgressEvent(
+            data=GenerationProgressData(
+                candidate_id=candidate_id,
+                generated_bp=len(generated),
+                target_bp=len(seed) + n_tokens,
+                progress=1.0,
+            )
+        ).to_json(),
+    )
+
+    return generated
+
+
 async def _fill_with_demo_tokens(
     *,
     manager: WebSocketManager,
@@ -932,7 +1063,13 @@ def _uses_protein_structure(design_type: str | None) -> bool:
     return any(token in key for token in ("coding", "protein", "peptide", "orf"))
 
 
-def _default_target_sequence_length(design_type: str | None, run_profile: str) -> int:
+def _default_target_sequence_length(
+    design_type: str | None,
+    run_profile: str,
+    target_length_override: int | None = None,
+) -> int:
+    if target_length_override is not None:
+        return max(100, min(target_length_override, 100_000))
     if run_profile == "live":
         return 16000 if _uses_protein_structure(design_type) else 12000
     return 3200 if _uses_protein_structure(design_type) else 2200

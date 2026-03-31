@@ -171,8 +171,14 @@ class Evo2MockService(Evo2Service):
     ) -> AsyncGenerator[str, None]:
         rng = random.Random(_deterministic_seed(seed + str(n_tokens)))
         last = seed[-1].upper() if seed else "A"
-        # Keep long-sequence demos snappy while preserving visible token streaming.
-        token_delay = 0.004 if n_tokens >= 160 else 0.012
+        # Scale delay by sequence length to keep wall-clock time reasonable.
+        # Short (<160): visible streaming. Medium (160-5k): fast streaming. Long (>5k): minimal delay.
+        if n_tokens >= 5000:
+            token_delay = 0.0005
+        elif n_tokens >= 160:
+            token_delay = 0.004
+        else:
+            token_delay = 0.012
 
         for _ in range(n_tokens):
             weights = _TRANSITION.get(last, _TRANSITION["A"])

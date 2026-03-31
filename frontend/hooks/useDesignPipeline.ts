@@ -284,6 +284,42 @@ export function useDesignPipeline() {
         break;
       }
 
+      case "generation_batch": {
+        // Batched tokens for long sequences (>5k bp)
+        const tokens = msg.data.tokens as string;
+        const candidateId = Number(msg.data.candidate_id ?? 0);
+        const current = candidateSequenceRef.current[candidateId] ?? "";
+        candidateSequenceRef.current[candidateId] = `${current}${tokens}`;
+
+        const existing = store.candidates.find((c) => c.id === candidateId);
+        if (existing) {
+          const updated = {
+            ...existing,
+            sequence: candidateSequenceRef.current[candidateId],
+            status: existing.status === "queued" ? "running" : existing.status,
+          };
+          const rest = store.candidates.filter((c) => c.id !== candidateId);
+          store.setCandidates([...rest, updated].sort((a, b) => b.overall - a.overall));
+        }
+        // Append just the last few tokens for the generating animation
+        const displayTokens = tokens.slice(-4);
+        for (const t of displayTokens) {
+          store.appendGeneratingToken(t);
+        }
+        break;
+      }
+
+      case "generation_progress": {
+        // Progress update for long sequence generation
+        const progress = Number(msg.data.progress ?? 0);
+        const generatedBp = Number(msg.data.generated_bp ?? 0);
+        const targetBp = Number(msg.data.target_bp ?? 0);
+        // Update stage progress via the stage_status mechanism
+        // The pipeline status component already reads stage progress
+        store.setPipelineStage("generation");
+        break;
+      }
+
       case "candidate_scored": {
         store.addCompletedStage("generation");
         store.addCompletedStage("scoring");
