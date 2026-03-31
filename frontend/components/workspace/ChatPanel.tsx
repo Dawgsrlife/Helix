@@ -374,14 +374,16 @@ export default function ChatPanel() {
   };
 
   return (
-    <div className="w-[360px] shrink-0 flex flex-col h-full"
-      style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}>
+    <div className="w-full sm:w-[360px] shrink-0 flex flex-col h-full"
+      style={{ background: "var(--surface-raised)", borderLeft: "1px solid var(--ghost-border)" }}
+      role="complementary"
+      aria-label="Helio AI assistant">
 
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 shrink-0"
         style={{ borderBottom: "1px solid var(--ghost-border)" }}>
         <div className="flex items-center gap-2.5">
-          <Sparkles size={14} style={{ color: "var(--accent)" }} />
+          <Sparkles size={14} style={{ color: "var(--accent)" }} aria-hidden="true" />
           <span className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Helio Agent</span>
           {iterations > 1 && (
             <span className="text-[10px] px-2 py-0.5 rounded-full"
@@ -390,13 +392,13 @@ export default function ChatPanel() {
             </span>
           )}
         </div>
-        <button onClick={toggleChat} className="p-1.5 rounded-md hover:bg-white/5 transition-colors">
-          <X size={14} style={{ color: "var(--text-muted)" }} />
+        <button onClick={toggleChat} className="p-1.5 rounded-md hover:bg-white/5 transition-colors" aria-label="Close chat panel">
+          <X size={14} style={{ color: "var(--text-muted)" }} aria-hidden="true" />
         </button>
       </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-5" aria-live="polite" aria-label="Chat messages">
         {chatMessages.length === 0 && (
           <div>
             <p className="text-[13px] mb-4 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
@@ -544,13 +546,15 @@ export default function ChatPanel() {
           <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSend()}
             placeholder="Ask Helio to edit, optimize, or explain..."
+            aria-label="Message Helio"
             className="flex-1 text-[13px] outline-none bg-transparent"
             style={{ color: "var(--text-primary)" }}
             disabled={isTyping} />
           <button onClick={() => handleSend()} disabled={!input.trim() || isTyping}
+            aria-label="Send message"
             className="p-1.5 rounded transition-colors hover:bg-white/5 disabled:opacity-30"
             style={{ color: input.trim() ? "var(--accent)" : "var(--text-faint)" }}>
-            <Send size={14} />
+            <Send size={14} aria-hidden="true" />
           </button>
         </div>
       </div>

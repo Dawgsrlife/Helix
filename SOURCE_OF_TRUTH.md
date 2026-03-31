@@ -25,7 +25,7 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - 4D scoring logic (functional, tissue specificity, off-target, novelty)
 - Session management (in-memory dev, Redis production)
 - Frontend workspace (Next.js 16, sequence viewer, 3D structure, leaderboard, chat)
-- 85 backend tests passing
+- 389 backend tests passing
 
 ### What's Mocked / Faked
 - **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
@@ -60,9 +60,9 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 
 ### Phase 3: Scale & Polish
 - [x] **3.1 Sequence length scaling** — Support gene-length sequences up to 100k bp. Added `target_length` to design requests, dynamic timeout/worker scaling, token batching for sequences >5k (200-token `generation_batch` events + `generation_progress`), per-position score downsampling for sequences >10k (capped at 2k points), faster mock generation for long sequences. 38 new tests.
-- [ ] **3.2 FASTA/GenBank import/export** — Researchers need to bring their own sequences and export results.
-- [ ] **3.3 Multi-user sessions** — Move beyond single-user. Auth, session isolation, concurrent pipelines.
-- [ ] **3.4 Frontend polish** — Loading states, error boundaries, responsive layout, accessibility.
+- [x] **3.2 FASTA/GenBank import/export** — Pure-Python FASTA/GenBank parsers and exporters (no BioPython). Three new endpoints: `POST /api/import` (file upload), `POST /api/export/fasta`, `POST /api/export/genbank`. 34 new tests.
+- [x] **3.3 Multi-user sessions** — Session ownership via `user_id` on `DesignRequest`. `GET /api/sessions/{user_id}` endpoint. Both MemorySessionStore and RedisSessionStore track owners and user→session mappings. 15 new tests.
+- [x] **3.4 Frontend polish** — React ErrorBoundary wrapping root layout and each view. Skeleton loader components. Responsive sidebar (hidden on mobile, toggle via hamburger menu, backdrop overlay). Side panels hidden on mobile (structure inspector, explorer inspector, IDE panel). Header tab bar hidden on small screens. ARIA labels on all icon buttons, nav items (`aria-current`), chat panel, pipeline progress bar (`role="progressbar"`), leaderboard. `aria-live` on pipeline status and chat messages. Skip-to-content link. Focus-visible ring styles. `prefers-reduced-motion` media query disables all animations. Responsive padding on leaderboard.
 
 ### Phase 4: Research-Grade Features
 - [ ] **4.1 Variant annotation** — ClinVar/gnomAD overlay on sequence viewer with pathogenicity predictions.
@@ -76,8 +76,8 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 
 ### Backend
 
-- FastAPI endpoints: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`.
-- WebSocket event contract: `pipeline_manifest`, `stage_status`, `candidate_status`, `candidate_seed`, `intent_parsed`, `retrieval_progress`, `generation_token`, `candidate_scored`, `structure_ready`, `regulatory_map_ready`, `explanation_chunk`, `pipeline_complete`.
+- FastAPI endpoints: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`, `/api/import`, `/api/export/fasta`, `/api/export/genbank`, `/api/sessions/{user_id}`.
+- WebSocket event contract: `pipeline_manifest`, `stage_status`, `candidate_status`, `candidate_seed`, `intent_parsed`, `retrieval_progress`, `generation_token`, `generation_batch`, `generation_progress`, `candidate_scored`, `structure_ready`, `regulatory_map_ready`, `explanation_chunk`, `pipeline_complete`.
 - `/api/design` accepts `run_profile: "demo" | "live"`, `truth_mode`, and `num_candidates`.
 - Generation orchestration emits N candidate placeholders and guarantees `pipeline_complete.candidates` includes one record per requested candidate ID.
 - Stage state is orchestrator-driven (`stage_status`) instead of frontend inference.

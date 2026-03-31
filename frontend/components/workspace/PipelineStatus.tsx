@@ -83,7 +83,8 @@ export default function PipelineStatus() {
     : null;
 
   return (
-    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "var(--surface-base)" }}>
+    <div className="flex-1 flex items-center justify-center px-8 py-12" style={{ background: "var(--surface-base)" }}
+      role="status" aria-live="polite" aria-label="Pipeline progress">
       <div className="max-w-lg w-full">
         <h2 className="text-xl font-semibold tracking-tight mb-2">
           {isStreaming ? "Running design pipeline" : "Running analysis"}
@@ -95,7 +96,9 @@ export default function PipelineStatus() {
         </p>
 
         {/* Progress bar */}
-        <div className="h-1 rounded-full mb-8 overflow-hidden" style={{ background: "var(--ghost-border)" }}>
+        <div className="h-1 rounded-full mb-8 overflow-hidden" style={{ background: "var(--ghost-border)" }}
+          role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}
+          aria-label={`Pipeline ${Math.round(progress)}% complete`}>
           <motion.div className="h-full rounded-full" style={{ background: "var(--accent)" }}
             animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
         </div>

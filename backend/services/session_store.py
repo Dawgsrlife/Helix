@@ -34,7 +34,17 @@ class SessionLockTimeoutError(TimeoutError):
 
 class SessionStore(ABC):
     @abstractmethod
-    async def initialize_session(self, session_id: str) -> None:
+    async def initialize_session(self, session_id: str, user_id: str | None = None) -> None:
+        pass
+
+    @abstractmethod
+    async def get_session_owner(self, session_id: str) -> str | None:
+        """Return the user_id that owns this session, or None if unset."""
+        pass
+
+    @abstractmethod
+    async def list_user_sessions(self, user_id: str) -> list[str]:
+        """List all session IDs owned by a user."""
         pass
 
     @abstractmethod
@@ -97,14 +107,26 @@ class MemorySessionStore(SessionStore):
         self._pending_goals: dict[str, str] = {}
         self._candidates: dict[str, dict[int, str]] = {}
         self._raw_store: dict[str, str] = {}
+        self._session_owners: dict[str, str] = {}
         self._lock = asyncio.Lock()
         self._candidate_locks: dict[str, asyncio.Lock] = {}
 
     def _candidate_lock_key(self, session_id: str, candidate_id: int) -> str:
         return f"{session_id}:{candidate_id}"
 
-    async def initialize_session(self, session_id: str) -> None:
+    async def initialize_session(self, session_id: str, user_id: str | None = None) -> None:
+        if user_id:
+            async with self._lock:
+                self._session_owners[session_id] = user_id
         await self.set_candidate_sequence(session_id, 0, self._default_seed)
+
+    async def get_session_owner(self, session_id: str) -> str | None:
+        async with self._lock:
+            return self._session_owners.get(session_id)
+
+    async def list_user_sessions(self, user_id: str) -> list[str]:
+        async with self._lock:
+            return [sid for sid, uid in self._session_owners.items() if uid == user_id]
 
     async def set_pending_goal(self, session_id: str, goal: str) -> None:
         async with self._lock:
@@ -190,8 +212,28 @@ class RedisSessionStore(SessionStore):
     def _candidate_lock_key(self, session_id: str, candidate_id: int) -> str:
         return f"{self._key_prefix}:{session_id}:lock:{candidate_id}"
 
-    async def initialize_session(self, session_id: str) -> None:
+    def _owner_key(self, session_id: str) -> str:
+        return f"{self._key_prefix}:{session_id}:owner"
+
+    def _user_sessions_key(self, user_id: str) -> str:
+        return f"{self._key_prefix}:user:{user_id}:sessions"
+
+    async def initialize_session(self, session_id: str, user_id: str | None = None) -> None:
+        if user_id:
+            pipe = self._client.pipeline(transaction=True)
+            pipe.set(self._owner_key(session_id), user_id, ex=self._ttl_seconds)
+            pipe.sadd(self._user_sessions_key(user_id), session_id)
+            pipe.expire(self._user_sessions_key(user_id), self._ttl_seconds)
+            await pipe.execute()
         await self.set_candidate_sequence(session_id, 0, self._default_seed)
+
+    async def get_session_owner(self, session_id: str) -> str | None:
+        value = await self._client.get(self._owner_key(session_id))
+        return str(value) if value is not None else None
+
+    async def list_user_sessions(self, user_id: str) -> list[str]:
+        members = await self._client.smembers(self._user_sessions_key(user_id))
+        return [str(m) for m in members]
 
     async def set_pending_goal(self, session_id: str, goal: str) -> None:
         key = self._pending_goal_key(session_id)

@@ -30,6 +30,7 @@ MAX_SEQUENCE_LENGTH = 100_000
 class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
+    user_id: str | None = None
     num_candidates: int | None = None
     run_profile: Literal["demo", "live"] = "demo"
     truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"

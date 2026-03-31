@@ -8,8 +8,9 @@ import Link from "next/link";
 import {
   Dna, FlaskConical, BarChart3, Search, Home, Sun, Moon, LogOut,
   ChevronRight, Pencil, ArrowRight, Sparkles, Target,
-  Box, Maximize2, Minimize2, HelpCircle, RotateCcw,
+  Box, Maximize2, Minimize2, HelpCircle, RotateCcw, Menu, X,
 } from "lucide-react";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { useHelixStore } from "@/lib/store";
 import { useSequenceAnalysis } from "@/hooks/useSequenceAnalysis";
 import { useDesignPipeline } from "@/hooks/useDesignPipeline";
@@ -240,9 +241,20 @@ function AnalyzePageInner() {
 
   // Sidebar hover state for spring animation
   const [hoveredNav, setHoveredNav] = useState<string | null>(null);
+  // Mobile sidebar collapse
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="grain h-screen flex overflow-hidden" style={{ background: "var(--surface-base)", color: "var(--text-primary)" }}>
+
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
 
       {/* ── TUTORIAL OVERLAY ── */}
       <TutorialOverlay
@@ -254,11 +266,13 @@ function AnalyzePageInner() {
 
       {/* ── SIDEBAR ── */}
       <motion.aside
-        className="w-[220px] shrink-0 flex flex-col h-full"
+        className={`w-[220px] shrink-0 flex flex-col h-full fixed lg:relative z-50 lg:z-auto transition-transform lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ background: "var(--surface-void)" }}
         initial={{ x: -220, opacity: 0 }}
         animate={{ x: 0, opacity: 1 }}
         transition={{ ...springTransition, delay: 0.1 }}
+        aria-label="Main navigation"
+        role="navigation"
       >
         {/* Wordmark */}
         <div className="px-6 h-14 flex items-center">
@@ -266,34 +280,36 @@ function AnalyzePageInner() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 space-y-0.5 mt-2">
+        <nav className="flex-1 px-3 space-y-0.5 mt-2" aria-label="Workspace views">
           <motion.button
-            onClick={() => setViewMode("input")}
+            onClick={() => { setViewMode("input"); setSidebarOpen(false); }}
             onMouseEnter={() => setHoveredNav("input")}
             onMouseLeave={() => setHoveredNav(null)}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             transition={springTransition}
+            aria-current={viewMode === "input" || viewMode === "pipeline" ? "page" : undefined}
             className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-colors ${
               viewMode === "input" || viewMode === "pipeline" ? "nav-active" : "hover:bg-white/[0.03]"
             }`}>
-            <Home size={16} style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-faint)" }} />
+            <Home size={16} aria-hidden="true" style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-faint)" }} />
             <span className="label-caps" style={{ color: viewMode === "input" || viewMode === "pipeline" ? "var(--accent-bright)" : "var(--text-muted)" }}>Home</span>
           </motion.button>
           {SIDEBAR_ITEMS.map(({ icon: Icon, label, viewMode: target }) => {
             const isActive = viewMode === target || (target === "ide" && viewMode === "compare");
             return (
               <motion.button key={target}
-                onClick={() => (analysisResult || target === "structure") ? setViewMode(target) : setViewMode("input")}
+                onClick={() => { (analysisResult || target === "structure") ? setViewMode(target) : setViewMode("input"); setSidebarOpen(false); }}
                 onMouseEnter={() => setHoveredNav(target)}
                 onMouseLeave={() => setHoveredNav(null)}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 transition={springTransition}
+                aria-current={isActive ? "page" : undefined}
                 className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-left transition-colors ${
                   isActive ? "nav-active" : "hover:bg-white/[0.03]"
                 }`}>
-                <Icon size={16} style={{ color: isActive ? "var(--accent-bright)" : "var(--text-faint)" }} />
+                <Icon size={16} aria-hidden="true" style={{ color: isActive ? "var(--accent-bright)" : "var(--text-faint)" }} />
                 <span className="label-caps" style={{ color: isActive ? "var(--accent-bright)" : "var(--text-muted)" }}>{label}</span>
               </motion.button>
             );
@@ -358,16 +374,25 @@ function AnalyzePageInner() {
         </div>
       </motion.aside>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden" id="main-content">
         {/* ── HEADER (glassmorphic) ── */}
         <motion.header
-          className="h-14 shrink-0 flex items-center justify-between px-6"
+          className="h-14 shrink-0 flex items-center justify-between px-4 lg:px-6"
           style={{ background: "color-mix(in oklch, var(--surface-base), transparent 40%)", backdropFilter: "blur(20px) saturate(1.8)", borderBottom: "0.5px solid var(--ghost-border)" }}
           initial={{ y: -56, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ ...smoothTransition, delay: 0.15 }}
         >
           <div className="flex items-center gap-3">
+            {/* Mobile menu toggle */}
+            <button
+              className="lg:hidden p-2 -ml-2 rounded-md transition-colors hover:bg-white/[0.06]"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label={sidebarOpen ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={sidebarOpen}
+            >
+              {sidebarOpen ? <X size={18} aria-hidden="true" /> : <Menu size={18} aria-hidden="true" />}
+            </button>
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <motion.span className="text-[13px]" style={{ color: "var(--text-secondary)" }}
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -375,12 +400,14 @@ function AnalyzePageInner() {
               </motion.span>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 lg:gap-3 overflow-x-auto">
             {viewMode !== "input" && viewMode !== "pipeline" && (
               <>
-                <div className="flex gap-1">
+                <div className="hidden md:flex gap-1" role="tablist" aria-label="View tabs">
                   {(["analyze", "structure", "leaderboard", "explorer", "ide", "compare"] as const).map((m) => (
                     <motion.button key={m} onClick={() => setViewMode(m)}
+                      role="tab"
+                      aria-selected={viewMode === m}
                       whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
                       className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-colors font-label"
                       style={{
@@ -392,6 +419,8 @@ function AnalyzePageInner() {
                   ))}
                 </div>
                 <button onClick={toggleChat}
+                  aria-label={chatOpen ? "Close Helio chat" : "Open Helio chat"}
+                  aria-pressed={chatOpen}
                   className="px-3 py-1.5 rounded-md text-[10px] font-medium uppercase tracking-wider transition-all font-label"
                   style={{ color: chatOpen ? "var(--accent-bright)" : "var(--text-faint)" }}>
                   Helio
@@ -405,16 +434,21 @@ function AnalyzePageInner() {
           {/* ═══ INPUT ═══ */}
           {viewMode === "input" && (
             <motion.div key="input" className="flex-1 flex overflow-hidden" data-tutorial="sequence-input"
+              role="main"
               {...fadeSlide}>
-              <SequenceInput onSubmit={handleSequenceSubmit} onDesign={handleDesignSubmit} isLoading={isLoading} error={error} />
+              <ErrorBoundary>
+                <SequenceInput onSubmit={handleSequenceSubmit} onDesign={handleDesignSubmit} isLoading={isLoading} error={error} />
+              </ErrorBoundary>
             </motion.div>
           )}
 
           {/* ═══ PIPELINE: running ═══ */}
           {viewMode === "pipeline" && (
-            <motion.div key="pipeline" className="flex-1"
+            <motion.div key="pipeline" className="flex-1" role="main" aria-live="polite"
               {...fadeSlide}>
-              <PipelineStatus />
+              <ErrorBoundary>
+                <PipelineStatus />
+              </ErrorBoundary>
             </motion.div>
           )}
 
@@ -677,9 +711,9 @@ function AnalyzePageInner() {
                 </motion.div>
               </div>
 
-              {/* Side panel (hidden in fullscreen) */}
+              {/* Side panel (hidden in fullscreen and on mobile) */}
               {!structureFullscreen && (
-                <motion.div className="w-[320px] shrink-0 flex flex-col overflow-y-auto"
+                <motion.div className="hidden lg:flex w-[320px] shrink-0 flex-col overflow-y-auto"
                   style={{ background: "var(--surface-elevated)" }}
                   {...slideInRight}>
 
@@ -890,7 +924,7 @@ function AnalyzePageInner() {
                   </motion.div>
                 </div>
                 {/* Inspector panel */}
-                <motion.div className="w-[320px] shrink-0 flex flex-col overflow-y-auto"
+                <motion.div className="hidden lg:flex w-[320px] shrink-0 flex-col overflow-y-auto"
                   style={{ background: "var(--surface-elevated)" }}
                   {...slideInRight}>
                   <div className="p-5 pb-4">
@@ -1026,7 +1060,7 @@ function AnalyzePageInner() {
                   </motion.div>
                 </div>
                 {/* IDE right panel */}
-                <motion.div className="w-[380px] shrink-0 flex flex-col overflow-y-auto"
+                <motion.div className="hidden lg:flex w-[380px] shrink-0 flex-col overflow-y-auto"
                   style={{ background: "var(--surface-elevated)" }}
                   {...slideInRight}>
                   {/* Mutation editor */}
@@ -1131,6 +1165,7 @@ function AnalyzePageInner() {
       {/* Floating Helio button */}
       {!chatOpen && viewMode !== "input" && viewMode !== "pipeline" && analysisResult && (
         <motion.button onClick={toggleChat}
+          aria-label="Open Helio AI assistant"
           className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium"
           style={{
             background: "var(--accent)",

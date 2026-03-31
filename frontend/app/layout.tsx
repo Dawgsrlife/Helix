@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Instrument_Serif, Space_Grotesk } from "next/font/google";
 import { cn } from "@/lib/utils";
+import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import "./globals.css";
 
 const inter = Inter({
@@ -49,7 +50,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={cn("dark", inter.variable, jetbrainsMono.variable, instrumentSerif.variable, spaceGrotesk.variable)}>
-      <body className="antialiased min-h-screen font-sans">{children}</body>
+      <body className="antialiased min-h-screen font-sans">
+        <a href="#main-content" className="skip-to-content">Skip to content</a>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </body>
     </html>
   );
 }

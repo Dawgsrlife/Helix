@@ -39,9 +39,10 @@ export default function CandidateLeaderboard() {
   };
 
   return (
-    <div className="flex-1 overflow-auto px-8 py-6" style={{ background: "var(--surface-base)" }}>
+    <div className="flex-1 overflow-auto px-4 lg:px-8 py-6" style={{ background: "var(--surface-base)" }}
+      role="region" aria-label="Candidate leaderboard">
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <div>
             <h2 className="text-xl font-semibold tracking-tight mb-1">Candidate Ranking</h2>
             <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>{candidates.length} candidates scored and ranked by <ScienceTooltip term="overall-viability">composite viability</ScienceTooltip></p>
@@ -49,7 +50,7 @@ export default function CandidateLeaderboard() {
           <button onClick={() => setViewMode("explorer")}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-[1.02]"
             style={{ background: "var(--accent)", color: "var(--surface-base)" }}>
-            Inspect top candidate <ArrowRight size={14} />
+            Inspect top candidate <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
 
@@ -132,7 +133,7 @@ export default function CandidateLeaderboard() {
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: c.scores.offTarget > 0.03 ? "var(--base-t)" : "var(--accent)" }}>{(c.scores.offTarget * 100).toFixed(1)}%</span>
               <span className="w-20 text-right text-[13px] font-mono" style={{ color: "var(--base-g)" }}>{(c.scores.novelty * 100).toFixed(0)}%</span>
               <span className="w-20 text-right text-base font-semibold font-mono" style={{ color: "var(--text-primary)" }}>{c.overall.toFixed(1)}</span>
-              <ChevronRight size={14} className="w-8 shrink-0" style={{ color: "var(--text-faint)" }} />
+              <ChevronRight size={14} className="w-8 shrink-0" style={{ color: "var(--text-faint)" }} aria-hidden="true" />
             </motion.button>
           ))}
         </div>

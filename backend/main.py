@@ -5,8 +5,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
 from models.requests import (
     AnalyzeRequest,
@@ -117,7 +118,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
     num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
     # Agent memory should only live within the active chat lifecycle for this run.
     copilot.clear_session_memory(session_id=session_id)
-    await session_store.initialize_session(session_id)
+    await session_store.initialize_session(session_id, user_id=request.user_id)
     _set_session_context(
         session_id,
         {
@@ -357,6 +358,105 @@ async def structure(request: StructureRequest) -> StructureResponse:
     region = sequence[request.region_start:request.region_end]
     pdb_data, confidence, model = await _predict_structure_snapshot(sequence=region, candidate_id=0)
     return StructureResponse(pdb_data=pdb_data, model=model, confidence=confidence)
+
+
+@app.post("/api/import")
+async def import_sequence(file: UploadFile) -> dict[str, object]:
+    """Import sequences from FASTA or GenBank files."""
+    from services.sequence_formats import parse_fasta, parse_genbank
+
+    if file.size is not None and file.size > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+
+    content = (await file.read()).decode("utf-8", errors="replace")
+    filename = (file.filename or "").lower()
+
+    if filename.endswith((".gb", ".gbk", ".genbank")):
+        records = parse_genbank(content)
+        return {
+            "format": "genbank",
+            "count": len(records),
+            "sequences": [
+                {
+                    "id": rec.locus or rec.accession or f"seq_{i}",
+                    "sequence": rec.sequence,
+                    "length": len(rec.sequence),
+                    "organism": rec.organism,
+                    "definition": rec.definition,
+                    "features": [
+                        {"type": f.type, "start": f.start, "end": f.end, "strand": f.strand}
+                        for f in rec.features
+                    ],
+                }
+                for i, rec in enumerate(records)
+            ],
+        }
+
+    # Default: FASTA (handles .fasta, .fa, .fna, .txt, or raw)
+    records = parse_fasta(content)
+    return {
+        "format": "fasta",
+        "count": len(records),
+        "sequences": [
+            {
+                "id": rec.header,
+                "sequence": rec.sequence,
+                "length": len(rec.sequence),
+                "description": rec.description,
+            }
+            for rec in records
+        ],
+    }
+
+
+@app.post("/api/export/fasta")
+async def export_fasta_endpoint(request: Request) -> PlainTextResponse:
+    """Export sequences to FASTA format."""
+    from services.sequence_formats import export_fasta
+
+    body = await request.json()
+    sequences = body.get("sequences", [])
+    if not sequences:
+        raise HTTPException(status_code=422, detail="No sequences provided")
+
+    fasta_text = export_fasta(sequences)
+    return PlainTextResponse(
+        content=fasta_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=helix_export.fasta"},
+    )
+
+
+@app.post("/api/export/genbank")
+async def export_genbank_endpoint(request: Request) -> PlainTextResponse:
+    """Export a sequence to GenBank format."""
+    from services.sequence_formats import export_genbank
+
+    body = await request.json()
+    sequence = body.get("sequence", "")
+    if not sequence:
+        raise HTTPException(status_code=422, detail="No sequence provided")
+
+    gb_text = export_genbank(
+        sequence=sequence,
+        locus=body.get("locus", "HELIX_SEQ"),
+        definition=body.get("definition", "Helix-designed sequence"),
+        organism=body.get("organism", "synthetic construct"),
+        features=body.get("features"),
+        scores=body.get("scores"),
+    )
+    return PlainTextResponse(
+        content=gb_text,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=helix_export.gb"},
+    )
+
+
+@app.get("/api/sessions/{user_id}")
+async def list_sessions(user_id: str) -> dict[str, object]:
+    """List all sessions owned by a user."""
+    session_ids = await session_store.list_user_sessions(user_id)
+    return {"user_id": user_id, "sessions": session_ids, "count": len(session_ids)}
 
 
 @app.get("/api/health", response_model=HealthResponse)
