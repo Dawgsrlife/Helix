@@ -34,7 +34,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:80
 
 interface ApiAnalysisResponse {
   sequence: string;
-  regions: Array<{
+  regions?: Array<{
     start: number;
     end: number;
     type: string;

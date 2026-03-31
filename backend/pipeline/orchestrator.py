@@ -169,6 +169,8 @@ async def _score_with_fallback(
         async with asyncio.timeout(timeout):
             return await score_candidate(service, sequence, target_tissues=target_tissues)
     except Exception:
+        import logging
+        logging.getLogger("helix").warning("Primary scoring failed, falling back to mock", exc_info=True)
         return await score_candidate(fallback_service, sequence, target_tissues=target_tissues)
 
 

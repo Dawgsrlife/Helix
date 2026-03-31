@@ -84,6 +84,5 @@ class HealthResponse(BaseModel):
 
 class AnalysisResponse(BaseModel):
     sequence: str
-    regions: list[dict[str, object]]
     scores: list[dict[str, float | int]]
     proteins: list[dict[str, object]]

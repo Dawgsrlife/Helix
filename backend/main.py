@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from collections.abc import AsyncIterator as _AsyncIterator
+from contextlib import asynccontextmanager as _acm
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -61,6 +64,21 @@ from ws.events import (
     StructureReadyEvent,
 )
 
+logger = logging.getLogger("helix")
+
+
+@_acm
+async def _session_errors_to_http(candidate_id: int = 0) -> _AsyncIterator[None]:
+    """Convert session store exceptions to HTTP error responses."""
+    try:
+        yield
+    except SessionLockTimeoutError as exc:
+        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
+    except SessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="session not found") from exc
+    except CandidateNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"candidate {exc.candidate_id} not found") from exc
+
 app = FastAPI(title="Helix Backend", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -106,7 +124,6 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
     ]
     return AnalysisResponse(
         sequence=sequence,
-        regions=[],
         scores=[{"position": x.position, "score": x.score} for x in per_position],
         proteins=proteins,
     )
@@ -115,9 +132,9 @@ async def analyze(request: AnalyzeRequest) -> AnalysisResponse:
 @app.post("/api/design", response_model=DesignAcceptedResponse, status_code=202)
 async def design(request: DesignRequest, http_request: Request) -> DesignAcceptedResponse:
     session_id = request.session_id or create_session_id()
-    num_candidates = 10 if request.num_candidates is None else max(1, min(request.num_candidates, 10))
+    num_candidates = request.num_candidates
     # Agent memory should only live within the active chat lifecycle for this run.
-    copilot.clear_session_memory(session_id=session_id)
+    await copilot.clear_session_memory(session_id=session_id)
     await session_store.initialize_session(session_id, user_id=request.user_id)
     _set_session_context(
         session_id,
@@ -152,7 +169,7 @@ async def design(request: DesignRequest, http_request: Request) -> DesignAccepte
 
 @app.post("/api/edit/base", response_model=BaseEditResponse)
 async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
-    try:
+    async with _session_errors_to_http(request.candidate_id):
         async with session_store.candidate_guard(request.session_id, request.candidate_id):
             sequence = await session_store.require_candidate_sequence(request.session_id, request.candidate_id)
             if request.position < 0 or request.position >= len(sequence):
@@ -167,12 +184,6 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
             mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
             mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
             await session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
-    except SessionLockTimeoutError as exc:
-        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
-    except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="session not found") from exc
-    except CandidateNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
 
     return BaseEditResponse(
         position=request.position,
@@ -194,15 +205,9 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
 async def edit_followup(request: FollowupEditRequest) -> FollowupAcceptedResponse:
     steps = ["intent_parse", "evo2_generation", "evo2_scoring"]
     candidate_id = request.candidate_id or 0
-    try:
+    async with _session_errors_to_http(candidate_id):
         async with session_store.candidate_guard(request.session_id, candidate_id):
             base_sequence = await session_store.require_candidate_sequence(request.session_id, candidate_id)
-    except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="session not found") from exc
-    except CandidateNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"candidate {candidate_id} not found") from exc
-    except SessionLockTimeoutError as exc:
-        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
 
     context = SESSION_CONTEXT.get(request.session_id, {})
     asyncio.create_task(
@@ -241,7 +246,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                 detail="session not found — include 'sequence' to auto-create",
             )
 
-    try:
+    async with _session_errors_to_http(request.candidate_id):
         async with session_store.candidate_guard(request.session_id, request.candidate_id):
             result = await copilot.chat(
                 session_id=request.session_id,
@@ -249,12 +254,6 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                 message=request.message,
                 history=request.history,
             )
-    except SessionNotFoundError as exc:
-        raise HTTPException(status_code=404, detail="session not found") from exc
-    except CandidateNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=f"candidate {request.candidate_id} not found") from exc
-    except SessionLockTimeoutError as exc:
-        raise HTTPException(status_code=423, detail="candidate is busy; retry shortly") from exc
 
     candidate_update = None
     if result.candidate_update is not None:
@@ -290,8 +289,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                     ).to_json(),
                 )
             except Exception:
-                # Keep chat endpoint resilient even if structure refresh fails.
-                pass
+                logger.warning("Structure prediction failed for candidate %s", update.candidate_id, exc_info=True)
         if not _design_uses_protein_structure(design_type) and regulatory_map is None:
             try:
                 regulatory_map = build_regulatory_map(update.sequence)
@@ -312,7 +310,7 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
                     ).to_json(),
                 )
             except Exception:
-                pass
+                logger.warning("Regulatory map failed for candidate %s", update.candidate_id, exc_info=True)
         candidate_update = AgentCandidateUpdateResponse(
             candidate_id=update.candidate_id,
             sequence=update.sequence,

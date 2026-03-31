@@ -31,7 +31,7 @@ class DesignRequest(BaseModel):
     goal: str
     session_id: str | None = None
     user_id: str | None = None
-    num_candidates: int | None = None
+    num_candidates: int = Field(10, ge=1, le=10, description="Number of candidates to generate (1–10)")
     run_profile: Literal["demo", "live"] = "demo"
     truth_mode: Literal["demo_fallback", "real_only"] = "demo_fallback"
     target_length: int | None = Field(

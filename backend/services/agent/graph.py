@@ -56,8 +56,8 @@ class AgenticCopilot:
         self._responder_llm = self._build_responder_llm()
         self._graph = self._build_graph()
 
-    def clear_session_memory(self, *, session_id: str) -> None:
-        asyncio.get_event_loop().create_task(self._memory.clear_session(session_id))
+    async def clear_session_memory(self, *, session_id: str) -> None:
+        await self._memory.clear_session(session_id)
 
     async def chat(
         self,

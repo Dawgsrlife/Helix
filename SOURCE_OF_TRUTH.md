@@ -25,7 +25,7 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - 4D scoring logic (functional, tissue specificity, off-target, novelty)
 - Session management (in-memory dev, Redis production)
 - Frontend workspace (Next.js 16, sequence viewer, 3D structure, leaderboard, chat)
-- 389 backend tests passing
+- 471 backend tests passing (389 core + 82 hardened e2e)
 
 ### What's Mocked / Faked
 - **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
@@ -35,10 +35,6 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - **Frontend API layer** has mock fallbacks for every endpoint (works without backend).
 
 ### What's Badly Done
-- **Orchestrator (`pipeline/orchestrator.py`)** has massive DRY violations: scoring fallback code copy-pasted 3x, structure prediction duplicated between generation and followup pipelines, no separation of concerns.
-- **No README** — cannot be open-sourced without one.
-- **No Docker/CI** — project can only run on the developer's machine.
-- **No `.env.example`** — new contributors can't configure the project.
 - **Mock frontend deleted** but still referenced in docs.
 
 ---
@@ -63,6 +59,7 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 - [x] **3.2 FASTA/GenBank import/export** — Pure-Python FASTA/GenBank parsers and exporters (no BioPython). Three new endpoints: `POST /api/import` (file upload), `POST /api/export/fasta`, `POST /api/export/genbank`. 34 new tests.
 - [x] **3.3 Multi-user sessions** — Session ownership via `user_id` on `DesignRequest`. `GET /api/sessions/{user_id}` endpoint. Both MemorySessionStore and RedisSessionStore track owners and user→session mappings. 15 new tests.
 - [x] **3.4 Frontend polish** — React ErrorBoundary wrapping root layout and each view. Skeleton loader components. Responsive sidebar (hidden on mobile, toggle via hamburger menu, backdrop overlay). Side panels hidden on mobile (structure inspector, explorer inspector, IDE panel). Header tab bar hidden on small screens. ARIA labels on all icon buttons, nav items (`aria-current`), chat panel, pipeline progress bar (`role="progressbar"`), leaderboard. `aria-live` on pipeline status and chat messages. Skip-to-content link. Focus-visible ring styles. `prefers-reduced-motion` media query disables all animations. Responsive padding on leaderboard.
+- [x] **3.5 Hardening & code quality** — DRY: extracted `_session_errors_to_http` async context manager (3 duplicate try/except blocks → 1). Fixed silent `except Exception: pass` → `logger.warning` with traceback. Fixed fire-and-forget `clear_session_memory` → proper `await`. Added Pydantic `Field(ge=1, le=10)` validation on `num_candidates` (replaces manual clamping). Removed dead `regions=[]` from analyze response. 82 hardened e2e tests with real genomic sequences (BRCA1, Huntington-like CAG repeats, all-T, high-GC, promoter-like), exact computed assertions, edge cases across translation, scoring, FASTA/GenBank, sessions, and API contracts.
 
 ### Phase 4: Research-Grade Features
 - [ ] **4.1 Variant annotation** — ClinVar/gnomAD overlay on sequence viewer with pathogenicity predictions.
