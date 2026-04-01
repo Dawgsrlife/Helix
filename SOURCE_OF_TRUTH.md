@@ -1,6 +1,6 @@
 # Helix Source of Truth
 
-Date: 2026-03-30
+Date: 2026-04-01
 Status: Canonical
 
 ## Doc Precedence
@@ -25,7 +25,7 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - 4D scoring logic (functional, tissue specificity, off-target, novelty)
 - Session management (in-memory dev, Redis production)
 - Frontend workspace (Next.js 16, sequence viewer, 3D structure, leaderboard, chat)
-- 471 backend tests passing (389 core + 82 hardened e2e)
+- 703 backend tests passing (389 core + 82 hardened e2e + 80 codon optimization + 50 variant annotation + 64 off-target + 38 cross-phase integration)
 
 ### What's Mocked / Faked
 - **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
@@ -62,10 +62,10 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 - [x] **3.5 Hardening & code quality** — DRY: extracted `_session_errors_to_http` async context manager (3 duplicate try/except blocks → 1). Fixed silent `except Exception: pass` → `logger.warning` with traceback. Fixed fire-and-forget `clear_session_memory` → proper `await`. Added Pydantic `Field(ge=1, le=10)` validation on `num_candidates` (replaces manual clamping). Removed dead `regions=[]` from analyze response. 82 hardened e2e tests with real genomic sequences (BRCA1, Huntington-like CAG repeats, all-T, high-GC, promoter-like), exact computed assertions, edge cases across translation, scoring, FASTA/GenBank, sessions, and API contracts.
 
 ### Phase 4: Research-Grade Features
-- [ ] **4.1 Variant annotation** — ClinVar/gnomAD overlay on sequence viewer with pathogenicity predictions.
-- [ ] **4.2 Codon optimization** — For protein-coding designs, optimize codon usage for target organism.
-- [ ] **4.3 Off-target analysis** — BLAST integration for checking sequence uniqueness.
-- [ ] **4.4 Experiment tracking** — Version every design iteration (the "startup moat" from ARCHITECTURE.md).
+- [x] **4.1 Variant annotation** — `POST /api/variants`. ClinVar integration: fetches pathogenic variants for a gene, parses HGVS nomenclature to map to sequence positions, provides clinical significance, review stars, condition data. Supports region filtering. 29 tests.
+- [x] **4.2 Codon optimization** — `POST /api/optimize/codons`. Organism-specific codon usage optimisation (human, E. coli, yeast, mouse, fruit fly). Preserves amino acids and DNA motifs, reports CAI and GC content changes. 51 tests.
+- [x] **4.3 Off-target analysis** — `POST /api/offtarget`. Fast local k-mer scan against reference genomic elements (Alu, LINE-1, oncogene hotspots, regulatory elements). GC balance risk, repeat fraction detection. Async NCBI BLAST wrapper. 64 tests.
+- [x] **4.4 Experiment tracking** — `POST /api/experiments/record`, `GET /api/experiments/{session_id}`, `GET /api/experiments/{session_id}/{version_id}`, `POST /api/experiments/revert`, `POST /api/experiments/diff`, `GET /api/experiments/{session_id}/{version_id}/lineage`. Versions every design iteration with parent→child lineage, position-level diffs, one-click revert. Auto-records on base edits and agent mutations. 50 tests.
 
 ---
 
@@ -73,7 +73,7 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 
 ### Backend
 
-- FastAPI endpoints: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`, `/api/import`, `/api/export/fasta`, `/api/export/genbank`, `/api/sessions/{user_id}`.
+- FastAPI endpoints: `/api/design`, `/api/edit/base`, `/api/edit/followup`, `/api/agent/chat`, `/api/mutations`, `/api/analyze`, `/api/structure`, `/api/health`, `/api/import`, `/api/export/fasta`, `/api/export/genbank`, `/api/sessions/{user_id}`, `/api/variants`, `/api/optimize/codons`, `/api/offtarget`, `/api/experiments/record`, `/api/experiments/{session_id}`, `/api/experiments/{session_id}/{version_id}`, `/api/experiments/revert`, `/api/experiments/diff`, `/api/experiments/{session_id}/{version_id}/lineage`.
 - WebSocket event contract: `pipeline_manifest`, `stage_status`, `candidate_status`, `candidate_seed`, `intent_parsed`, `retrieval_progress`, `generation_token`, `generation_batch`, `generation_progress`, `candidate_scored`, `structure_ready`, `regulatory_map_ready`, `explanation_chunk`, `pipeline_complete`.
 - `/api/design` accepts `run_profile: "demo" | "live"`, `truth_mode`, and `num_candidates`.
 - Generation orchestration emits N candidate placeholders and guarantees `pipeline_complete.candidates` includes one record per requested candidate ID.

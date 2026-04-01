@@ -233,7 +233,7 @@ class Evo2LocalService(Evo2Service):
 
     async def forward(self, sequence: str) -> ForwardResult:
         model = self._load_model()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         logits, _embeddings = await loop.run_in_executor(
             None, model.forward, sequence  # type: ignore[union-attr]
         )
@@ -247,7 +247,7 @@ class Evo2LocalService(Evo2Service):
 
     async def score(self, sequence: str) -> float:
         model = self._load_model()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         score_val = await loop.run_in_executor(
             None, model.score, sequence  # type: ignore[union-attr]
         )
@@ -280,7 +280,7 @@ class Evo2LocalService(Evo2Service):
     ) -> AsyncGenerator[str, None]:
         # Evo2 local generation: extend the seed sequence token by token
         model = self._load_model()
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         current = seed
 
         for _ in range(n_tokens):

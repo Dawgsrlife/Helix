@@ -16,10 +16,16 @@ from models.requests import (
     AnalyzeRequest,
     AgentChatRequest,
     BaseEditRequest,
+    CodonOptimizationRequest,
     DesignRequest,
+    ExperimentDiffRequest,
+    ExperimentRecordRequest,
+    ExperimentRevertRequest,
     FollowupEditRequest,
     MutationRequest,
+    OffTargetRequest,
     StructureRequest,
+    VariantAnnotationRequest,
 )
 from models.responses import (
     AnalysisResponse,
@@ -54,6 +60,10 @@ from services.session_store import (
 )
 from services.structure import predict_structure
 from services.translation import find_orfs
+from services.experiment_tracker import (
+    ExperimentTracker,
+    ExperimentVersionNotFoundError,
+)
 from ws.manager import WebSocketManager
 from ws.events import (
     CandidateStatusData,
@@ -92,6 +102,7 @@ ws_manager = WebSocketManager()
 evo2_service = create_evo2_service()
 session_store = create_session_store(settings, DEFAULT_SEED)
 copilot = AgenticCopilot(session_store=session_store, evo2_service=evo2_service)
+experiment_tracker = ExperimentTracker(session_store)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
@@ -184,6 +195,30 @@ async def edit_base(request: BaseEditRequest) -> BaseEditResponse:
             mutation = await evo2_service.score_mutation(sequence, request.position, request.new_base)
             mutated_sequence = sequence[: request.position] + request.new_base.upper() + sequence[request.position + 1 :]
             await session_store.set_candidate_sequence(request.session_id, request.candidate_id, mutated_sequence)
+
+    # Auto-record experiment version for base edits
+    try:
+        await experiment_tracker.record_version(
+            session_id=request.session_id,
+            candidate_id=request.candidate_id,
+            sequence=mutated_sequence,
+            scores={
+                "functional": updated_scores.functional,
+                "tissue_specificity": updated_scores.tissue_specificity,
+                "off_target": updated_scores.off_target,
+                "novelty": updated_scores.novelty,
+                "combined": updated_scores.combined or 0.0,
+            },
+            operation="edit",
+            operation_details={
+                "position": request.position,
+                "ref_base": mutation.reference_base,
+                "new_base": request.new_base,
+                "delta_likelihood": delta,
+            },
+        )
+    except Exception:
+        logger.warning("Failed to record experiment version for base edit", exc_info=True)
 
     return BaseEditResponse(
         position=request.position,
@@ -323,6 +358,20 @@ async def agent_chat(request: AgentChatRequest) -> AgentChatResponse:
             regulatory_map=update.regulatory_map,
         )
 
+        # Auto-record experiment version for agent mutations
+        try:
+            op = "transform" if update.mutation and update.mutation.get("scope") == "transform" else "edit"
+            await experiment_tracker.record_version(
+                session_id=request.session_id,
+                candidate_id=update.candidate_id,
+                sequence=update.sequence,
+                scores=update.scores,
+                operation=op,
+                operation_details=update.mutation or {},
+            )
+        except Exception:
+            logger.warning("Failed to record experiment version for agent chat", exc_info=True)
+
     return AgentChatResponse(
         assistant_message=result.assistant_message,
         tool_calls=[AgentToolCallResponse(**tool.to_dict()) for tool in result.tool_calls],
@@ -448,6 +497,195 @@ async def export_genbank_endpoint(request: Request) -> PlainTextResponse:
         media_type="text/plain",
         headers={"Content-Disposition": "attachment; filename=helix_export.gb"},
     )
+
+
+@app.post("/api/offtarget")
+async def offtarget_analysis(request: OffTargetRequest) -> dict[str, object]:
+    """Run off-target analysis on a sequence using local k-mer scan."""
+    from services.offtarget import scan_offtargets
+
+    result = scan_offtargets(
+        sequence=request.sequence,
+        k=request.k,
+        max_hits=request.max_hits,
+    )
+    return {
+        "query_length": result.query_length,
+        "k": result.k,
+        "total_query_kmers": result.total_query_kmers,
+        "repeat_fraction": result.repeat_fraction,
+        "gc_balance_risk": result.gc_balance_risk,
+        "hit_count": len(result.hits),
+        "hits": [
+            {
+                "region_name": h.region_name,
+                "similarity_score": h.similarity_score,
+                "shared_kmers": h.shared_kmers,
+                "total_query_kmers": h.total_query_kmers,
+                "category": h.category,
+                "risk_level": h.risk_level,
+                "description": h.description,
+            }
+            for h in result.hits
+        ],
+    }
+
+
+@app.post("/api/optimize/codons")
+async def optimize_codons_endpoint(request: CodonOptimizationRequest) -> dict[str, object]:
+    """Optimize codon usage for a target organism."""
+    from services.codon_optimization import optimize_codons
+
+    try:
+        result = optimize_codons(
+            dna=request.sequence,
+            organism=request.organism,
+            preserve_motifs=request.preserve_motifs or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {
+        "original_sequence": result.original_sequence,
+        "optimized_sequence": result.optimized_sequence,
+        "organism": result.organism,
+        "original_cai": result.original_cai,
+        "optimized_cai": result.optimized_cai,
+        "amino_acid_sequence": result.amino_acid_sequence,
+        "codons_changed": result.codons_changed,
+        "total_codons": result.total_codons,
+        "gc_content_before": result.gc_content_before,
+        "gc_content_after": result.gc_content_after,
+        "preserved_motif_count": result.preserved_motif_count,
+    }
+
+
+@app.post("/api/variants")
+async def variant_annotation(request: VariantAnnotationRequest) -> dict[str, object]:
+    """Annotate a gene/sequence region with ClinVar pathogenic variants."""
+    from services.variant_annotation import annotate_sequence_region, annotate_variants
+
+    if request.sequence and request.region_end is not None:
+        result = await annotate_sequence_region(
+            gene=request.gene,
+            sequence=request.sequence,
+            region_start=request.region_start,
+            region_end=request.region_end,
+            max_variants=request.max_variants,
+        )
+    else:
+        result = await annotate_variants(
+            gene=request.gene,
+            sequence=request.sequence,
+            max_variants=request.max_variants,
+        )
+
+    return {
+        "gene": result.gene,
+        "total_variants_in_gene": result.total_variants_in_gene,
+        "annotations": [
+            {
+                "position": a.position,
+                "ref_base": a.ref_base,
+                "alt_base": a.alt_base,
+                "clinical_significance": a.clinical_significance,
+                "condition": a.condition,
+                "variant_id": a.variant_id,
+                "variant_title": a.variant_title,
+                "variation_type": a.variation_type,
+                "review_stars": a.review_stars,
+                "allele_frequency": a.allele_frequency,
+            }
+            for a in result.annotations
+        ],
+        "unmapped_variants": result.unmapped_variants,
+        "count": len(result.annotations),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Experiment tracking endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/experiments/record")
+async def experiment_record(request: ExperimentRecordRequest) -> dict[str, object]:
+    """Record a new experiment version snapshot."""
+    version_id = await experiment_tracker.record_version(
+        session_id=request.session_id,
+        candidate_id=request.candidate_id,
+        sequence=request.sequence,
+        scores=request.scores,
+        operation=request.operation,
+        operation_details=dict(request.operation_details),
+        parent_version_id=request.parent_version_id,
+        metadata=dict(request.metadata),
+    )
+    return {"version_id": version_id, "session_id": request.session_id}
+
+
+@app.get("/api/experiments/{session_id}")
+async def experiment_list(session_id: str, candidate_id: int | None = None) -> dict[str, object]:
+    """List all experiment versions for a session."""
+    versions = await experiment_tracker.list_versions(session_id, candidate_id=candidate_id)
+    return {
+        "session_id": session_id,
+        "count": len(versions),
+        "versions": [v.to_dict() for v in versions],
+    }
+
+
+@app.get("/api/experiments/{session_id}/{version_id}")
+async def experiment_get(session_id: str, version_id: str) -> dict[str, object]:
+    """Get a specific experiment version."""
+    try:
+        version = await experiment_tracker.get_version(session_id, version_id)
+    except ExperimentVersionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return version.to_dict()
+
+
+@app.post("/api/experiments/revert")
+async def experiment_revert(request: ExperimentRevertRequest) -> dict[str, object]:
+    """Revert a candidate to a previous experiment version."""
+    try:
+        version = await experiment_tracker.revert_to_version(
+            request.session_id, request.version_id,
+        )
+    except ExperimentVersionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "reverted": True,
+        "new_version_id": version.version_id,
+        "restored_sequence_length": len(version.sequence),
+        "operation": version.operation,
+    }
+
+
+@app.post("/api/experiments/diff")
+async def experiment_diff(request: ExperimentDiffRequest) -> dict[str, object]:
+    """Compute a position-level diff between two experiment versions."""
+    try:
+        diff = await experiment_tracker.diff_versions(
+            request.session_id, request.v1_id, request.v2_id,
+        )
+    except ExperimentVersionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return diff.to_dict()
+
+
+@app.get("/api/experiments/{session_id}/{version_id}/lineage")
+async def experiment_lineage(session_id: str, version_id: str) -> dict[str, object]:
+    """Get the lineage chain (parent→root) for a version."""
+    try:
+        chain = await experiment_tracker.get_lineage(session_id, version_id)
+    except ExperimentVersionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {
+        "session_id": session_id,
+        "version_id": version_id,
+        "depth": len(chain),
+        "lineage": [v.to_dict() for v in chain],
+    }
 
 
 @app.get("/api/sessions/{user_id}")

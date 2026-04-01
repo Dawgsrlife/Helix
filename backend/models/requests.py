@@ -103,3 +103,67 @@ class StructureRequest(BaseModel):
     @classmethod
     def validate_sequence(cls, v: str) -> str:
         return _validate_sequence(v)
+
+
+class VariantAnnotationRequest(BaseModel):
+    gene: str = Field(..., min_length=1, description="Gene symbol (e.g. BRCA1)")
+    sequence: str | None = Field(None, description="Optional sequence for position validation")
+    region_start: int = Field(0, ge=0)
+    region_end: int | None = None
+    max_variants: int = Field(25, ge=1, le=100)
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str | None) -> str | None:
+        if v is not None:
+            return _validate_sequence(v)
+        return v
+
+
+class CodonOptimizationRequest(BaseModel):
+    sequence: str = Field(..., description="Protein-coding DNA sequence to optimize")
+    organism: str = Field("homo_sapiens", description="Target organism for codon usage")
+    preserve_motifs: list[str] = Field(default_factory=list, description="Motif sequences to preserve")
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+class OffTargetRequest(BaseModel):
+    sequence: str = Field(..., description="Query sequence to check for off-target hits")
+    k: int = Field(12, ge=8, le=20, description="K-mer size for local similarity search")
+    max_hits: int = Field(20, ge=1, le=100)
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+class ExperimentRecordRequest(BaseModel):
+    session_id: str
+    candidate_id: int = 0
+    sequence: str
+    scores: dict[str, float] = Field(default_factory=dict)
+    operation: str = Field(..., min_length=1, description="Operation type: initial, edit, transform, optimize, generate")
+    operation_details: dict[str, object] = Field(default_factory=dict)
+    parent_version_id: str | None = None
+    metadata: dict[str, object] = Field(default_factory=dict)
+
+    @field_validator("sequence")
+    @classmethod
+    def validate_sequence(cls, v: str) -> str:
+        return _validate_sequence(v)
+
+
+class ExperimentDiffRequest(BaseModel):
+    session_id: str
+    v1_id: str = Field(..., min_length=1, description="First version ID")
+    v2_id: str = Field(..., min_length=1, description="Second version ID")
+
+
+class ExperimentRevertRequest(BaseModel):
+    session_id: str
+    version_id: str = Field(..., min_length=1, description="Version to revert to")

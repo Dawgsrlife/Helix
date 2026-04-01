@@ -593,8 +593,10 @@ async def run_generation_pipeline(
     await tracker.set("structure", "done", 1.0)
 
     if first_explanation_task is not None:
-        with contextlib.suppress(Exception):
+        try:
             await asyncio.wait_for(first_explanation_task, timeout=profile.explanation_timeout)
+        except Exception:
+            logger.warning("First explanation task failed", exc_info=True)
 
     structured = [candidate for candidate in runtime.values() if candidate.status == "structured" and candidate.scores]
     if structured:
@@ -604,7 +606,7 @@ async def run_generation_pipeline(
             and top_candidate.pdb_data
             and _looks_like_mock_pdb(top_candidate.pdb_data)
         ):
-            with contextlib.suppress(Exception):
+            try:
                 high_fidelity = await asyncio.wait_for(
                     predict_structure(top_candidate.sequence),
                     timeout=max(45.0, profile.structure_timeout * 2.5),
@@ -623,9 +625,11 @@ async def run_generation_pipeline(
                             )
                         ).to_json(),
                     )
+            except Exception:
+                logger.warning("High-fidelity structure prediction failed for candidate %s", top_candidate.id, exc_info=True)
         if first_explained_candidate_id != top_candidate.id:
             await tracker.set("explanation", "active", 0.7)
-            with contextlib.suppress(Exception):
+            try:
                 await asyncio.wait_for(
                     generate_explanation(
                         sequence=top_candidate.sequence,
@@ -637,6 +641,8 @@ async def run_generation_pipeline(
                     ),
                     timeout=profile.explanation_timeout,
                 )
+            except Exception:
+                logger.warning("Top-candidate explanation failed for candidate %s", top_candidate.id, exc_info=True)
         await tracker.set("explanation", "done", 1.0)
     else:
         best = max(runtime.values(), key=lambda c: len(c.sequence))
@@ -846,9 +852,11 @@ async def _emit_retrieval(
     import dataclasses
 
     result = None
-    with contextlib.suppress(Exception):
+    try:
         async with asyncio.timeout(timeout_seconds):
             result = await retrieve_context(spec)
+    except Exception:
+        logger.warning("Retrieval failed for gene=%s", spec.target_gene, exc_info=True)
 
     sources = [
         ("ncbi", result.ncbi if result is not None else None),

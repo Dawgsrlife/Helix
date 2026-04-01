@@ -127,7 +127,7 @@ source .venv/bin/activate
 pytest -q
 ```
 
-281 tests covering the pipeline orchestrator, scoring logic, WebSocket events, API endpoints, and external service contracts.
+703+ tests covering the pipeline orchestrator, scoring logic, WebSocket events, API endpoints, external service contracts, variant annotation, codon optimization, off-target analysis, experiment tracking, cross-phase integration, and hardened end-to-end tests with real genomic sequences.
 
 ---
 
@@ -143,7 +143,7 @@ Helix/
 │   ├── pipeline/               # Orchestrator, intent parser, scoring, retrieval, explanation
 │   ├── ws/                     # WebSocket manager + typed event contracts
 │   ├── cli/                    # Interactive Evo2 testing terminal
-│   └── tests/                  # 216 tests
+│   └── tests/                  # 703+ tests
 ├── frontend/
 │   ├── app/                    # Next.js pages (landing + /analyze workspace)
 │   ├── components/             # Sequence viewer, 3D structure, leaderboard, chat
