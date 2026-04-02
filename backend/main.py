@@ -89,7 +89,20 @@ async def _session_errors_to_http(candidate_id: int = 0) -> _AsyncIterator[None]
     except CandidateNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"candidate {exc.candidate_id} not found") from exc
 
-app = FastAPI(title="Helix Backend", version="0.1.0")
+
+@_acm
+async def _lifespan(app: FastAPI) -> _AsyncIterator[None]:
+    """Modern lifespan handler — replaces deprecated @app.on_event."""
+    # Startup
+    if settings.session_store_mode == SessionStoreMode.REDIS:
+        redis_ok = await session_store.ping()
+        if not redis_ok:
+            raise RuntimeError("Redis session store is enabled but unreachable.")
+    yield
+    # Shutdown
+    await session_store.close()
+
+app = FastAPI(title="Helix Backend", version="0.2.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -106,18 +119,6 @@ experiment_tracker = ExperimentTracker(session_store)
 SESSION_CONTEXT: dict[str, dict[str, Any]] = {}
 MAX_SESSION_CONTEXT_ENTRIES = 512
 
-
-@app.on_event("startup")
-async def _startup_checks() -> None:
-    if settings.session_store_mode == SessionStoreMode.REDIS:
-        redis_ok = await session_store.ping()
-        if not redis_ok:
-            raise RuntimeError("Redis session store is enabled but unreachable.")
-
-
-@app.on_event("shutdown")
-async def _shutdown_cleanup() -> None:
-    await session_store.close()
 
 
 @app.post("/api/analyze", response_model=AnalysisResponse)

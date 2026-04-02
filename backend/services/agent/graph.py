@@ -370,9 +370,11 @@ class AgenticCopilot:
                     new_base=str(args.get("new_base", "")).upper(),
                 )
             elif tool_name == "optimize_candidate":
+                rounds_raw = args.get("rounds")
                 return await agent_tools.tool_optimize(
                     **common,
                     objective=str(args.get("objective", "tissue_specificity")),
+                    rounds=int(rounds_raw) if rounds_raw is not None else None,
                 )
             elif tool_name == "compare_candidates":
                 return await agent_tools.tool_compare(**common)
@@ -387,6 +389,36 @@ class AgenticCopilot:
                 return await agent_tools.tool_restore(
                     **common,
                     restore_to=str(args.get("sequence", "")).upper(),
+                )
+            elif tool_name == "codon_optimize":
+                return await agent_tools.tool_codon_optimize(
+                    **common,
+                    organism=str(args.get("organism", "homo_sapiens")),
+                )
+            elif tool_name == "offtarget_scan":
+                return await agent_tools.tool_offtarget_scan(
+                    service=self._service,
+                    candidate_id=candidate_id,
+                    sequence=sequence,
+                    k=int(args.get("k", 12)),
+                )
+            elif tool_name == "insert_bases":
+                return await agent_tools.tool_insert_bases(
+                    **common,
+                    position=int(args.get("position", 0)),
+                    bases=str(args.get("bases", "")),
+                )
+            elif tool_name == "delete_bases":
+                return await agent_tools.tool_delete_bases(
+                    **common,
+                    start=int(args.get("start", 0)),
+                    end=int(args.get("end", 0)),
+                )
+            elif tool_name == "restriction_sites":
+                return await agent_tools.tool_restriction_sites(
+                    candidate_id=candidate_id,
+                    sequence=sequence,
+                    enzymes=args.get("enzymes"),
                 )
             else:
                 return await agent_tools.tool_explain(**common)

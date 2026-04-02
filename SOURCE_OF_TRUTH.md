@@ -1,7 +1,7 @@
 # Helix Source of Truth
 
 Date: 2026-04-01
-Status: Canonical
+Status: Canonical — Post-Audit
 
 ## Doc Precedence
 
@@ -13,9 +13,9 @@ Status: Canonical
 
 Helix is a free, open-source genomic design IDE where researchers submit a design goal, watch candidate DNA generation live, compare ranked candidates, edit bases inline, and get real-time AI feedback plus protein structure context.
 
-## Post-Hackathon Status (2026-03-30)
+## Post-Hackathon Status (2026-04-01)
 
-Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitioning from hackathon prototype to a production-grade open-source genomic research tool.
+Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Codebase audited 2026-04-01. **Verdict: Strong demo quality, not yet production-ready for real biotech/clinical use.** 5 critical gaps identified — see Known Issues and Phases 5-9 below.
 
 ### What's Real
 - NCBI, PubMed, ClinVar integrations (live API calls with retry/rate-limiting)
@@ -25,7 +25,7 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - 4D scoring logic (functional, tissue specificity, off-target, novelty)
 - Session management (in-memory dev, Redis production)
 - Frontend workspace (Next.js 16, sequence viewer, 3D structure, leaderboard, chat)
-- 703 backend tests passing (389 core + 82 hardened e2e + 80 codon optimization + 50 variant annotation + 64 off-target + 38 cross-phase integration)
+- 765 backend tests passing (389 core + 82 hardened e2e + 80 codon optimization + 50 variant annotation + 64 off-target + 38 cross-phase integration + 44 Phase 5 tools + 18 hill-climb optimizer)
 
 ### What's Mocked / Faked
 - **Structure prediction** defaults to MOCK but ESMFold API (`api.esmatlas.com`) is verified live. Set `STRUCTURE_MODE=esmfold` for real protein folding.
@@ -34,8 +34,15 @@ Won 2nd place in the AI Agents track at YHack (March 28-29, 2026). Now transitio
 - **Agent chat** uses LangGraph (plan→execute→reflect→respond) with Claude tool_use, Gemini, and deterministic planning. Memory persists in Redis.
 - **Frontend API layer** has mock fallbacks for every endpoint (works without backend).
 
-### What's Badly Done
-- **Mock frontend deleted** but still referenced in docs.
+### Known Critical Issues (2026-04-01 Audit)
+- ~~**C-1: Agent tool set too narrow**~~ — **Resolved.** Expanded from 6 to 11 tools: added codon_optimize, offtarget_scan, insert_bases, delete_bases, restriction_sites.
+- ~~**C-2: Optimizer is brute-force single-base**~~ — **Resolved.** Replaced with multi-round hill-climbing (5 rounds, 16 positions/round, early convergence).
+- **C-3: All scoring is heuristic** — Every scorer in `evo2_score.py` is hand-tuned math. In mock mode (default), forward pass is `np.random.normal` — scores are deterministic noise.
+- **C-4: NIM service uses mock logits for scoring** — `Evo2NIMService.forward()` returns `_mock_logits()` for per-position data. Only generation is real.
+- **C-5: No inline sequence editor** — Users can only edit via single-base API call. No drag-select, no inline typing.
+- **C-6: No frontend for experiment tracking / import-export / codon opt / variant annotation** — Backend services exist but are not wired to UI.
+- **C-7: Zero frontend tests** — No Jest, no Playwright, no Cypress.
+- **C-8: Off-target analysis is local-only** — Reference panels are hardcoded short consensus fragments. Real BLAST is stubbed.
 
 ---
 
@@ -67,9 +74,44 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 - [x] **4.3 Off-target analysis** — `POST /api/offtarget`. Fast local k-mer scan against reference genomic elements (Alu, LINE-1, oncogene hotspots, regulatory elements). GC balance risk, repeat fraction detection. Async NCBI BLAST wrapper. 64 tests.
 - [x] **4.4 Experiment tracking** — `POST /api/experiments/record`, `GET /api/experiments/{session_id}`, `GET /api/experiments/{session_id}/{version_id}`, `POST /api/experiments/revert`, `POST /api/experiments/diff`, `GET /api/experiments/{session_id}/{version_id}/lineage`. Versions every design iteration with parent→child lineage, position-level diffs, one-click revert. Auto-records on base edits and agent mutations. 50 tests.
 
+### Phase 5: Agent Tool Expansion 🟡
+- [x] **5.1 Insert/delete base tools** — `insert_bases(position, bases)` and `delete_bases(start, end)` tools added to agent. 15 tests.
+- [x] **5.2 Wire codon optimization as agent tool** — `tool_codon_optimize(organism)` calls existing `codon_optimization.optimize_codons()`, preserves amino acids, updates session store. 8 tests.
+- [x] **5.3 Wire off-target scan as agent tool** — `tool_offtarget_scan(k)` calls existing `offtarget.scan_offtargets()`, returns risk summary. 4 tests.
+- [x] **5.4 Find restriction sites tool** — Searches 20 common restriction enzymes, returns positions. 7 tests.
+- [x] **5.5 Multi-step optimization** — Replaced brute-force single-shot (≤48 random variants) with multi-round hill-climbing: samples 16 positions/round, evaluates 3 alternatives each, applies best-improving mutation, repeats up to 5 rounds with early convergence. 18 tests.
+- [ ] **5.6 Agent streaming** — Stream tool execution and response via WebSocket instead of blocking HTTP.
+
+### Phase 6: Real Biology Integration ⬜
+- [ ] **6.1 Calibrate scoring pipeline** — Replace heuristic scorers with calibrated models or ML classifiers. Add confidence intervals.
+- [ ] **6.2 Fix NIM service scoring** — Use a different NIM endpoint that returns per-position log-likelihoods, or proxy through a scoring-specific API.
+- [ ] **6.3 Real BLAST integration** — Wire NCBI BLAST for off-target via E-utilities (submission + polling + parsing).
+- [ ] **6.4 Primer3 integration** — Add primer design service and API endpoint.
+
+### Phase 7: Frontend Feature Parity ⬜
+- [ ] **7.1 Inline sequence editor** — Click-to-edit bases, drag-select regions, keyboard shortcuts.
+- [ ] **7.2 FASTA/GenBank import/export UI** — File upload component + download buttons.
+- [ ] **7.3 Experiment history panel** — Browse versions, view diffs, one-click revert in the UI.
+- [ ] **7.4 Variant annotation browser** — Display ClinVar data overlaid on sequence.
+- [ ] **7.5 Codon optimization UI** — Organism selector, before/after comparison.
+- [ ] **7.6 Alignment viewer** — Side-by-side candidate comparison.
+
+### Phase 8: Frontend Quality ⬜
+- [ ] **8.1 Component tests** — Jest + React Testing Library for all components.
+- [ ] **8.2 E2E browser tests** — Playwright for critical user flows.
+- [ ] **8.3 Accessibility audit** — Full WCAG 2.1 AA compliance.
+- [ ] **8.4 Performance profiling** — Large sequence rendering (>10k bp).
+
+### Phase 9: Production Hardening 🟡
+- [x] **9.1 FastAPI lifespan migration** — Replaced `@app.on_event` with `lifespan` context manager. Eliminates deprecation warnings.
+- [ ] **9.2 API authentication** — JWT/OAuth for public endpoints.
+- [ ] **9.3 Rate limiting** — Per-IP and per-user rate limits.
+- [ ] **9.4 OpenTelemetry** — Distributed tracing.
+- [ ] **9.5 Database migration** — Move from Redis-only to proper persistence (PostgreSQL + SQLAlchemy).
+
 ---
 
-## As-built Snapshot (2026-03-30)
+## As-built Snapshot (2026-04-02)
 
 ### Backend
 
@@ -82,7 +124,9 @@ Priority order. Each item is a self-contained PR. Do one at a time.
 - Candidate scoring events include per-position likelihoods for sequence heatmap rendering.
 - Generation and scoring degrade to deterministic fallback instead of dropping candidates.
 - Structure fallback emits richer synthetic PDB backbones (hundreds of atoms).
-- `agent/chat` endpoint runs tool-style actions: explain, edit, optimize, compare.
+- `agent/chat` endpoint runs 11 tool-style actions: explain, edit_base, optimize (hill-climbing), compare, transform, restore, codon_optimize, offtarget_scan, insert_bases, delete_bases, restriction_sites.
+- Agent optimizer uses multi-round hill-climbing (up to 5 rounds, 16 positions/round, early convergence).
+- FastAPI v0.2.0 — uses modern `lifespan` context manager (no deprecated `on_event`).
 
 ### Frontend
 

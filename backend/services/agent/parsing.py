@@ -23,6 +23,11 @@ ALLOWED_TOOLS = frozenset({
     "compare_candidates",
     "transform_sequence",
     "restore_sequence",
+    "codon_optimize",
+    "offtarget_scan",
+    "insert_bases",
+    "delete_bases",
+    "restriction_sites",
 })
 
 

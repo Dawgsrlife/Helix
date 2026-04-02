@@ -48,7 +48,7 @@ CLAUDE_TOOL_DEFINITIONS = [
     },
     {
         "name": "optimize_candidate",
-        "description": "Find the single-base mutation that best improves the candidate for a given objective. Use when the user asks to optimize, improve, or make safer.",
+        "description": "Run multi-round hill-climbing optimization to improve the candidate for a given objective. Each round samples positions, evaluates mutations, and applies the best. Converges early if no improvement found.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -56,6 +56,10 @@ CLAUDE_TOOL_DEFINITIONS = [
                     "type": "string",
                     "enum": ["safety", "tissue_specificity", "functional", "novelty"],
                     "description": "Optimization objective",
+                },
+                "rounds": {
+                    "type": "integer",
+                    "description": "Maximum number of hill-climbing rounds (1-5, default 5)",
                 },
             },
             "required": ["objective"],
@@ -93,6 +97,63 @@ CLAUDE_TOOL_DEFINITIONS = [
             "required": ["sequence"],
         },
     },
+    {
+        "name": "codon_optimize",
+        "description": "Optimize codon usage for a target organism while preserving amino acid sequence. Use when the user asks to optimize codons, improve expression, or adapt for an organism.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "organism": {"type": "string", "enum": ["homo_sapiens", "e_coli", "yeast", "mouse", "drosophila"], "description": "Target organism"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "offtarget_scan",
+        "description": "Scan the sequence for off-target risks using k-mer similarity against known genomic elements (Alu repeats, LINE-1, oncogene hotspots). Use when the user asks about off-target, safety, or genomic risk.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "k": {"type": "integer", "description": "K-mer size (8-20, default 12)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "insert_bases",
+        "description": "Insert one or more DNA bases at a specific position in the sequence. Use when the user asks to insert, add, or append bases.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "position": {"type": "integer", "description": "0-indexed position to insert at"},
+                "bases": {"type": "string", "description": "DNA bases to insert (e.g. 'ATG')"},
+            },
+            "required": ["position", "bases"],
+        },
+    },
+    {
+        "name": "delete_bases",
+        "description": "Delete a range of bases from the sequence. Use when the user asks to delete, remove, or trim bases.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "start": {"type": "integer", "description": "Start position (0-indexed, inclusive)"},
+                "end": {"type": "integer", "description": "End position (0-indexed, exclusive)"},
+            },
+            "required": ["start", "end"],
+        },
+    },
+    {
+        "name": "restriction_sites",
+        "description": "Find restriction enzyme cut sites in the sequence. Use when the user asks about restriction enzymes, cut sites, or cloning sites.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "enzymes": {"type": "array", "items": {"type": "string"}, "description": "Optional list of specific enzymes to search for (e.g. ['EcoRI', 'BamHI'])"},
+            },
+            "required": [],
+        },
+    },
 ]
 
 # Prompt for JSON-based planners (Gemini/OpenAI)
@@ -103,10 +164,15 @@ Return ONLY strict JSON with this exact shape:
 Allowed tools:
 1) explain_candidate — args: {}
 2) edit_base — args: {"position": <int>, "new_base": "A|T|C|G"}
-3) optimize_candidate — args: {"objective": "safety|tissue_specificity|functional|novelty"}
+3) optimize_candidate — args: {"objective": "safety|tissue_specificity|functional|novelty", "rounds": <int 1-5, optional>}
 4) compare_candidates — args: {}
 5) transform_sequence — args: {"mode": "all_t|all_a|all_c|all_g|reverse_complement|replace_base", "from_base": "A|T|C|G (only for replace_base)", "to_base": "A|T|C|G (only for replace_base)"}
 6) restore_sequence — args: {"sequence": "<ATCG...>"}
+7) codon_optimize — args: {"organism": "homo_sapiens|e_coli|yeast|mouse|drosophila"}
+8) offtarget_scan — args: {"k": <int 8-20, default 12>}
+9) insert_bases — args: {"position": <int>, "bases": "<ATCG...>"}
+10) delete_bases — args: {"start": <int>, "end": <int>}
+11) restriction_sites — args: {"enzymes": ["EcoRI", ...] (optional)}
 
 Rules:
 - If user asks for global sequence rewrite like "all Ts", use transform_sequence.
@@ -114,6 +180,11 @@ Rules:
 - If user asks to undo/revert, use restore_sequence with the most recent previous sequence from memory.
 - If user asks to compare or rank, include compare_candidates.
 - If user asks specific base mutation, include edit_base.
+- If user asks to optimize codons/expression for an organism, use codon_optimize.
+- If user asks about off-target risk or safety scan, use offtarget_scan.
+- If user asks to insert or add bases, use insert_bases.
+- If user asks to delete or remove bases, use delete_bases.
+- If user asks about restriction enzymes or cloning sites, use restriction_sites.
 - You may chain multiple actions in order.
 - If uncertain, default to explain_candidate.
 """
@@ -148,7 +219,7 @@ GEMINI_FUNCTION_DECLARATIONS = [
     },
     {
         "name": "optimize_candidate",
-        "description": "Find the single-base mutation that best improves the candidate for a given objective. Use when the user asks to optimize, improve, or make safer.",
+        "description": "Run multi-round hill-climbing optimization to improve the candidate for a given objective. Each round samples positions, evaluates mutations, and applies the best. Converges early if no improvement.",
         "parameters": {
             "type": "OBJECT",
             "properties": {
@@ -156,6 +227,10 @@ GEMINI_FUNCTION_DECLARATIONS = [
                     "type": "STRING",
                     "enum": ["safety", "tissue_specificity", "functional", "novelty"],
                     "description": "Optimization objective",
+                },
+                "rounds": {
+                    "type": "INTEGER",
+                    "description": "Maximum hill-climbing rounds (1-5, default 5)",
                 },
             },
             "required": ["objective"],
@@ -191,6 +266,60 @@ GEMINI_FUNCTION_DECLARATIONS = [
                 "sequence": {"type": "STRING", "description": "The previous sequence to restore (from memory)"},
             },
             "required": ["sequence"],
+        },
+    },
+    {
+        "name": "codon_optimize",
+        "description": "Optimize codon usage for a target organism while preserving amino acid sequence. Use when the user asks to optimize codons or improve expression.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "organism": {"type": "STRING", "enum": ["homo_sapiens", "e_coli", "yeast", "mouse", "drosophila"], "description": "Target organism"},
+            },
+        },
+    },
+    {
+        "name": "offtarget_scan",
+        "description": "Scan the sequence for off-target risks using k-mer similarity against known genomic elements.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "k": {"type": "INTEGER", "description": "K-mer size (8-20, default 12)"},
+            },
+        },
+    },
+    {
+        "name": "insert_bases",
+        "description": "Insert one or more DNA bases at a specific position in the sequence.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "position": {"type": "INTEGER", "description": "0-indexed position to insert at"},
+                "bases": {"type": "STRING", "description": "DNA bases to insert (e.g. 'ATG')"},
+            },
+            "required": ["position", "bases"],
+        },
+    },
+    {
+        "name": "delete_bases",
+        "description": "Delete a range of bases from the sequence.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "start": {"type": "INTEGER", "description": "Start position (0-indexed, inclusive)"},
+                "end": {"type": "INTEGER", "description": "End position (0-indexed, exclusive)"},
+            },
+            "required": ["start", "end"],
+        },
+    },
+    {
+        "name": "restriction_sites",
+        "description": "Find restriction enzyme cut sites in the sequence.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "enzymes": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Optional specific enzymes"},
+            },
         },
     },
 ]
@@ -256,8 +385,30 @@ def deterministic_plan(
         actions.append({"tool": "compare_candidates", "args": {}})
 
     # Optimize
-    if any(token in text for token in ("tissue-specific", "tissue specific", "safer", "off-target", "novel", "functional")):
+    if any(token in text for token in ("tissue-specific", "tissue specific", "safer", "novel", "functional")):
         actions.append({"tool": "optimize_candidate", "args": {"objective": objective_from_prompt(text)}})
+
+    # Codon optimize
+    if any(token in text for token in ("codon", "codon optim", "expression optim", "cai")):
+        organism = "homo_sapiens"
+        if "e. coli" in text or "e coli" in text or "ecoli" in text:
+            organism = "e_coli"
+        elif "yeast" in text:
+            organism = "yeast"
+        elif "mouse" in text:
+            organism = "mouse"
+        elif "drosophila" in text or "fly" in text:
+            organism = "drosophila"
+        actions.append({"tool": "codon_optimize", "args": {"organism": organism}})
+
+    # Off-target scan
+    if any(token in text for token in ("off-target", "off target", "offtarget", "kmer", "k-mer", "genomic risk")):
+        if not any(a["tool"] == "optimize_candidate" for a in actions):
+            actions.append({"tool": "offtarget_scan", "args": {}})
+
+    # Restriction sites
+    if any(token in text for token in ("restriction", "cut site", "cloning site", "restriction enzyme", "ecori", "bamhi")):
+        actions.append({"tool": "restriction_sites", "args": {}})
 
     if not actions:
         actions.append({"tool": "explain_candidate", "args": {}})
