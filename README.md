@@ -18,8 +18,10 @@
 ## 🎬 Demo
 
 <div align="center">
-  <img src="frontend/public/assets/hero-editor.png" alt="Helix IDE" width="100%" style="border-radius: 8px; border: 1px solid #2a2a2a;"/>
-  <p><em>Design candidates, stream scoring, inspect folds, and iterate with an agentic copilot.</em></p>
+  <video src="https://github.com/user-attachments/assets/a64d46b4-d993-460e-bcd3-b83aeeef4588" controls width="100%" poster="frontend/public/assets/hero-editor.jpg">
+    <a href="https://github.com/user-attachments/assets/a64d46b4-d993-460e-bcd3-b83aeeef4588">Watch Helix demo video</a>
+  </video>
+  <p><em>From natural-language objective to editable genomic candidates and live structure feedback.</em></p>
 </div>
 
 ---
